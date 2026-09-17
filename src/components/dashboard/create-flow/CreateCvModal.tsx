@@ -34,6 +34,7 @@ import {
 } from "@/hooks/use-cv-generation";
 import { applyCvContent } from "@/lib/cv-mapper";
 import { ApiError, ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 
 interface CreateCvModalProps {
   isOpen: boolean;
@@ -163,6 +164,10 @@ export function CreateCvModal({
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [jobGaps, setJobGaps] = useState<string[]>([]);
   const [showAttachProfile, setShowAttachProfile] = useState(false);
+
+  // A CV document created mid-flow should never outlive an abandoned
+  // session — only a completed flow keeps it (see markCompleted() below).
+  const { markCompleted } = useDraftCvLifecycle(isOpen, cvDocumentId);
 
   const analyzeMutation = useAnalyzeFreestyle();
   const analyzeUploadMutation = useAnalyzeUpload();
@@ -426,6 +431,7 @@ export function CreateCvModal({
 
         const generatedCv = { ...buildLocalCv(latestContent), id: cvDocumentId };
         if (action === "create" && profileId) saveNewProfile(generatedCv, profileId);
+        markCompleted();
         onComplete(generatedCv);
       } catch (err) {
         setFlowError(err instanceof ApiError ? err.message : "Something went wrong saving your CV");

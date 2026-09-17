@@ -11,6 +11,9 @@ export default function BuilderPage() {
     setSavedProfiles,
     activeEditingCv,
     setActiveEditingCv,
+    handleOpenDraftInEditor,
+    handleDuplicateDraft,
+    handleDeleteDraft,
     isCreateModalOpen,
     setIsCreateModalOpen,
     isStartWithTemplateOpen,
@@ -29,6 +32,9 @@ export default function BuilderPage() {
       setSavedProfiles={setSavedProfiles}
       activeEditingCv={activeEditingCv}
       setActiveEditingCv={setActiveEditingCv}
+      onOpenDraftInEditor={handleOpenDraftInEditor}
+      onDuplicateDraft={handleDuplicateDraft}
+      onDeleteDraft={handleDeleteDraft}
       isCreateModalOpenExternal={isCreateModalOpen}
       onCloseCreateModalExternal={() => setIsCreateModalOpen(false)}
       isStartWithTemplateModalOpenExternal={isStartWithTemplateOpen}

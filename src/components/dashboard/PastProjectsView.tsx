@@ -16,12 +16,13 @@ import {
   Plus,
 } from "lucide-react";
 import { ResumeDraft, INITIAL_DRAFTS, TemplateId } from "./create-flow/types";
+import { ConfirmDialog } from "./ConfirmDialog";
 
 interface PastProjectsViewProps {
   drafts?: ResumeDraft[];
   onOpenDraft?: (draft: ResumeDraft) => void;
   onDuplicateDraft?: (draft: ResumeDraft) => void;
-  onDeleteDraft?: (id: string) => void;
+  onDeleteDraft?: (id: string) => void | Promise<void>;
   onNewResume?: () => void;
   onUseTemplate?: (templateId: TemplateId) => void;
 }
@@ -37,6 +38,17 @@ export function PastProjectsView({
   const [sortBy, setSortBy] = useState<"edited" | "score" | "title">("edited");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [downloadSuccessId, setDownloadSuccessId] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    type: "delete" | "duplicate";
+    draft: ResumeDraft;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const requestAction = (type: "delete" | "duplicate", draft: ResumeDraft) => {
+    setDeleteError(null);
+    setPendingAction({ type, draft });
+  };
 
   // Filter and sort drafts
   const filteredDrafts = drafts
@@ -237,7 +249,7 @@ export function PastProjectsView({
                   {/* Copy Button (Copies and opens the copied one) */}
                   <button
                     type="button"
-                    onClick={() => onDuplicateDraft?.(draft)}
+                    onClick={() => requestAction("duplicate", draft)}
                     className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                     title="Duplicate & Edit Resume"
                   >
@@ -248,7 +260,7 @@ export function PastProjectsView({
                   {onDeleteDraft && (
                     <button
                       type="button"
-                      onClick={() => onDeleteDraft(draft.id)}
+                      onClick={() => requestAction("delete", draft)}
                       className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                       title="Delete draft"
                     >
@@ -319,7 +331,7 @@ export function PastProjectsView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onDuplicateDraft?.(draft)}
+                  onClick={() => requestAction("duplicate", draft)}
                   className="p-2 rounded-xl text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                   title="Duplicate & Open Copy"
                 >
@@ -328,7 +340,7 @@ export function PastProjectsView({
                 {onDeleteDraft && (
                   <button
                     type="button"
-                    onClick={() => onDeleteDraft(draft.id)}
+                    onClick={() => requestAction("delete", draft)}
                     className="p-2 rounded-xl text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                     title="Delete Draft"
                   >
@@ -348,6 +360,40 @@ export function PastProjectsView({
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={pendingAction !== null}
+        title={pendingAction?.type === "delete" ? "Delete this resume?" : "Duplicate this resume?"}
+        description={
+          pendingAction?.type === "delete"
+            ? `"${pendingAction.draft.title}" will be permanently deleted. This can't be undone.`
+            : `A copy of "${pendingAction?.draft.title}" will be created and opened for editing.`
+        }
+        confirmLabel={pendingAction?.type === "delete" ? "Delete" : "Duplicate"}
+        processingLabel="Deleting..."
+        isProcessing={isDeleting}
+        error={deleteError}
+        danger={pendingAction?.type === "delete"}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={async () => {
+          if (!pendingAction) return;
+          if (pendingAction.type === "duplicate") {
+            onDuplicateDraft?.(pendingAction.draft);
+            setPendingAction(null);
+            return;
+          }
+          setIsDeleting(true);
+          setDeleteError(null);
+          try {
+            await onDeleteDraft?.(pendingAction.draft.id);
+            setPendingAction(null);
+          } catch {
+            setDeleteError("Could not delete this resume. Please try again.");
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -45,7 +45,7 @@ export function toResumeDraft(doc: ApiCvDocument): ResumeDraft {
 
   return {
     id: doc.id,
-    title: personal.title ? `${personal.title} - Resume` : "Untitled Resume",
+    title: doc.title || (personal.title ? `${personal.title} - Resume` : "Untitled Resume"),
     targetRole,
     targetCompany: "General Application",
     atsScore: 90,

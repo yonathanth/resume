@@ -35,6 +35,7 @@ import {
 } from "@/hooks/use-cv-generation";
 import { applyCvContent } from "@/lib/cv-mapper";
 import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 
 interface EnhanceCvModalProps {
   isOpen: boolean;
@@ -109,6 +110,10 @@ export function EnhanceCvModal({
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [jobGaps, setJobGaps] = useState<string[]>([]);
 
+  // A CV document created mid-flow should never outlive an abandoned
+  // session — only a completed flow keeps it (see markCompleted() below).
+  const { markCompleted } = useDraftCvLifecycle(isOpen, cvDocumentId);
+
   const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
@@ -142,6 +147,8 @@ export function EnhanceCvModal({
 
   // Pulls the REAL content behind the selected career profile or past
   // project (never the fabricated skeleton) before moving to the goals step.
+  // Enhancing "from a career profile" keeps the new CV attached to that same
+  // profile — it's a new document for the same trajectory, not a detached one.
   const handlePrepareExistingSource = async () => {
     setFlowError(null);
     try {
@@ -149,7 +156,7 @@ export function EnhanceCvModal({
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
             ? { sourceCvId: selectedProjectId }
-            : { sourceProfileId: selectedProfileId }
+            : { sourceProfileId: selectedProfileId, targetProfileId: selectedProfileId }
         );
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -278,9 +285,11 @@ export function EnhanceCvModal({
   };
 
   // "Apply & Select Template" / "Skip instructions" — re-runs generation
-  // with the enhancement instructions folded in (or omitted, for skip) and a
-  // high enhancementLevel, since "Enhance" implies an aggressive rewrite
-  // rather than the neutral default.
+  // with the improvement goal sent as its own high-priority instruction (not
+  // folded into sourceText, so the AI treats it as a directive rather than
+  // more candidate narrative to extract facts from) and a high
+  // enhancementLevel, since "Enhance" implies an aggressive rewrite rather
+  // than the neutral default.
   const handleContinueToTemplate = async (goalOverride?: string) => {
     setFlowError(null);
     const goal = goalOverride !== undefined ? goalOverride : improvementGoal;
@@ -293,18 +302,13 @@ export function EnhanceCvModal({
     const answerLines = clarifyingQuestions
       .filter((q) => questionAnswers[q.id]?.trim())
       .map((q) => `${q.question} ${questionAnswers[q.id].trim()}`);
-    const augmentedText = [
-      analyzedSourceText,
-      goal.trim() && `Enhancement focus: ${goal}`,
-      ...answerLines,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    const augmentedText = [analyzedSourceText, ...answerLines].filter(Boolean).join("\n\n");
 
     try {
       const document = await refineMutation.mutateAsync({
         cvDocumentId,
         sourceText: augmentedText,
+        focusInstructions: goal.trim() || undefined,
         jobDescription: optionalJd || undefined,
         enhancementLevel: 0.8,
       });
@@ -334,6 +338,7 @@ export function EnhanceCvModal({
 
         const finalCv = { ...buildEnhancedCv(), id: cvDocumentId };
         if (action === "create" && profileId) saveNewProfile(finalCv, profileId);
+        markCompleted();
         onComplete(finalCv);
       } catch (err) {
         setFlowError(err instanceof Error ? err.message : "Something went wrong saving your CV");

@@ -27,6 +27,7 @@ import { CreateCvModal } from "./create-flow/CreateCvModal";
 import { TailorCvModal } from "./create-flow/TailorCvModal";
 import { EnhanceCvModal } from "./create-flow/EnhanceCvModal";
 import { CvEditorWorkspace } from "./create-flow/CvEditorWorkspace";
+import { ConfirmDialog } from "./ConfirmDialog";
 import {
   CvData,
   CareerProfile,
@@ -50,6 +51,9 @@ interface BuilderViewProps {
   setSavedProfiles?: React.Dispatch<React.SetStateAction<CareerProfile[]>>;
   activeEditingCv?: CvData | null;
   setActiveEditingCv?: (cv: CvData | null) => void;
+  onOpenDraftInEditor?: (draft: ResumeDraft) => void;
+  onDuplicateDraft?: (draft: ResumeDraft) => void;
+  onDeleteDraft?: (id: string) => void | Promise<void>;
   isCreateModalOpenExternal?: boolean;
   onCloseCreateModalExternal?: () => void;
   isStartWithTemplateModalOpenExternal?: boolean;
@@ -68,6 +72,9 @@ export function BuilderView({
   setSavedProfiles: externalSetProfiles,
   activeEditingCv: externalActiveEditingCv,
   setActiveEditingCv: externalSetActiveEditingCv,
+  onOpenDraftInEditor: externalOpenDraftInEditor,
+  onDuplicateDraft: externalDuplicateDraft,
+  onDeleteDraft: externalDeleteDraft,
   isCreateModalOpenExternal = false,
   onCloseCreateModalExternal,
   isStartWithTemplateModalOpenExternal = false,
@@ -100,6 +107,17 @@ export function BuilderView({
   const [startWithTemplateOpen, setStartWithTemplateOpen] = useState(false);
   const [tailorModalOpen, setTailorModalOpen] = useState(false);
   const [enhanceModalOpen, setEnhanceModalOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<{
+    type: "delete" | "duplicate";
+    draft: ResumeDraft;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const requestAction = (type: "delete" | "duplicate", draft: ResumeDraft) => {
+    setDeleteError(null);
+    setPendingAction({ type, draft });
+  };
 
   const handleSaveCareerProfile = (newProfile: CareerProfile) => {
     setSavedProfiles((prev) => [newProfile, ...prev]);
@@ -130,7 +148,11 @@ export function BuilderView({
     },
   }));
 
-  const handleOpenDraftInEditor = (draft: ResumeDraft) => {
+  // Fallback-only: builds a placeholder CV from a draft's summary fields.
+  // Used solely when this component is rendered standalone, without the
+  // real DashboardContext handlers (which fetch the CV's actual saved
+  // content) passed in as props.
+  const localOpenDraftInEditor = (draft: ResumeDraft) => {
     const draftCv: CvData = {
       ...defaultSampleCv,
       id: draft.id,
@@ -145,12 +167,12 @@ export function BuilderView({
     setActiveEditingCv(draftCv);
   };
 
-  const handleDeleteDraft = (id: string) => {
+  const localDeleteDraft = (id: string) => {
     setDrafts((prev) => prev.filter((d) => d.id !== id));
   };
 
   // Duplicate draft and immediately open the copied one in editor!
-  const handleDuplicateDraft = (draft: ResumeDraft) => {
+  const localDuplicateDraft = (draft: ResumeDraft) => {
     const duplicated: ResumeDraft = {
       ...draft,
       id: `draft-${Date.now()}`,
@@ -158,8 +180,12 @@ export function BuilderView({
       lastEdited: "Just now",
     };
     setDrafts((prev) => [duplicated, ...prev]);
-    handleOpenDraftInEditor(duplicated);
+    localOpenDraftInEditor(duplicated);
   };
+
+  const openDraftInEditor = externalOpenDraftInEditor ?? localOpenDraftInEditor;
+  const duplicateDraft = externalDuplicateDraft ?? localDuplicateDraft;
+  const deleteDraft = externalDeleteDraft ?? localDeleteDraft;
 
   // If a CV is open for editing, render the Form + Live Preview Combo Workspace
   if (activeEditingCv) {
@@ -348,7 +374,7 @@ export function BuilderView({
                 <div className="flex items-start justify-between gap-3 mb-2.5">
                   <div className="min-w-0">
                     <h3
-                      onClick={() => handleOpenDraftInEditor(draft)}
+                      onClick={() => openDraftInEditor(draft)}
                       className="text-sm font-bold text-neutral-950 tracking-tight truncate hover:underline cursor-pointer"
                     >
                       {draft.title}
@@ -364,7 +390,7 @@ export function BuilderView({
 
                 {/* Simulated Document Thumbnail Strip */}
                 <div
-                  onClick={() => handleOpenDraftInEditor(draft)}
+                  onClick={() => openDraftInEditor(draft)}
                   className="my-4 p-3.5 rounded-2xl bg-neutral-50 border border-neutral-100 flex flex-col gap-1.5 cursor-pointer hover:bg-neutral-100/70 transition-colors"
                 >
                   <div className="flex items-center gap-1.5 mb-1">
@@ -404,7 +430,7 @@ export function BuilderView({
                   {/* Copy Button (Copies and opens the copied one) */}
                   <button
                     type="button"
-                    onClick={() => handleDuplicateDraft(draft)}
+                    onClick={() => requestAction("duplicate", draft)}
                     className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
                     title="Duplicate & Edit"
                   >
@@ -414,7 +440,7 @@ export function BuilderView({
                   {/* Delete Action */}
                   <button
                     type="button"
-                    onClick={() => handleDeleteDraft(draft.id)}
+                    onClick={() => requestAction("delete", draft)}
                     className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                     title="Delete draft"
                   >
@@ -424,7 +450,7 @@ export function BuilderView({
                   {/* Primary Edit / Open Studio Button */}
                   <button
                     type="button"
-                    onClick={() => handleOpenDraftInEditor(draft)}
+                    onClick={() => openDraftInEditor(draft)}
                     className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-950 text-white font-bold text-[11px] hover:bg-neutral-800 transition-colors cursor-pointer shadow-2xs"
                   >
                     <span>Edit</span>
@@ -499,6 +525,40 @@ export function BuilderView({
         careerProfiles={savedProfiles}
         pastProjects={pastProjectsList}
         onSaveCareerProfile={handleSaveCareerProfile}
+      />
+
+      <ConfirmDialog
+        isOpen={pendingAction !== null}
+        title={pendingAction?.type === "delete" ? "Delete this resume?" : "Duplicate this resume?"}
+        description={
+          pendingAction?.type === "delete"
+            ? `"${pendingAction.draft.title}" will be permanently deleted. This can't be undone.`
+            : `A copy of "${pendingAction?.draft.title}" will be created and opened for editing.`
+        }
+        confirmLabel={pendingAction?.type === "delete" ? "Delete" : "Duplicate"}
+        processingLabel="Deleting..."
+        isProcessing={isDeleting}
+        error={deleteError}
+        danger={pendingAction?.type === "delete"}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={async () => {
+          if (!pendingAction) return;
+          if (pendingAction.type === "duplicate") {
+            duplicateDraft(pendingAction.draft);
+            setPendingAction(null);
+            return;
+          }
+          setIsDeleting(true);
+          setDeleteError(null);
+          try {
+            await deleteDraft(pendingAction.draft.id);
+            setPendingAction(null);
+          } catch {
+            setDeleteError("Could not delete this resume. Please try again.");
+          } finally {
+            setIsDeleting(false);
+          }
+        }}
       />
     </div>
   );

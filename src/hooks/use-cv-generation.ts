@@ -131,6 +131,10 @@ export interface RefineCvInput {
   name?: string;
   /** 0–1, writing intensity — e.g. the Tailor alignment slider or Enhance's boost intent. */
   enhancementLevel?: number;
+  /** A short instruction for what to emphasize/rewrite toward (e.g. Enhance's
+   * improvement-goal field) — sent as its own high-priority prompt block
+   * instead of being folded into sourceText. */
+  focusInstructions?: string;
 }
 
 // Step 2: "Choose Template & Continue" — re-analyzes with the essentials the
@@ -147,6 +151,7 @@ export function useRefineCv() {
         jobDescription: input.jobDescription,
         name: input.name,
         enhancementLevel: input.enhancementLevel,
+        focusInstructions: input.focusInstructions,
       });
       if ("mismatch" in analyzed) return analyzed;
 

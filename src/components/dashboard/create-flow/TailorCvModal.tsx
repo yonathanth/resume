@@ -39,6 +39,7 @@ import {
 } from "@/hooks/use-cv-generation";
 import { applyCvContent } from "@/lib/cv-mapper";
 import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 
 interface TailorCvModalProps {
   isOpen: boolean;
@@ -129,6 +130,10 @@ export function TailorCvModal({
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
   const [jobGaps, setJobGaps] = useState<string[]>([]);
 
+  // A CV document created mid-flow should never outlive an abandoned
+  // session — only a completed flow keeps it (see markCompleted() below).
+  const { markCompleted } = useDraftCvLifecycle(isOpen, cvDocumentId);
+
   const analyzeMutation = useAnalyzeFreestyle();
   const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
@@ -139,6 +144,8 @@ export function TailorCvModal({
 
   // Pulls the REAL content behind the selected career profile or past
   // project (never the fabricated skeleton) before moving to the JD step.
+  // Tailoring "from a career profile" keeps the new CV attached to that same
+  // profile — it's a new document for the same trajectory, not a detached one.
   const handlePrepareExistingSource = async () => {
     setFlowError(null);
     try {
@@ -146,7 +153,7 @@ export function TailorCvModal({
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
             ? { sourceCvId: selectedProjectId }
-            : { sourceProfileId: selectedProfileId }
+            : { sourceProfileId: selectedProfileId, targetProfileId: selectedProfileId }
         );
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -401,6 +408,7 @@ export function TailorCvModal({
 
         const finalCv = { ...buildTailoredCv(), id: cvDocumentId };
         if (action === "create" && profileId) saveNewProfile(finalCv, profileId);
+        markCompleted();
         onComplete(finalCv);
       } catch (err) {
         setFlowError(err instanceof Error ? err.message : "Something went wrong saving your CV");

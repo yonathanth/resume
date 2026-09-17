@@ -11,12 +11,13 @@ import { useRouter } from "next/navigation";
 import { useAllDrafts } from "@/hooks/use-cv-drafts";
 import { useProfiles } from "@/hooks/use-profiles";
 import {
+  ApiError,
   getCvDocument,
   deleteCvDocument,
   createCvDocument,
   updateCvContent,
 } from "@/lib/api";
-import { applyCvContent, createBlankCv, toResumeDraft } from "@/lib/cv-mapper";
+import { toResumeDraft } from "@/lib/cv-mapper";
 import {
   ResumeDraft,
   CareerProfile,
@@ -41,7 +42,8 @@ interface DashboardContextValue {
 
   handleOpenDraftInEditor: (draft: ResumeDraft) => void;
   handleDuplicateDraft: (draft: ResumeDraft) => void;
-  handleDeleteDraft: (id: string) => void;
+  handleDeleteDraft: (id: string) => Promise<void>;
+  updateDraftFromSavedCv: (savedCv: CvData) => void;
   handleUseTemplate: (templateId: TemplateId) => void;
   handleCreateCvFromProfile: (profile: CareerProfile) => void;
   handleNewResume: () => void;
@@ -87,27 +89,42 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [preselectedCareerProfile, setPreselectedCareerProfile] = useState<CareerProfile | null>(null);
   const [preselectedTemplate, setPreselectedTemplate] = useState<TemplateId | undefined>(undefined);
 
-  // Opens a draft in the editor with its REAL saved content — falls back to
-  // the blank skeleton only if this isn't a real backend document (e.g. a
-  // duplicate created before the backend call below could resolve).
-  const handleOpenDraftInEditor = async (draft: ResumeDraft) => {
-    let draftCv: CvData = createBlankCv({
-      id: draft.id,
-      title: draft.title,
-      targetRole: draft.targetRole,
-      atsScore: draft.atsScore,
-      skills: draft.matchedKeywords,
+  // Opens a draft in its own dedicated editor page (a real route, not an
+  // overlay component swapped in over whichever page triggered it) — the
+  // page itself fetches the CV's real saved content by id.
+  const handleOpenDraftInEditor = (draft: ResumeDraft) => {
+    router.push(`/dashboard/editor/${draft.id}`);
+  };
+
+  // Upserts the drafts list from a just-saved CV — shared by the editor page
+  // and the "open studio directly" flow after generating a new CV.
+  const updateDraftFromSavedCv = (savedCv: CvData) => {
+    const id = savedCv.id && savedCv.id !== "cv-new" ? savedCv.id : `draft-${Date.now()}`;
+    const newDraft: ResumeDraft = {
+      id,
+      title: savedCv.title,
+      targetRole: savedCv.targetRole,
+      targetCompany: "General Application",
+      atsScore: savedCv.atsScore,
+      lastEdited: "Just now",
+      templateName:
+        savedCv.templateStyle === "tech"
+          ? "Silicon Valley Tech Lead"
+          : savedCv.templateStyle === "executive"
+            ? "Executive Ivy"
+            : "Modern Minimalist",
+      accentColor: "bg-neutral-950",
+      matchedKeywords: savedCv.skills.slice(0, 5),
+    };
+    setDrafts((prev) => {
+      const existingIdx = prev.findIndex((d) => d.id === id);
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        copy[existingIdx] = newDraft;
+        return copy;
+      }
+      return [newDraft, ...prev];
     });
-
-    try {
-      const doc = await getCvDocument(draft.id);
-      draftCv = applyCvContent(draftCv, doc.content);
-    } catch {
-      // Not a real backend document — keep the blank skeleton.
-    }
-
-    setActiveEditingCv(draftCv);
-    router.push("/dashboard");
   };
 
   // Duplicates a draft by copying its REAL content into a new standalone
@@ -117,10 +134,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     try {
       const original = await getCvDocument(draft.id);
       const newDoc = await createCvDocument(original.profileId ?? undefined);
-      await updateCvContent(newDoc.id, { content: original.content });
+      const copyTitle = `${draft.title} (Copy)`;
+      await updateCvContent(newDoc.id, { content: original.content, title: copyTitle });
       const duplicated: ResumeDraft = {
-        ...toResumeDraft({ ...newDoc, content: original.content }),
-        title: `${draft.title} (Copy)`,
+        ...toResumeDraft({ ...newDoc, content: original.content, title: copyTitle }),
+        title: copyTitle,
       };
       setDrafts((prev) => [duplicated, ...prev]);
       handleOpenDraftInEditor(duplicated);
@@ -136,11 +154,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleDeleteDraft = (id: string) => {
+  // Waits for the actual backend delete before removing it from the local
+  // list, so callers can show a real "Deleting..." state and surface a real
+  // failure instead of silently pretending it succeeded. A 404 means this
+  // was never a real backend document (e.g. a local-only fallback draft) —
+  // still safe to remove locally in that case.
+  const handleDeleteDraft = async (id: string) => {
+    try {
+      await deleteCvDocument(id);
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 404)) {
+        throw err;
+      }
+    }
     setDrafts((prev) => prev.filter((d) => d.id !== id));
-    deleteCvDocument(id).catch(() => {
-      // Not a real backend document (e.g. a local-only fallback draft) — ignore.
-    });
   };
 
   const handleUseTemplate = (templateId: TemplateId) => {
@@ -185,6 +212,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         handleOpenDraftInEditor,
         handleDuplicateDraft,
         handleDeleteDraft,
+        updateDraftFromSavedCv,
         handleUseTemplate,
         handleCreateCvFromProfile,
         handleNewResume,

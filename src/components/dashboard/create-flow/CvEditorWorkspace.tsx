@@ -224,6 +224,7 @@ export function CvEditorWorkspace({
       await updateCvContent(cv.id, {
         content: toCVContentPatch(cv),
         jobDescription: cv.jobDescription ?? null,
+        title: cv.title,
       });
       await finalizeCvDocument(cv.id);
       await renderCvDocument(cv.id);
@@ -261,6 +262,7 @@ export function CvEditorWorkspace({
         await updateCvContent(cv.id, {
           content: toCVContentPatch(cv),
           jobDescription: cv.jobDescription ?? null,
+          title: cv.title,
         });
       } catch (err) {
         console.error("Failed to save CV changes", err);
@@ -852,7 +854,7 @@ export function CvEditorWorkspace({
         </div>
 
         {/* RIGHT COLUMN: LIVE ATS PAPER PREVIEW (Desktop Split Screen) */}
-        <div className="hidden lg:flex flex-1 h-full bg-[#ebebed] p-6 lg:p-8 flex-col items-center justify-between overflow-y-auto">
+        <div className="hidden lg:flex flex-1 h-full bg-[#ebebed] p-6 lg:p-8 flex-col items-center justify-start overflow-y-auto">
           {/* Zoom and ATS compliance bar */}
           <div className="w-full max-w-[640px] flex items-center justify-between mb-4 select-none">
             <div className="flex items-center gap-2">
@@ -888,10 +890,15 @@ export function CvEditorWorkspace({
           {/* Paper Document Representation */}
           {/* Paper Document Representation */}
           <div
-            className={`w-full max-w-[640px] min-h-[900px] bg-white rounded-lg shadow-xl p-10 sm:p-12 text-neutral-900 transition-transform origin-top flex flex-col justify-between ${
+            className={`w-full max-w-[640px]  bg-white rounded-lg shadow-xl p-10 sm:p-12 text-neutral-900 ${
               isSerif ? "font-serif" : "font-sans"
             }`}
-            style={{ transform: `scale(${zoomLevel / 100})` }}
+            // `zoom` (not `transform: scale`) so the box's actual layout size
+            // changes with it — an `overflow-y-auto` ancestor can only size
+            // its scrollable area off real layout dimensions, and a scaled
+            // transform doesn't reliably contribute to that when content is
+            // taller than one page.
+            style={{ zoom: zoomLevel / 100 } as React.CSSProperties}
           >
             <div className="space-y-6">
               {/* Document Header */}
@@ -1105,7 +1112,7 @@ export function CvEditorWorkspace({
             </div>
 
             {/* Bottom ATS Signature Line */}
-            <div className="pt-8 border-t border-neutral-100 text-[10px] text-neutral-400 text-center flex items-center justify-center gap-1.5">
+            <div className="mt-8 pt-8 border-t border-neutral-100 text-[10px] text-neutral-400 text-center flex items-center justify-center gap-1.5">
               <span>Prepared with Resumate ATS Machine-Readable Specification</span>
               <span>•</span>
               <span className="font-semibold text-neutral-600">{currentTemplate.name} ({currentTemplate.category})</span>

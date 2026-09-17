@@ -68,8 +68,10 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
   const token = getAccessToken();
   const headers = new Headers(options.headers);
   // FormData (file uploads) must keep the browser-generated multipart
-  // boundary — never force JSON headers onto it.
-  if (!(options.body instanceof FormData)) {
+  // boundary — never force JSON headers onto it. And a bodyless request
+  // (e.g. DELETE) must not claim a JSON content-type at all — Fastify
+  // rejects "Content-Type: application/json" paired with an empty body.
+  if (options.body !== undefined && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -180,6 +182,9 @@ export interface CVContentDTO {
 export interface ApiCvDocument {
   id: string;
   profileId: string | null;
+  // The document's own display name, distinct from content.personal.title
+  // (the candidate's job title/headline inside the CV itself).
+  title: string | null;
   templateId: string;
   content: CVContentDTO;
   status: string;
@@ -290,6 +295,10 @@ export function analyzeCv(input: {
   name?: string;
   enhancementLevel?: number;
   templateId?: string;
+  // A short instruction for what to emphasize/rewrite toward (e.g. the
+  // Enhance flow's improvement-goal field) — kept out of sourceText so the
+  // AI treats it as a directive, not more candidate narrative.
+  focusInstructions?: string;
 }) {
   return apiFetch<AnalyzeResult | GenerateCvMismatch>("/api/v1/cv/analyze", {
     method: "POST",
@@ -308,6 +317,7 @@ export function generateCv(
     jobDescription?: string;
     name?: string;
     enhancementLevel?: number;
+    focusInstructions?: string;
   }
 ) {
   return apiFetch<ApiCvDocument | GenerateCvMismatch>(`/api/v1/cv/${cvId}/generate`, {
@@ -326,7 +336,7 @@ export function moveCvDocumentProfile(cvId: string, profileId: string | null) {
 
 export function updateCvContent(
   cvId: string,
-  input: { content?: CVContentDTO; jobDescription?: string | null }
+  input: { content?: CVContentDTO; jobDescription?: string | null; title?: string }
 ) {
   return apiFetch<ApiCvDocument>(`/api/v1/cv/${cvId}`, {
     method: "PATCH",
