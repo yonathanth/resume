@@ -13,7 +13,6 @@ import { useProfiles } from "@/hooks/use-profiles";
 import {
   getCvDocument,
   deleteCvDocument,
-  getUnfiledProfile,
   createCvDocument,
   updateCvContent,
 } from "@/lib/api";
@@ -72,9 +71,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const { data: fetchedProfiles } = useProfiles();
   const hasHydratedProfiles = useRef(false);
 
-  // Seed saved profiles from the backend (excludes the hidden "Unfiled CVs"
-  // bucket) once on load; local edits (creating a new one) take over from
-  // there.
+  // Seed saved profiles from the backend once on load; local edits (creating
+  // a new one) take over from there.
   useEffect(() => {
     if (fetchedProfiles && !hasHydratedProfiles.current) {
       hasHydratedProfiles.current = true;
@@ -112,13 +110,13 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     router.push("/dashboard");
   };
 
-  // Duplicates a draft by copying its REAL content into a new backend
-  // document in the unfiled bucket, so editing the copy doesn't start blank.
+  // Duplicates a draft by copying its REAL content into a new standalone
+  // backend document (kept under the same career profile as the original,
+  // if any), so editing the copy doesn't start blank.
   const handleDuplicateDraft = async (draft: ResumeDraft) => {
     try {
       const original = await getCvDocument(draft.id);
-      const bucket = await getUnfiledProfile();
-      const newDoc = await createCvDocument(bucket.id);
+      const newDoc = await createCvDocument(original.profileId ?? undefined);
       await updateCvContent(newDoc.id, { content: original.content });
       const duplicated: ResumeDraft = {
         ...toResumeDraft({ ...newDoc, content: original.content }),

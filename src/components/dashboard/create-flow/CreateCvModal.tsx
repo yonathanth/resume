@@ -33,7 +33,7 @@ import {
   useFinalizeCvProfile,
 } from "@/hooks/use-cv-generation";
 import { applyCvContent } from "@/lib/cv-mapper";
-import { ApiError, CVContentDTO } from "@/lib/api";
+import { ApiError, ClarificationQuestion, CVContentDTO } from "@/lib/api";
 
 interface CreateCvModalProps {
   isOpen: boolean;
@@ -152,10 +152,17 @@ export function CreateCvModal({
   // it stays local-only. Downstream logic keys off `cvDocumentId` actually
   // being set, not the method itself.
   const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
-  const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
   const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
   const [analyzedSourceText, setAnalyzedSourceText] = useState("");
   const [flowError, setFlowError] = useState<string | null>(null);
+
+  // AI clarification questions surfaced by /cv/analyze (additive to the
+  // fixed missing-details fields below) and any job-compatibility gaps
+  // surfaced after refining — both optional, shown only when non-empty.
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>([]);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [jobGaps, setJobGaps] = useState<string[]>([]);
+  const [showAttachProfile, setShowAttachProfile] = useState(false);
 
   const analyzeMutation = useAnalyzeFreestyle();
   const analyzeUploadMutation = useAnalyzeUpload();
@@ -178,9 +185,10 @@ export function CreateCvModal({
         setFlowError(document.reason);
         return;
       }
-      setDefaultProfileId(profileId);
       setCvDocumentId(docId);
       setLatestContent(document.content);
+      setClarifyingQuestions(document.questions ?? []);
+      setQuestionAnswers({});
       const personal = document.content?.personal ?? {};
       setFullName(personal.full_name || fullName);
       setEmail(personal.email || email);
@@ -204,15 +212,16 @@ export function CreateCvModal({
     setFreestyleText(text);
 
     try {
-      const { profileId, cvDocumentId: docId, document } = await analyzeMutation.mutateAsync(text);
+      const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync(text);
       if ("mismatch" in document) {
         setFlowError(document.reason);
         return;
       }
-      setDefaultProfileId(profileId);
       setCvDocumentId(docId);
       setLatestContent(document.content);
       setAnalyzedSourceText(text);
+      setClarifyingQuestions(document.questions ?? []);
+      setQuestionAnswers({});
       const personal = document.content?.personal ?? {};
       setFullName(personal.full_name ?? "");
       setTargetRole(personal.title ?? "");
@@ -237,7 +246,7 @@ export function CreateCvModal({
     }, 400);
 
     try {
-      const { profileId, cvDocumentId: docId, sourceText, document } =
+      const { cvDocumentId: docId, sourceText, document } =
         await analyzeUploadMutation.mutateAsync(file);
       clearInterval(progressTimer);
 
@@ -248,10 +257,11 @@ export function CreateCvModal({
       }
 
       setAnalysisProgress(100);
-      setDefaultProfileId(profileId);
       setCvDocumentId(docId);
       setLatestContent(document.content);
       setAnalyzedSourceText(sourceText);
+      setClarifyingQuestions(document.questions ?? []);
+      setQuestionAnswers({});
       const personal = document.content?.personal ?? {};
       setFullName(personal.full_name ?? "");
       setTargetRole(personal.title ?? "");
@@ -282,6 +292,9 @@ export function CreateCvModal({
       `Target role: ${targetRole}`,
       phone.trim() && `Phone: ${phone}`,
       missingMetric.trim() && `Key recent achievement: ${missingMetric}`,
+      ...clarifyingQuestions
+        .filter((q) => questionAnswers[q.id]?.trim())
+        .map((q) => `${q.question} ${questionAnswers[q.id].trim()}`),
     ].filter(Boolean);
     const augmentedText = `${analyzedSourceText}\n\n${extraLines.join("\n")}`;
 
@@ -297,10 +310,64 @@ export function CreateCvModal({
         return;
       }
       setLatestContent(document.content);
+      setJobGaps(document.jobAnalysis?.gaps ?? []);
       setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
     } catch (err) {
       setFlowError(err instanceof ApiError ? err.message : "Could not update your CV. Please try again.");
     }
+  };
+
+  // Renders any AI-surfaced clarification questions additively below the
+  // fixed missing-details fields — only appears when the analyze step
+  // actually flagged something it couldn't confidently infer.
+  const renderClarifyingQuestions = () => {
+    if (clarifyingQuestions.length === 0) return null;
+    return (
+      <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3">
+        <span className="text-[11px] font-bold text-violet-800 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5" />
+          A few things the AI wants to confirm
+        </span>
+        {clarifyingQuestions.map((q) => (
+          <div key={q.id}>
+            <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+              {q.question}
+              {!q.required && " (Optional)"}
+            </label>
+            {q.type === "textarea" ? (
+              <textarea
+                rows={2}
+                value={questionAnswers[q.id] ?? ""}
+                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={q.reason}
+                className="w-full p-2.5 rounded-lg border border-neutral-300 text-xs bg-white text-neutral-900"
+              />
+            ) : q.type === "select" && q.options?.length ? (
+              <select
+                value={questionAnswers[q.id] ?? ""}
+                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-neutral-300 text-xs text-neutral-900"
+              >
+                <option value="">Select...</option>
+                {q.options.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={q.type === "date" ? "date" : "text"}
+                value={questionAnswers[q.id] ?? ""}
+                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={q.reason}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-white border border-neutral-300 text-xs text-neutral-900 focus:ring-2 focus:ring-neutral-900"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const buildLocalCv = (content?: CVContentDTO): CvData => {
@@ -345,20 +412,20 @@ export function CreateCvModal({
   };
 
   // Handle Finish Flow and Launch Editor
-  const handleFinish = async (shouldSaveProfile: boolean) => {
+  const handleFinish = async (action: "create" | "attach" | "none", existingProfileId?: string) => {
     setFlowError(null);
 
-    if (cvDocumentId && defaultProfileId) {
+    if (cvDocumentId) {
       try {
         const { profileId } = await finalizeMutation.mutateAsync({
           cvDocumentId,
-          currentProfileId: defaultProfileId,
-          shouldSaveProfile,
+          action,
           targetRole: targetRole || defaultSampleCv.targetRole,
+          existingProfileId,
         });
 
         const generatedCv = { ...buildLocalCv(latestContent), id: cvDocumentId };
-        if (shouldSaveProfile) saveNewProfile(generatedCv, profileId);
+        if (action === "create" && profileId) saveNewProfile(generatedCv, profileId);
         onComplete(generatedCv);
       } catch (err) {
         setFlowError(err instanceof ApiError ? err.message : "Something went wrong saving your CV");
@@ -367,7 +434,7 @@ export function CreateCvModal({
     }
 
     const generatedCv = buildLocalCv();
-    if (shouldSaveProfile) saveNewProfile(generatedCv, `profile-${Date.now()}`);
+    if (action === "create") saveNewProfile(generatedCv, `profile-${Date.now()}`);
     onComplete(generatedCv);
   };
 
@@ -796,6 +863,8 @@ export function CreateCvModal({
                 />
               </div>
 
+              {renderClarifyingQuestions()}
+
               {/* Optional Job Description */}
               <div className="rounded-xl border border-neutral-200 p-3 bg-neutral-50/60 mt-2">
                 <div className="flex items-center justify-between">
@@ -988,6 +1057,8 @@ export function CreateCvModal({
                 />
               </div>
 
+              {renderClarifyingQuestions()}
+
               {/* Optional Job Description */}
               <div className="rounded-xl border border-neutral-200 p-3 bg-neutral-50/60 mt-2">
                 <div className="flex items-center justify-between">
@@ -1123,6 +1194,20 @@ export function CreateCvModal({
               </p>
             </div>
 
+            {jobGaps.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 mb-4">
+                <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1.5 mb-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Gaps vs. the job description
+                </span>
+                <ul className="text-[11px] text-amber-700 space-y-0.5 list-disc list-inside">
+                  {jobGaps.map((gap, idx) => (
+                    <li key={idx}>{gap}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="space-y-2.5 mb-6 max-h-[300px] overflow-y-auto pr-1 scrollbar-none">
               {TEMPLATE_OPTIONS.map((tmpl) => {
                 const isSelected = selectedTemplate === tmpl.id;
@@ -1256,6 +1341,20 @@ export function CreateCvModal({
               </div>
             </div>
 
+            {jobGaps.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 mb-4">
+                <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1.5 mb-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Gaps vs. the job description
+                </span>
+                <ul className="text-[11px] text-amber-700 space-y-0.5 list-disc list-inside">
+                  {jobGaps.map((gap, idx) => (
+                    <li key={idx}>{gap}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Save Error */}
             {flowError && (
               <p className="text-[11px] text-red-600 font-medium text-center mb-2">{flowError}</p>
@@ -1266,7 +1365,7 @@ export function CreateCvModal({
               <button
                 type="button"
                 disabled={isFlowBusy}
-                onClick={() => handleFinish(true)}
+                onClick={() => handleFinish("create")}
                 className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <BookmarkPlus className="w-4 h-4" />
@@ -1274,10 +1373,38 @@ export function CreateCvModal({
                   {finalizeMutation.isPending ? "Saving..." : "Save to Career Profiles & Open Studio"}
                 </span>
               </button>
+
+              {availableProfiles.length > 0 && !showAttachProfile && (
+                <button
+                  type="button"
+                  disabled={isFlowBusy}
+                  onClick={() => setShowAttachProfile(true)}
+                  className="w-full py-2.5 rounded-2xl border border-neutral-200 text-neutral-600 font-semibold text-xs hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  Attach to an Existing Profile
+                </button>
+              )}
+
+              {showAttachProfile && (
+                <div className="rounded-2xl border border-neutral-200 p-2.5 space-y-1.5 max-h-[160px] overflow-y-auto">
+                  {availableProfiles.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      disabled={isFlowBusy}
+                      onClick={() => handleFinish("attach", p.id)}
+                      className="w-full px-3 py-2 rounded-xl text-left text-xs font-semibold text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {p.roleTitle}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <button
                 type="button"
                 disabled={isFlowBusy}
-                onClick={() => handleFinish(false)}
+                onClick={() => handleFinish("none")}
                 className="w-full py-2.5 rounded-2xl border border-neutral-200 text-neutral-600 font-semibold text-xs hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {finalizeMutation.isPending ? "Saving..." : "Skip & Open Studio Directly"}

@@ -5,8 +5,8 @@ import { listProfiles, getProfileSkills, getProfileSummary } from "@/lib/api";
 import { toCareerProfile } from "@/lib/cv-mapper";
 import { CareerProfile } from "@/components/dashboard/create-flow/types";
 
-// Real career profiles the user has created — the backend already excludes
-// the hidden "Unfiled CVs" bucket profile (isSystemDefault) from this list.
+// Real career profiles the user has created — standalone CV documents with
+// no profile attached simply don't appear here.
 export function useProfiles() {
   return useQuery({
     queryKey: ["career-profiles"],

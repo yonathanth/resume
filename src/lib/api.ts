@@ -134,6 +134,20 @@ export interface ApiCareerProfile {
   summarySkills?: string[] | null;
 }
 
+export interface ClarificationQuestion {
+  id: string;
+  question: string;
+  reason: string;
+  type: "text" | "textarea" | "select" | "date";
+  required: boolean;
+  options?: string[];
+}
+
+export interface JobAnalysis {
+  mismatch: false;
+  gaps?: string[];
+}
+
 export interface CVContentDTO {
   personal?: {
     full_name?: string;
@@ -165,12 +179,22 @@ export interface CVContentDTO {
 
 export interface ApiCvDocument {
   id: string;
-  profileId: string;
+  profileId: string | null;
   templateId: string;
   content: CVContentDTO;
   status: string;
   createdAt: string;
   updatedAt: string;
+  // Only present on the response from generateCv() when it actually ran the
+  // AI (as opposed to persisting an already-analyzed candidateData).
+  questions?: ClarificationQuestion[];
+  jobAnalysis?: JobAnalysis | null;
+}
+
+export interface AnalyzeResult {
+  candidateData: CVContentDTO;
+  questions: ClarificationQuestion[];
+  jobAnalysis: JobAnalysis | null;
 }
 
 export interface GenerateCvMismatch {
@@ -188,11 +212,15 @@ export interface ApiCvImport {
 }
 
 // Uploads a resume file (pdf/docx/png/jpg/jpeg) for OCR/text extraction —
-// backed by pdf-parse, mammoth and tesseract.js on the server.
-export function uploadCvImport(profileId: string, file: File) {
+// backed by pdf-parse, mammoth and tesseract.js on the server. Omit
+// profileId for a standalone upload not attached to any career profile.
+export function uploadCvImport(file: File, profileId?: string) {
   const formData = new FormData();
   formData.append("file", file);
-  return apiFetch<ApiCvImport>(`/api/v1/profiles/${encodeURIComponent(profileId)}/import`, {
+  const path = profileId
+    ? `/api/v1/profiles/${encodeURIComponent(profileId)}/import`
+    : "/api/v1/imports";
+  return apiFetch<ApiCvImport>(path, {
     method: "POST",
     body: formData,
   });
@@ -200,13 +228,6 @@ export function uploadCvImport(profileId: string, file: File) {
 
 export function listProfiles() {
   return apiFetch<ApiCareerProfile[]>("/api/v1/profiles");
-}
-
-// The hidden per-user bucket profile for CVs generated via "Skip & Open
-// Studio Directly" — created lazily on the backend, never shown in the
-// regular profiles list.
-export function getUnfiledProfile() {
-  return apiFetch<ApiCareerProfile>("/api/v1/profiles/default");
 }
 
 // Deduped skills across every CV under the user's real career profiles.
@@ -234,15 +255,16 @@ export function createProfile(title: string) {
   });
 }
 
-export function createCvDocument(profileId: string, templateId = "default") {
+// Omit profileId to create a standalone CV not attached to any career profile.
+export function createCvDocument(profileId?: string, templateId = "default") {
   return apiFetch<ApiCvDocument>("/api/v1/cv", {
     method: "POST",
     body: JSON.stringify({ profileId, templateId }),
   });
 }
 
-// Omit profileId to list every CV document the user owns across all of
-// their career profiles (including the hidden "Unfiled CVs" bucket).
+// Omit profileId to list every CV document the user owns — across all of
+// their career profiles and standalone (unattached) documents alike.
 export function listCvDocuments(profileId?: string) {
   const query = profileId ? `?profileId=${encodeURIComponent(profileId)}` : "";
   return apiFetch<ApiCvDocument[]>(`/api/v1/cv${query}`);
@@ -258,9 +280,35 @@ export function deleteCvDocument(cvId: string) {
   });
 }
 
+// Runs the same combined AI analysis /cv/analyze does, without persisting
+// anything — structuring, tailoring, job compatibility, and clarification
+// questions all come back together (see the backend's clarification.rules.ts
+// for why this stays one AI call).
+export function analyzeCv(input: {
+  sourceText: string;
+  jobDescription?: string;
+  name?: string;
+  enhancementLevel?: number;
+  templateId?: string;
+}) {
+  return apiFetch<AnalyzeResult | GenerateCvMismatch>("/api/v1/cv/analyze", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// Persists a CV document. Either pass sourceText (runs the AI here, same as
+// analyzeCv) or analyzedContent (the candidateData from a prior analyzeCv()
+// call — skips the AI call and just validates + saves it).
 export function generateCv(
   cvId: string,
-  input: { sourceText: string; jobDescription?: string; name?: string; enhancementLevel?: number }
+  input: {
+    sourceText?: string;
+    analyzedContent?: CVContentDTO;
+    jobDescription?: string;
+    name?: string;
+    enhancementLevel?: number;
+  }
 ) {
   return apiFetch<ApiCvDocument | GenerateCvMismatch>(`/api/v1/cv/${cvId}/generate`, {
     method: "POST",
@@ -268,7 +316,8 @@ export function generateCv(
   });
 }
 
-export function moveCvDocumentProfile(cvId: string, profileId: string) {
+// null detaches the document from any career profile.
+export function moveCvDocumentProfile(cvId: string, profileId: string | null) {
   return apiFetch<ApiCvDocument>(`/api/v1/cv/${cvId}/profile`, {
     method: "PATCH",
     body: JSON.stringify({ profileId }),

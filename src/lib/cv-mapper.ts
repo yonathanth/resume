@@ -37,7 +37,7 @@ export function createBlankCv(overrides: Partial<CvData> = {}): CvData {
   };
 }
 
-// Maps a backend CV document (from the hidden "Unfiled CVs" bucket profile)
+// Maps a backend CV document (attached to a career profile or standalone)
 // into the local ResumeDraft shape the Past Projects page already renders.
 export function toResumeDraft(doc: ApiCvDocument): ResumeDraft {
   const personal = doc.content?.personal ?? {};

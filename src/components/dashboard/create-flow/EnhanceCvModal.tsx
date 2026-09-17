@@ -15,6 +15,7 @@ import {
   SlidersHorizontal,
   ChevronRight,
   FileCheck,
+  AlertCircle,
 } from "lucide-react";
 import {
   CvData,
@@ -33,7 +34,7 @@ import {
   useFinalizeCvProfile,
 } from "@/hooks/use-cv-generation";
 import { applyCvContent } from "@/lib/cv-mapper";
-import { CVContentDTO } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
 
 interface EnhanceCvModalProps {
   isOpen: boolean;
@@ -96,11 +97,17 @@ export function EnhanceCvModal({
   // handlePrepareExistingSource). Downstream logic keys off `cvDocumentId`
   // actually being set, not the source type itself.
   const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
-  const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
   const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
   const [analyzedSourceText, setAnalyzedSourceText] = useState("");
   const [flowError, setFlowError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // AI clarification questions surfaced by /cv/analyze (additive to the
+  // improvement-goals step) and job-compatibility gaps surfaced after
+  // enhancing — both optional, shown only when non-empty.
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>([]);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [jobGaps, setJobGaps] = useState<string[]>([]);
 
   const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
@@ -115,16 +122,17 @@ export function EnhanceCvModal({
     setFlowError(null);
     setUploadedFileName(file.name);
     try {
-      const { profileId, cvDocumentId: docId, sourceText, document } =
+      const { cvDocumentId: docId, sourceText, document } =
         await analyzeUploadMutation.mutateAsync(file);
       if ("mismatch" in document) {
         setFlowError(document.reason);
         return;
       }
-      setDefaultProfileId(profileId);
       setCvDocumentId(docId);
       setLatestContent(document.content);
       setAnalyzedSourceText(sourceText);
+      setClarifyingQuestions(document.questions ?? []);
+      setQuestionAnswers({});
     } catch (err) {
       setFlowError(
         err instanceof Error ? err.message : "Could not read this file. Please try a different one."
@@ -137,7 +145,7 @@ export function EnhanceCvModal({
   const handlePrepareExistingSource = async () => {
     setFlowError(null);
     try {
-      const { profileId, cvDocumentId: docId, sourceText, document } =
+      const { cvDocumentId: docId, sourceText, document } =
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
             ? { sourceCvId: selectedProjectId }
@@ -147,14 +155,68 @@ export function EnhanceCvModal({
         setFlowError(document.reason);
         return;
       }
-      setDefaultProfileId(profileId);
       setCvDocumentId(docId);
       setLatestContent(document.content);
       setAnalyzedSourceText(sourceText);
+      setClarifyingQuestions(document.questions ?? []);
+      setQuestionAnswers({});
       setStep("improvement-goals");
     } catch (err) {
       setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
     }
+  };
+
+  // Renders any AI-surfaced clarification questions additively below the
+  // custom enhancement instructions — only appears when the analyze step
+  // actually flagged something it couldn't confidently infer.
+  const renderClarifyingQuestions = () => {
+    if (clarifyingQuestions.length === 0) return null;
+    return (
+      <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3 mb-4">
+        <span className="text-[11px] font-bold text-violet-800 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5" />
+          A few things the AI wants to confirm
+        </span>
+        {clarifyingQuestions.map((q) => (
+          <div key={q.id}>
+            <label className="text-xs font-bold text-neutral-950 block mb-1">
+              {q.question}
+              {!q.required && " (Optional)"}
+            </label>
+            {q.type === "textarea" ? (
+              <textarea
+                rows={2}
+                value={questionAnswers[q.id] ?? ""}
+                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={q.reason}
+                className="w-full p-2.5 rounded-lg border border-neutral-200 text-xs bg-white text-neutral-900"
+              />
+            ) : q.type === "select" && q.options?.length ? (
+              <select
+                value={questionAnswers[q.id] ?? ""}
+                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-neutral-200 text-xs bg-white"
+              >
+                <option value="">Select...</option>
+                {q.options.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type={q.type === "date" ? "date" : "text"}
+                value={questionAnswers[q.id] ?? ""}
+                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
+                placeholder={q.reason}
+                className="w-full px-3 py-2 rounded-xl border border-neutral-200 text-xs bg-white text-neutral-900"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const getBaseCv = (): CvData => {
@@ -228,9 +290,16 @@ export function EnhanceCvModal({
       return;
     }
 
-    const augmentedText = goal.trim()
-      ? `${analyzedSourceText}\n\nEnhancement focus: ${goal}`
-      : analyzedSourceText;
+    const answerLines = clarifyingQuestions
+      .filter((q) => questionAnswers[q.id]?.trim())
+      .map((q) => `${q.question} ${questionAnswers[q.id].trim()}`);
+    const augmentedText = [
+      analyzedSourceText,
+      goal.trim() && `Enhancement focus: ${goal}`,
+      ...answerLines,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     try {
       const document = await refineMutation.mutateAsync({
@@ -244,26 +313,27 @@ export function EnhanceCvModal({
         return;
       }
       setLatestContent(document.content);
+      setJobGaps(document.jobAnalysis?.gaps ?? []);
       setStep("select-template");
     } catch (err) {
       setFlowError(err instanceof Error ? err.message : "Could not enhance your CV. Please try again.");
     }
   };
 
-  const handleFinish = async (shouldSaveProfile: boolean) => {
+  const handleFinish = async (action: "create" | "attach" | "none", existingProfileId?: string) => {
     setFlowError(null);
 
-    if (cvDocumentId && defaultProfileId) {
+    if (cvDocumentId) {
       try {
         const { profileId } = await finalizeMutation.mutateAsync({
           cvDocumentId,
-          currentProfileId: defaultProfileId,
-          shouldSaveProfile,
+          action,
           targetRole: getBaseCv().targetRole,
+          existingProfileId,
         });
 
         const finalCv = { ...buildEnhancedCv(), id: cvDocumentId };
-        if (shouldSaveProfile) saveNewProfile(finalCv, profileId);
+        if (action === "create" && profileId) saveNewProfile(finalCv, profileId);
         onComplete(finalCv);
       } catch (err) {
         setFlowError(err instanceof Error ? err.message : "Something went wrong saving your CV");
@@ -272,7 +342,7 @@ export function EnhanceCvModal({
     }
 
     const finalCv = buildEnhancedCv();
-    if (shouldSaveProfile) saveNewProfile(finalCv, `profile-${Date.now()}`);
+    if (action === "create") saveNewProfile(finalCv, `profile-${Date.now()}`);
     onComplete(finalCv);
   };
 
@@ -619,6 +689,8 @@ export function EnhanceCvModal({
               />
             </div>
 
+            {renderClarifyingQuestions()}
+
             {/* Optional Job Description Accordion (as requested across flows) */}
             <div className="rounded-xl border border-neutral-200 p-3 bg-neutral-50/60 mb-5">
               <div className="flex items-center justify-between">
@@ -700,6 +772,20 @@ export function EnhanceCvModal({
               </p>
             </div>
 
+            {jobGaps.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 mb-4">
+                <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1.5 mb-1">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Gaps vs. the job description
+                </span>
+                <ul className="text-[11px] text-amber-700 space-y-0.5 list-disc list-inside">
+                  {jobGaps.map((gap, idx) => (
+                    <li key={idx}>{gap}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="space-y-2.5 mb-6 max-h-[280px] overflow-y-auto pr-1">
               {TEMPLATE_OPTIONS.map((tmpl) => {
                 const isSelected = selectedTemplate === tmpl.id;
@@ -755,7 +841,7 @@ export function EnhanceCvModal({
               <button
                 type="button"
                 disabled={finalizeMutation.isPending}
-                onClick={() => handleFinish(false)}
+                onClick={() => handleFinish("none")}
                 className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <span>{finalizeMutation.isPending ? "Saving..." : "Open in Studio"}</span>
