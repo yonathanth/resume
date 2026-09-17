@@ -22,6 +22,8 @@ import {
   LayoutTemplate,
 } from "lucide-react";
 import { CvData, WorkExperience, Education, TEMPLATE_OPTIONS, TemplateId } from "./types";
+import { updateCvContent, finalizeCvDocument, renderCvDocument, downloadCvPdf, ApiError } from "@/lib/api";
+import { toCVContentPatch } from "@/lib/cv-mapper";
 
 interface CvEditorWorkspaceProps {
   initialData: CvData;
@@ -35,6 +37,9 @@ export function CvEditorWorkspace({
   onSave,
 }: CvEditorWorkspaceProps) {
   const [cv, setCv] = useState<CvData>(initialData);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<
     "personal" | "summary" | "experience" | "education" | "skills"
   >("personal");
@@ -199,12 +204,72 @@ export function CvEditorWorkspace({
     }));
   };
 
-  // Trigger simulated downloads
-  const handleDownload = (type: "pdf" | "docx") => {
-    setDownloadSuccess(
-      `Your ATS-compliant ${type.toUpperCase()} was generated successfully!`
-    );
-    setTimeout(() => setDownloadSuccess(null), 3500);
+  // Real PDF pipeline: save the current edits (PATCH), finalize the document
+  // (validates it's complete), render it server-side (Puppeteer), then
+  // stream the actual PDF back and save it. DOCX has no backend renderer, and
+  // an unbacked ("cv-new") CV has nothing to render, so both keep the
+  // original simulated confirmation banner.
+  const handleDownload = async (type: "pdf" | "docx") => {
+    const isBackedByDocument = Boolean(cv.id) && cv.id !== "cv-new";
+
+    if (type !== "pdf" || !isBackedByDocument) {
+      setDownloadSuccess(`Your ATS-compliant ${type.toUpperCase()} was generated successfully!`);
+      setTimeout(() => setDownloadSuccess(null), 3500);
+      return;
+    }
+
+    setDownloadError(null);
+    setIsDownloading(true);
+    try {
+      await updateCvContent(cv.id, {
+        content: toCVContentPatch(cv),
+        jobDescription: cv.jobDescription ?? null,
+      });
+      await finalizeCvDocument(cv.id);
+      await renderCvDocument(cv.id);
+      const blob = await downloadCvPdf(cv.id);
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${cv.title || "resume"}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+
+      setDownloadSuccess("Your ATS-compliant PDF was generated successfully!");
+      setTimeout(() => setDownloadSuccess(null), 3500);
+    } catch (err) {
+      setDownloadError(
+        err instanceof ApiError ? err.message : "Could not generate the PDF. Please try again."
+      );
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // "Done" — persists edits to the backend CV document (when this CV is
+  // backed by one and something actually changed) before closing the editor.
+  const handleDone = async () => {
+    const isBackedByDocument = Boolean(cv.id) && cv.id !== "cv-new";
+    const hasChanges = JSON.stringify(cv) !== JSON.stringify(initialData);
+
+    if (isBackedByDocument && hasChanges) {
+      setIsSaving(true);
+      try {
+        await updateCvContent(cv.id, {
+          content: toCVContentPatch(cv),
+          jobDescription: cv.jobDescription ?? null,
+        });
+      } catch (err) {
+        console.error("Failed to save CV changes", err);
+      } finally {
+        setIsSaving(false);
+      }
+    }
+
+    onSave(cv);
   };
 
   return (
@@ -262,20 +327,22 @@ export function CvEditorWorkspace({
           {/* Download PDF */}
           <button
             type="button"
+            disabled={isDownloading}
             onClick={() => handleDownload("pdf")}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-800 text-xs font-semibold transition-all cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <Download className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Download PDF</span>
+            <span className="hidden sm:inline">{isDownloading ? "Generating..." : "Download PDF"}</span>
           </button>
 
           {/* Done / Save Action */}
           <button
             type="button"
-            onClick={() => onSave(cv)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-semibold transition-all cursor-pointer shadow-xs"
+            disabled={isSaving}
+            onClick={handleDone}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-950 hover:bg-neutral-800 text-white text-xs font-semibold transition-all cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <span>Done</span>
+            <span>{isSaving ? "Saving..." : "Done"}</span>
           </button>
         </div>
       </header>
@@ -285,6 +352,11 @@ export function CvEditorWorkspace({
         <div className="bg-emerald-600 text-white text-xs font-semibold px-4 py-2 text-center flex items-center justify-center gap-2 animate-in fade-in">
           <CheckCircle2 className="w-4 h-4" />
           <span>{downloadSuccess}</span>
+        </div>
+      )}
+      {downloadError && (
+        <div className="bg-red-600 text-white text-xs font-semibold px-4 py-2 text-center flex items-center justify-center gap-2 animate-in fade-in">
+          <span>{downloadError}</span>
         </div>
       )}
 
@@ -1301,10 +1373,11 @@ export function CvEditorWorkspace({
               </button>
               <button
                 type="button"
+                disabled={isDownloading}
                 onClick={() => handleDownload("pdf")}
-                className="flex-1 py-2.5 rounded-xl bg-neutral-950 text-white text-xs font-bold hover:bg-neutral-800 shadow-sm cursor-pointer"
+                className="flex-1 py-2.5 rounded-xl bg-neutral-950 text-white text-xs font-bold hover:bg-neutral-800 shadow-sm cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Download PDF
+                {isDownloading ? "Generating..." : "Download PDF"}
               </button>
             </div>
           </div>

@@ -3,6 +3,9 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { FileText, Eye, EyeOff } from "lucide-react";
+import { useRegister, useLogin, useGoogleAuth } from "@/hooks/use-auth";
+import { useGoogleIdentity } from "@/hooks/use-google-identity";
+import { ApiError } from "@/lib/api";
 
 interface AuthLayoutProps {
   mode: "signup" | "login";
@@ -220,12 +223,45 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const isSignup = mode === "signup";
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const registerMutation = useRegister();
+  const loginMutation = useLogin();
+  const googleAuthMutation = useGoogleAuth();
+  const { promptGoogleSignIn } = useGoogleIdentity();
+
+  const isPending =
+    registerMutation.isPending || loginMutation.isPending || googleAuthMutation.isPending;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    window.location.href = "/dashboard";
+    setFormError(null);
+    try {
+      if (isSignup) {
+        await registerMutation.mutateAsync({ email, password });
+      } else {
+        await loginMutation.mutateAsync({ email, password });
+      }
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : "Something went wrong");
+    }
+  };
+
+  const handleGoogleClick = () => {
+    setFormError(null);
+    try {
+      promptGoogleSignIn((credential) => {
+        googleAuthMutation.mutate(credential, {
+          onError: (err) => {
+            setFormError(err instanceof ApiError ? err.message : "Google sign-in failed");
+          },
+        });
+      });
+    } catch {
+      setFormError("Google sign-in is not configured");
+    }
   };
 
   // 8 items per column to guarantee seamless, infinite marquee without gaps
@@ -276,10 +312,9 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
           {/* Social Auth: Google Button */}
           <button
             type="button"
-            onClick={() => {
-              window.location.href = "/dashboard";
-            }}
-            className="w-full py-2.5 px-4 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50 active:scale-[0.99] font-medium text-xs sm:text-[13px] text-neutral-800 flex items-center justify-center gap-2.5 shadow-2xs transition-all cursor-pointer"
+            onClick={handleGoogleClick}
+            disabled={isPending}
+            className="w-full py-2.5 px-4 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50 active:scale-[0.99] font-medium text-xs sm:text-[13px] text-neutral-800 flex items-center justify-center gap-2.5 shadow-2xs transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
           >
             <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
               <path
@@ -372,12 +407,18 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
               </div>
             )}
 
+            {/* Form Error */}
+            {formError && (
+              <p className="text-[11px] text-red-600 font-medium pt-0.5">{formError}</p>
+            )}
+
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs sm:text-[13px] hover:bg-neutral-800 active:scale-[0.99] transition-all shadow-xs cursor-pointer mt-1"
+              disabled={isPending}
+              className="w-full py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs sm:text-[13px] hover:bg-neutral-800 active:scale-[0.99] transition-all shadow-xs cursor-pointer mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Continue
+              {isPending ? "Please wait..." : "Continue"}
             </button>
           </form>
 

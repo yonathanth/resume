@@ -25,40 +25,43 @@ export type DashboardTab =
 
 interface DashboardSidebarProps {
   activeTab: DashboardTab;
-  onSelectTab: (tab: DashboardTab) => void;
   isExpanded: boolean;
   onToggleExpanded: () => void;
 }
 
 export function DashboardSidebar({
   activeTab,
-  onSelectTab,
   isExpanded,
   onToggleExpanded,
 }: DashboardSidebarProps) {
   const topNavItems: {
     id: DashboardTab;
     label: string;
+    href: string;
     icon: React.ComponentType<{ className?: string }>;
   }[] = [
     {
       id: "builder",
       label: "The Builder",
+      href: "/dashboard",
       icon: LayoutDashboard,
     },
     {
       id: "career-profiles",
       label: "Career Profiles",
+      href: "/dashboard/career-profiles",
       icon: UserCheck,
     },
     {
       id: "past-projects",
       label: "Past Projects",
+      href: "/dashboard/past-projects",
       icon: FolderKanban,
     },
     {
       id: "templates",
       label: "Templates",
+      href: "/dashboard/templates",
       icon: LayoutTemplate,
     },
   ];
@@ -66,23 +69,27 @@ export function DashboardSidebar({
   const bottomNavItems: {
     id: DashboardTab | "upgrade";
     label: string;
+    href: string;
     icon: React.ComponentType<{ className?: string }>;
-    href?: string;
+    isExternalAction?: boolean;
   }[] = [
     {
       id: "upgrade",
       label: "Upgrade",
       icon: Sparkles,
       href: "/pricing",
+      isExternalAction: true,
     },
     {
       id: "settings",
       label: "Account Settings",
+      href: "/dashboard/settings",
       icon: Settings,
     },
     {
       id: "help",
       label: "Help",
+      href: "/dashboard/help",
       icon: HelpCircle,
     },
   ];
@@ -153,10 +160,9 @@ export function DashboardSidebar({
             const isActive = activeTab === item.id;
             const Icon = item.icon;
             return (
-              <button
+              <Link
                 key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
+                href={item.href}
                 title={!isExpanded ? item.label : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   isActive
@@ -172,7 +178,7 @@ export function DashboardSidebar({
                 {isExpanded && (
                   <span className="truncate">{item.label}</span>
                 )}
-              </button>
+              </Link>
             );
           })}
         </nav>
@@ -186,10 +192,10 @@ export function DashboardSidebar({
         {/* Low Navigation: Account Settings & Help */}
         <div className="p-3 space-y-1">
           {bottomNavItems.map((item) => {
-            const isActive = activeTab === item.id;
+            const isActive = !item.isExternalAction && activeTab === item.id;
             const Icon = item.icon;
 
-            if (item.href) {
+            if (item.isExternalAction) {
               return (
                 <Link
                   key={item.id}
@@ -208,10 +214,9 @@ export function DashboardSidebar({
             }
 
             return (
-              <button
+              <Link
                 key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id as DashboardTab)}
+                href={item.href}
                 title={!isExpanded ? item.label : undefined}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all cursor-pointer ${
                   isActive
@@ -227,7 +232,7 @@ export function DashboardSidebar({
                 {isExpanded && (
                   <span className="truncate">{item.label}</span>
                 )}
-              </button>
+              </Link>
             );
           })}
         </div>

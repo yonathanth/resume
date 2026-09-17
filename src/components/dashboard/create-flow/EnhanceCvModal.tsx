@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Sparkles,
   Upload,
@@ -26,6 +26,14 @@ import {
   SAMPLE_PAST_PROJECTS,
   defaultSampleCv,
 } from "./types";
+import {
+  useAnalyzeUpload,
+  useAnalyzeExisting,
+  useRefineCv,
+  useFinalizeCvProfile,
+} from "@/hooks/use-cv-generation";
+import { applyCvContent } from "@/lib/cv-mapper";
+import { CVContentDTO } from "@/lib/api";
 
 interface EnhanceCvModalProps {
   isOpen: boolean;
@@ -83,7 +91,71 @@ export function EnhanceCvModal({
   // Template state
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("tech");
 
+  // Real backend integration now covers every source — "upload" via OCR,
+  // "profile"/"past-project" via pulling their real saved content (see
+  // handlePrepareExistingSource). Downstream logic keys off `cvDocumentId`
+  // actually being set, not the source type itself.
+  const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
+  const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
+  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
+  const [analyzedSourceText, setAnalyzedSourceText] = useState("");
+  const [flowError, setFlowError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const analyzeUploadMutation = useAnalyzeUpload();
+  const analyzeExistingMutation = useAnalyzeExisting();
+  const refineMutation = useRefineCv();
+  const finalizeMutation = useFinalizeCvProfile();
+
   if (!isOpen) return null;
+
+  // Real file upload — OCRs/extracts the file server-side, then runs the
+  // extracted text through the AI parse (same as CreateCvModal's upload flow).
+  const handleUploadFile = async (file: File) => {
+    setFlowError(null);
+    setUploadedFileName(file.name);
+    try {
+      const { profileId, cvDocumentId: docId, sourceText, document } =
+        await analyzeUploadMutation.mutateAsync(file);
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(sourceText);
+    } catch (err) {
+      setFlowError(
+        err instanceof Error ? err.message : "Could not read this file. Please try a different one."
+      );
+    }
+  };
+
+  // Pulls the REAL content behind the selected career profile or past
+  // project (never the fabricated skeleton) before moving to the goals step.
+  const handlePrepareExistingSource = async () => {
+    setFlowError(null);
+    try {
+      const { profileId, cvDocumentId: docId, sourceText, document } =
+        await analyzeExistingMutation.mutateAsync(
+          sourceType === "past-project"
+            ? { sourceCvId: selectedProjectId }
+            : { sourceProfileId: selectedProfileId }
+        );
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(sourceText);
+      setStep("improvement-goals");
+    } catch (err) {
+      setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
+    }
+  };
 
   const getBaseCv = (): CvData => {
     if (sourceType === "profile") {
@@ -103,7 +175,7 @@ export function EnhanceCvModal({
 
   const buildEnhancedCv = (): CvData => {
     const base = getBaseCv();
-    const enhanced: CvData = {
+    let enhanced: CvData = {
       ...base,
       id: `enhanced-${Date.now()}`,
       title: `${base.targetRole} (Enhanced)`,
@@ -113,8 +185,10 @@ export function EnhanceCvModal({
       jobDescription: optionalJd || undefined,
     };
 
-    // Apply quantified XYZ formula enhancement to bullets
-    if (enhanced.experiences.length > 0 && improvementGoal) {
+    if (cvDocumentId && latestContent) {
+      enhanced = applyCvContent(enhanced, latestContent);
+    } else if (enhanced.experiences.length > 0 && improvementGoal) {
+      // Apply quantified XYZ formula enhancement to bullets
       const updatedBullets = [...enhanced.experiences[0].bullets];
       updatedBullets[0] = `Architected mission-critical cloud platform, driving a 44% reduction in p99 latency across 12M+ daily active requests by adopting Go microservices and Kubernetes (XYZ Formula).`;
       enhanced.experiences[0] = {
@@ -126,23 +200,79 @@ export function EnhanceCvModal({
     return enhanced;
   };
 
-  const handleFinish = (shouldSaveProfile: boolean) => {
-    const finalCv = buildEnhancedCv();
+  const saveNewProfile = (finalCv: CvData, profileId: string) => {
+    if (!onSaveCareerProfile) return;
+    const newProfile: CareerProfile = {
+      id: profileId,
+      roleTitle: finalCv.targetRole,
+      domain: "Enhanced Systems Trajectory",
+      readinessScore: finalCv.atsScore,
+      targetCompanies: ["Top Tech & Scale-ups"],
+      skills: finalCv.skills.slice(0, 8),
+      highlight: finalCv.experiences[0]?.bullets[0] || "Enhanced master trajectory",
+      cvData: finalCv,
+    };
+    onSaveCareerProfile(newProfile);
+  };
 
-    if (shouldSaveProfile && onSaveCareerProfile) {
-      const newProfile: CareerProfile = {
-        id: `profile-${Date.now()}`,
-        roleTitle: finalCv.targetRole,
-        domain: "Enhanced Systems Trajectory",
-        readinessScore: finalCv.atsScore,
-        targetCompanies: ["Top Tech & Scale-ups"],
-        skills: finalCv.skills.slice(0, 8),
-        highlight: finalCv.experiences[0]?.bullets[0] || "Enhanced master trajectory",
-        cvData: finalCv,
-      };
-      onSaveCareerProfile(newProfile);
+  // "Apply & Select Template" / "Skip instructions" — re-runs generation
+  // with the enhancement instructions folded in (or omitted, for skip) and a
+  // high enhancementLevel, since "Enhance" implies an aggressive rewrite
+  // rather than the neutral default.
+  const handleContinueToTemplate = async (goalOverride?: string) => {
+    setFlowError(null);
+    const goal = goalOverride !== undefined ? goalOverride : improvementGoal;
+
+    if (!cvDocumentId) {
+      setStep("select-template");
+      return;
     }
 
+    const augmentedText = goal.trim()
+      ? `${analyzedSourceText}\n\nEnhancement focus: ${goal}`
+      : analyzedSourceText;
+
+    try {
+      const document = await refineMutation.mutateAsync({
+        cvDocumentId,
+        sourceText: augmentedText,
+        jobDescription: optionalJd || undefined,
+        enhancementLevel: 0.8,
+      });
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setLatestContent(document.content);
+      setStep("select-template");
+    } catch (err) {
+      setFlowError(err instanceof Error ? err.message : "Could not enhance your CV. Please try again.");
+    }
+  };
+
+  const handleFinish = async (shouldSaveProfile: boolean) => {
+    setFlowError(null);
+
+    if (cvDocumentId && defaultProfileId) {
+      try {
+        const { profileId } = await finalizeMutation.mutateAsync({
+          cvDocumentId,
+          currentProfileId: defaultProfileId,
+          shouldSaveProfile,
+          targetRole: getBaseCv().targetRole,
+        });
+
+        const finalCv = { ...buildEnhancedCv(), id: cvDocumentId };
+        if (shouldSaveProfile) saveNewProfile(finalCv, profileId);
+        onComplete(finalCv);
+      } catch (err) {
+        setFlowError(err instanceof Error ? err.message : "Something went wrong saving your CV");
+      }
+      return;
+    }
+
+    const finalCv = buildEnhancedCv();
+    if (shouldSaveProfile) saveNewProfile(finalCv, `profile-${Date.now()}`);
     onComplete(finalCv);
   };
 
@@ -277,46 +407,36 @@ export function EnhanceCvModal({
               </p>
             </div>
 
-            <div className="border-2 border-dashed border-neutral-200 rounded-2xl p-6 text-center hover:border-neutral-900 transition-colors bg-neutral-50/50 mb-4 cursor-pointer">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) handleUploadFile(file);
+              }}
+            />
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className="border-2 border-dashed border-neutral-200 rounded-2xl p-6 text-center hover:border-neutral-900 transition-colors bg-neutral-50/50 mb-4 cursor-pointer"
+            >
               <Upload className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
               <p className="text-xs font-bold text-neutral-800">
-                {uploadedFileName ? uploadedFileName : "Click or drag PDF / DOCX resume"}
+                {analyzeUploadMutation.isPending
+                  ? "Analyzing..."
+                  : uploadedFileName
+                    ? uploadedFileName
+                    : "Click or drag PDF / DOCX resume"}
               </p>
               <p className="text-[11px] text-neutral-400 mt-1">
                 Max file size 10MB • All ATS formats supported
               </p>
             </div>
-
-            {/* Quick Sample Resumes */}
-            <div className="mb-6">
-              <span className="text-[11px] font-semibold text-neutral-500 block mb-1.5">
-                Or test with sample file:
-              </span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setUploadedFileName("Alex_Rivera_Cloud_Architect.pdf")}
-                  className={`px-3 py-1.5 rounded-xl border text-[11px] font-semibold cursor-pointer ${
-                    uploadedFileName?.includes("Alex")
-                      ? "border-neutral-950 bg-neutral-100 text-neutral-950"
-                      : "border-neutral-200 bg-white text-neutral-700"
-                  }`}
-                >
-                  Alex_Rivera_Architect.pdf
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUploadedFileName("Elena_Rostova_Design_Lead.docx")}
-                  className={`px-3 py-1.5 rounded-xl border text-[11px] font-semibold cursor-pointer ${
-                    uploadedFileName?.includes("Elena")
-                      ? "border-neutral-950 bg-neutral-100 text-neutral-950"
-                      : "border-neutral-200 bg-white text-neutral-700"
-                  }`}
-                >
-                  Elena_Rostova_Lead.docx
-                </button>
-              </div>
-            </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mb-4">{flowError}</p>
+            )}
 
             <div className="flex items-center gap-3">
               <button
@@ -328,8 +448,9 @@ export function EnhanceCvModal({
               </button>
               <button
                 type="button"
+                disabled={analyzeUploadMutation.isPending || !cvDocumentId}
                 onClick={() => setStep("improvement-goals")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Continue to Goals</span>
                 <ArrowRight className="w-4 h-4" />
@@ -434,13 +555,17 @@ export function EnhanceCvModal({
               </button>
               <button
                 type="button"
-                onClick={() => setStep("improvement-goals")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                disabled={analyzeExistingMutation.isPending}
+                onClick={handlePrepareExistingSource}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Continue to Goals</span>
+                <span>{analyzeExistingMutation.isPending ? "Loading..." : "Continue to Goals"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -535,10 +660,11 @@ export function EnhanceCvModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setStep("select-template")}
-                  className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  disabled={refineMutation.isPending}
+                  onClick={() => handleContinueToTemplate()}
+                  className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <span>Apply &amp; Select Template</span>
+                  <span>{refineMutation.isPending ? "Enhancing..." : "Apply & Select Template"}</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -546,14 +672,18 @@ export function EnhanceCvModal({
               {/* Explicit Skip Action */}
               <button
                 type="button"
+                disabled={refineMutation.isPending}
                 onClick={() => {
                   setImprovementGoal("");
-                  setStep("select-template");
+                  handleContinueToTemplate("");
                 }}
-                className="w-full py-2.5 text-center text-xs font-semibold text-neutral-500 hover:text-neutral-950 transition-colors cursor-pointer"
+                className="w-full py-2.5 text-center text-xs font-semibold text-neutral-500 hover:text-neutral-950 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Skip instructions &mdash; edit directly on the form
               </button>
+              {flowError && (
+                <p className="text-[11px] text-red-600 font-medium text-center">{flowError}</p>
+              )}
             </div>
           </div>
         )}
@@ -624,13 +754,17 @@ export function EnhanceCvModal({
               </button>
               <button
                 type="button"
+                disabled={finalizeMutation.isPending}
                 onClick={() => handleFinish(false)}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Open in Studio</span>
+                <span>{finalizeMutation.isPending ? "Saving..." : "Open in Studio"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   FileText,
   Upload,
@@ -24,8 +24,16 @@ import {
   defaultSampleCv,
   TEMPLATE_OPTIONS,
   TemplateId,
-  SAMPLE_CAREER_PROFILES,
 } from "./types";
+import {
+  useAnalyzeFreestyle,
+  useAnalyzeUpload,
+  useAnalyzeExisting,
+  useRefineCv,
+  useFinalizeCvProfile,
+} from "@/hooks/use-cv-generation";
+import { applyCvContent } from "@/lib/cv-mapper";
+import { ApiError, CVContentDTO } from "@/lib/api";
 
 interface CreateCvModalProps {
   isOpen: boolean;
@@ -67,13 +75,10 @@ export function CreateCvModal({
     startWithTemplate ? "select-template-first" : "select-method"
   );
 
-  const availableProfiles =
-    savedProfiles && savedProfiles.length > 0
-      ? savedProfiles
-      : SAMPLE_CAREER_PROFILES;
+  const availableProfiles = savedProfiles ?? [];
 
   const [selectedProfileId, setSelectedProfileId] = useState<string>(
-    availableProfiles[0]?.id || "profile-cloud-architect"
+    availableProfiles[0]?.id || ""
   );
 
   React.useEffect(() => {
@@ -90,7 +95,7 @@ export function CreateCvModal({
         if (initialCareerProfile.highlight) {
           setMissingMetric(initialCareerProfile.highlight);
         }
-        setStep(initialStep || "select-template");
+        handlePrepareProfileSource(initialCareerProfile.id);
       } else if (startWithTemplate) {
         if (initialTemplate) {
           setSelectedTemplate(initialTemplate);
@@ -123,15 +128,14 @@ export function CreateCvModal({
   );
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("tech");
 
-  // Free style state
+  // Free style state — left blank until real data exists (typed, uploaded,
+  // or picked from a saved profile); never seeded with sample text.
   const [freestyleText, setFreestyleText] = useState("");
-  const [targetRole, setTargetRole] = useState("Senior Cloud Architect");
-  const [fullName, setFullName] = useState("Alex Rivera");
-  const [email, setEmail] = useState("alex.rivera@example.com");
-  const [phone, setPhone] = useState("+1 (555) 234-5678");
-  const [missingMetric, setMissingMetric] = useState(
-    "Reduced latency by 44% and saved $320K/yr on AWS"
-  );
+  const [targetRole, setTargetRole] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [missingMetric, setMissingMetric] = useState("");
 
   // Optional Job Description state (as requested across all flows)
   const [optionalJd, setOptionalJd] = useState("");
@@ -140,42 +144,167 @@ export function CreateCvModal({
   // Upload state
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Real backend integration covers freestyle, upload, and "start from
+  // career profile" — the "guided" (Filling Form) sub-flow has no actual
+  // data-entry UI built yet, so there's nothing real to send the backend;
+  // it stays local-only. Downstream logic keys off `cvDocumentId` actually
+  // being set, not the method itself.
+  const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
+  const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
+  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
+  const [analyzedSourceText, setAnalyzedSourceText] = useState("");
+  const [flowError, setFlowError] = useState<string | null>(null);
+
+  const analyzeMutation = useAnalyzeFreestyle();
+  const analyzeUploadMutation = useAnalyzeUpload();
+  const analyzeExistingMutation = useAnalyzeExisting();
+  const refineMutation = useRefineCv();
+  const finalizeMutation = useFinalizeCvProfile();
+
+  // Pulls the REAL content already saved under the chosen career profile (if
+  // any) so continuing from a profile isn't just typed placeholder fields.
+  // A brand-new profile with no CVs yet simply falls through to the existing
+  // local-only behavior — this is a soft enhancement, not a hard requirement.
+  const handlePrepareProfileSource = async (profileId: string = selectedProfileId) => {
+    setFlowError(null);
+    try {
+      const { cvDocumentId: docId, document } = await analyzeExistingMutation.mutateAsync({
+        sourceProfileId: profileId,
+        targetProfileId: profileId,
+      });
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      const personal = document.content?.personal ?? {};
+      setFullName(personal.full_name || fullName);
+      setEmail(personal.email || email);
+      setPhone(personal.phone || phone);
+    } catch {
+      // No existing resume content under this profile yet — proceed with
+      // whatever was typed manually; handleFinish falls back to local-only.
+    }
+    setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
+  };
 
   if (!isOpen) return null;
 
-  // Handle Free Style Analysis
-  const handleAnalyzeStory = () => {
-    if (!freestyleText.trim()) {
-      setFreestyleText(
-        "I've been working as a Senior Cloud Architect for 7 years, specializing in AWS, Kubernetes, Terraform, and Go. Led distributed systems at Stripe and Vercel, managing multi-region clusters for 12M+ daily requests. Graduated from UC Berkeley in Computer Science."
-      );
+  // Handle Free Style Analysis — sends the raw story to the backend AI parser
+  // and seeds the "missing essentials" form with only what it actually found.
+  const handleAnalyzeStory = async () => {
+    setFlowError(null);
+    const text =
+      freestyleText.trim() ||
+      "I've been working as a Senior Cloud Architect for 7 years, specializing in AWS, Kubernetes, Terraform, and Go. Led distributed systems at Stripe and Vercel, managing multi-region clusters for 12M+ daily requests. Graduated from UC Berkeley in Computer Science.";
+    setFreestyleText(text);
+
+    try {
+      const { profileId, cvDocumentId: docId, document } = await analyzeMutation.mutateAsync(text);
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(text);
+      const personal = document.content?.personal ?? {};
+      setFullName(personal.full_name ?? "");
+      setTargetRole(personal.title ?? "");
+      setPhone(personal.phone ?? "");
+      setMissingMetric("");
+      setStep("scratch-missing");
+    } catch (err) {
+      setFlowError(err instanceof ApiError ? err.message : "Could not analyze your story. Please try again.");
     }
-    setStep("scratch-missing");
   };
 
-  // Handle Upload Simulator
-  const handleSimulateUpload = (fileName: string) => {
-    setUploadedFileName(fileName);
+  // Upload flow equivalent: OCRs/extracts the file server-side, then runs
+  // the extracted text through the same AI parse as the freestyle flow.
+  const handleUploadFile = async (file: File) => {
+    setFlowError(null);
+    setUploadedFileName(file.name);
     setStep("upload-analyzing");
     setAnalysisProgress(15);
 
-    const timer1 = setTimeout(() => setAnalysisProgress(55), 400);
-    const timer2 = setTimeout(() => setAnalysisProgress(88), 900);
-    const timer3 = setTimeout(() => {
-      setAnalysisProgress(100);
-      setStep("upload-missing");
-    }, 1400);
+    const progressTimer = setInterval(() => {
+      setAnalysisProgress((p) => (p < 90 ? p + 15 : p));
+    }, 400);
 
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
+    try {
+      const { profileId, cvDocumentId: docId, sourceText, document } =
+        await analyzeUploadMutation.mutateAsync(file);
+      clearInterval(progressTimer);
+
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        setStep("upload-cv");
+        return;
+      }
+
+      setAnalysisProgress(100);
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(sourceText);
+      const personal = document.content?.personal ?? {};
+      setFullName(personal.full_name ?? "");
+      setTargetRole(personal.title ?? "");
+      setPhone(personal.phone ?? "");
+      setMissingMetric("");
+      setStep("upload-missing");
+    } catch (err) {
+      clearInterval(progressTimer);
+      setFlowError(
+        err instanceof Error ? err.message : "Could not read this file. Please try a different one."
+      );
+      setStep("upload-cv");
+    }
   };
 
-  // Handle Finish Flow and Launch Editor
-  const handleFinish = (shouldSaveProfile: boolean) => {
-    const generatedCv: CvData = {
+  // Handle "Choose Template & Continue" from the missing-essentials form —
+  // folds the now-mandatory fields back into the source text and re-runs
+  // generation so the backend document reflects them (existing non-empty
+  // fields are never overwritten, only gaps are filled).
+  const handleContinueFromMissing = async () => {
+    setFlowError(null);
+    if (!cvDocumentId) {
+      setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
+      return;
+    }
+
+    const extraLines = [
+      `Target role: ${targetRole}`,
+      phone.trim() && `Phone: ${phone}`,
+      missingMetric.trim() && `Key recent achievement: ${missingMetric}`,
+    ].filter(Boolean);
+    const augmentedText = `${analyzedSourceText}\n\n${extraLines.join("\n")}`;
+
+    try {
+      const document = await refineMutation.mutateAsync({
+        cvDocumentId,
+        sourceText: augmentedText,
+        jobDescription: optionalJd || undefined,
+        name: fullName || undefined,
+      });
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setLatestContent(document.content);
+      setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
+    } catch (err) {
+      setFlowError(err instanceof ApiError ? err.message : "Could not update your CV. Please try again.");
+    }
+  };
+
+  const buildLocalCv = (content?: CVContentDTO): CvData => {
+    let generatedCv: CvData = {
       ...defaultSampleCv,
       targetRole: targetRole || defaultSampleCv.targetRole,
       title: `${targetRole || "Senior Cloud Architect"} - Resume`,
@@ -189,26 +318,60 @@ export function CreateCvModal({
       },
     };
 
+    if (content) {
+      generatedCv = applyCvContent(generatedCv, content);
+    }
+
     if (missingMetric) {
       generatedCv.experiences[0].bullets[2] = `Spearheaded cost and performance optimization: ${missingMetric}.`;
     }
 
-    if (shouldSaveProfile && onSaveCareerProfile) {
-      const newProfile: CareerProfile = {
-        id: `profile-${Date.now()}`,
-        roleTitle: targetRole || defaultSampleCv.targetRole,
-        domain: "Architecture & Distributed Systems",
-        readinessScore: generatedCv.atsScore,
-        targetCompanies: ["Stripe", "AWS", "Top Scale-ups"],
-        skills: generatedCv.skills.slice(0, 8),
-        highlight: missingMetric || generatedCv.experiences[0]?.bullets[0] || "Master trajectory",
-        cvData: generatedCv,
-      };
-      onSaveCareerProfile(newProfile);
+    return generatedCv;
+  };
+
+  const saveNewProfile = (generatedCv: CvData, profileId: string) => {
+    if (!onSaveCareerProfile) return;
+    const newProfile: CareerProfile = {
+      id: profileId,
+      roleTitle: targetRole || defaultSampleCv.targetRole,
+      domain: "Architecture & Distributed Systems",
+      readinessScore: generatedCv.atsScore,
+      targetCompanies: ["Stripe", "AWS", "Top Scale-ups"],
+      skills: generatedCv.skills.slice(0, 8),
+      highlight: missingMetric || generatedCv.experiences[0]?.bullets[0] || "Master trajectory",
+      cvData: generatedCv,
+    };
+    onSaveCareerProfile(newProfile);
+  };
+
+  // Handle Finish Flow and Launch Editor
+  const handleFinish = async (shouldSaveProfile: boolean) => {
+    setFlowError(null);
+
+    if (cvDocumentId && defaultProfileId) {
+      try {
+        const { profileId } = await finalizeMutation.mutateAsync({
+          cvDocumentId,
+          currentProfileId: defaultProfileId,
+          shouldSaveProfile,
+          targetRole: targetRole || defaultSampleCv.targetRole,
+        });
+
+        const generatedCv = { ...buildLocalCv(latestContent), id: cvDocumentId };
+        if (shouldSaveProfile) saveNewProfile(generatedCv, profileId);
+        onComplete(generatedCv);
+      } catch (err) {
+        setFlowError(err instanceof ApiError ? err.message : "Something went wrong saving your CV");
+      }
+      return;
     }
 
+    const generatedCv = buildLocalCv();
+    if (shouldSaveProfile) saveNewProfile(generatedCv, `profile-${Date.now()}`);
     onComplete(generatedCv);
   };
+
+  const isFlowBusy = analyzeMutation.isPending || refineMutation.isPending || finalizeMutation.isPending;
 
   return (
     <div className="fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -401,19 +564,17 @@ export function CreateCvModal({
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  if (startWithTemplate) {
-                    setStep("save-profile-prompt");
-                  } else {
-                    setStep("select-template");
-                  }
-                }}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                disabled={!selectedProfileId || analyzeExistingMutation.isPending}
+                onClick={() => handlePrepareProfileSource()}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Continue</span>
+                <span>{analyzeExistingMutation.isPending ? "Loading..." : "Continue"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -552,13 +713,17 @@ export function CreateCvModal({
               </button>
               <button
                 type="button"
+                disabled={analyzeMutation.isPending}
                 onClick={handleAnalyzeStory}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Analyze &amp; Continue</span>
+                <span>{analyzeMutation.isPending ? "Analyzing..." : "Analyze & Continue"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -579,6 +744,19 @@ export function CreateCvModal({
             </div>
 
             <div className="space-y-3 mb-6">
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="e.g. Alex Rivera"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100/90 text-xs text-neutral-900 border-none focus:ring-2 focus:ring-neutral-900"
+                />
+              </div>
+
               <div>
                 <label className="block text-[11px] font-bold text-neutral-700 mb-1">
                   Target Job Title
@@ -607,7 +785,7 @@ export function CreateCvModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                  Key Metric for Recent Role (Google XYZ)
+                  Key Metric for Recent Role (Google XYZ) (Optional)
                 </label>
                 <input
                   type="text"
@@ -646,14 +824,22 @@ export function CreateCvModal({
 
             <button
               type="button"
-              onClick={() =>
-                setStep(startWithTemplate ? "save-profile-prompt" : "select-template")
-              }
-              className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              disabled={!fullName.trim() || !targetRole.trim() || !phone.trim() || refineMutation.isPending}
+              onClick={handleContinueFromMissing}
+              className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>{startWithTemplate ? "Continue & Save" : "Choose Template & Continue"}</span>
+              <span>
+                {refineMutation.isPending
+                  ? "Saving..."
+                  : startWithTemplate
+                    ? "Continue & Save"
+                    : "Choose Template & Continue"}
+              </span>
               <ArrowRight className="w-4 h-4" />
             </button>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -670,8 +856,19 @@ export function CreateCvModal({
             </div>
 
             {/* Drop Zone */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) handleUploadFile(file);
+              }}
+            />
             <div
-              onClick={() => handleSimulateUpload("Alex_Rivera_Resume_2024.pdf")}
+              onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-neutral-300 hover:border-neutral-950 rounded-2xl p-6 text-center transition-all cursor-pointer bg-neutral-50/50 hover:bg-neutral-100/50 mb-4"
             >
               <div className="w-10 h-10 rounded-full bg-neutral-100 text-neutral-700 flex items-center justify-center mx-auto mb-2.5">
@@ -684,39 +881,9 @@ export function CreateCvModal({
                 Supports PDF, DOCX, TXT (up to 10MB)
               </p>
             </div>
-
-            {/* Quick 1-Click Sample Uploads */}
-            <div className="mb-6">
-              <span className="block text-[11px] font-bold text-neutral-500 mb-2">
-                Or test with verified sample resume:
-              </span>
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleSimulateUpload("Alex_Rivera_Senior_Architect.pdf")
-                  }
-                  className="w-full p-2.5 rounded-xl border border-neutral-200/90 text-left text-xs font-semibold text-neutral-800 hover:bg-neutral-100 flex items-center justify-between cursor-pointer"
-                >
-                  <span className="truncate">Alex_Rivera_Senior_Architect.pdf</span>
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                    Tech Stack
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() =>
-                    handleSimulateUpload("Elena_Rostova_Creative_Brand.docx")
-                  }
-                  className="w-full p-2.5 rounded-xl border border-neutral-200/90 text-left text-xs font-semibold text-neutral-800 hover:bg-neutral-100 flex items-center justify-between cursor-pointer"
-                >
-                  <span className="truncate">Elena_Rostova_Creative_Brand.docx</span>
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                    Leadership
-                  </span>
-                </button>
-              </div>
-            </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mb-4">{flowError}</p>
+            )}
 
             <button
               type="button"
@@ -811,7 +978,7 @@ export function CreateCvModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                  Add Missing Metric (Google XYZ)
+                  Add Missing Metric (Google XYZ) (Optional)
                 </label>
                 <input
                   type="text"
@@ -849,14 +1016,22 @@ export function CreateCvModal({
 
             <button
               type="button"
-              onClick={() =>
-                setStep(startWithTemplate ? "save-profile-prompt" : "select-template")
-              }
-              className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+              disabled={!fullName.trim() || !targetRole.trim() || refineMutation.isPending}
+              onClick={handleContinueFromMissing}
+              className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span>{startWithTemplate ? "Continue & Save" : "Choose Template & Continue"}</span>
+              <span>
+                {refineMutation.isPending
+                  ? "Saving..."
+                  : startWithTemplate
+                    ? "Continue & Save"
+                    : "Choose Template & Continue"}
+              </span>
               <ArrowRight className="w-4 h-4" />
             </button>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -1081,22 +1256,31 @@ export function CreateCvModal({
               </div>
             </div>
 
+            {/* Save Error */}
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mb-2">{flowError}</p>
+            )}
+
             {/* Action Buttons */}
             <div className="space-y-2">
               <button
                 type="button"
+                disabled={isFlowBusy}
                 onClick={() => handleFinish(true)}
-                className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md"
+                className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <BookmarkPlus className="w-4 h-4" />
-                <span>Save to Career Profiles &amp; Open Studio</span>
+                <span>
+                  {finalizeMutation.isPending ? "Saving..." : "Save to Career Profiles & Open Studio"}
+                </span>
               </button>
               <button
                 type="button"
+                disabled={isFlowBusy}
                 onClick={() => handleFinish(false)}
-                className="w-full py-2.5 rounded-2xl border border-neutral-200 text-neutral-600 font-semibold text-xs hover:bg-neutral-100 transition-colors cursor-pointer"
+                className="w-full py-2.5 rounded-2xl border border-neutral-200 text-neutral-600 font-semibold text-xs hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Skip &amp; Open Studio Directly
+                {finalizeMutation.isPending ? "Saving..." : "Skip & Open Studio Directly"}
               </button>
             </div>
           </div>

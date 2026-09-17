@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useProfileSkills, useProfileSummary } from "@/hooks/use-profiles";
 import {
   UserCheck,
   Plus,
@@ -22,6 +24,7 @@ import {
   SAMPLE_CAREER_PROFILES,
   defaultSampleCv,
 } from "./create-flow/types";
+import { createProfile, ApiError } from "@/lib/api";
 
 interface CareerProfilesViewProps {
   profiles?: CareerProfile[];
@@ -34,11 +37,16 @@ export function CareerProfilesView({
   onCreateCvFromProfile,
   onSaveTrajectory,
 }: CareerProfilesViewProps) {
+  const router = useRouter();
+  const { data: profileSkills } = useProfileSkills();
   const [trajectoryList, setTrajectoryList] = useState<CareerProfile[]>(profiles);
   const [selectedTrajectoryId, setSelectedTrajectoryId] = useState<string>(
     profiles[0]?.id || "profile-cloud-architect"
   );
   const [previewProfile, setPreviewProfile] = useState<CareerProfile | null>(null);
+  const { data: previewSummary, isLoading: isSummaryLoading } = useProfileSummary(
+    previewProfile?.id ?? null
+  );
   const [isNewTrajectoryModalOpen, setIsNewTrajectoryModalOpen] = useState(false);
 
   // New Trajectory form states
@@ -47,6 +55,8 @@ export function CareerProfilesView({
   const [newCompanies, setNewCompanies] = useState("");
   const [newHighlight, setNewHighlight] = useState("");
   const [newSkills, setNewSkills] = useState("");
+  const [isCreatingTrajectory, setIsCreatingTrajectory] = useState(false);
+  const [createTrajectoryError, setCreateTrajectoryError] = useState<string | null>(null);
 
   // Sync with prop if it updates
   React.useEffect(() => {
@@ -55,48 +65,56 @@ export function CareerProfilesView({
     }
   }, [profiles]);
 
-  const handleCreateTrajectory = (e: React.FormEvent) => {
+  const handleCreateTrajectory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRole.trim()) return;
 
+    setCreateTrajectoryError(null);
+    setIsCreatingTrajectory(true);
+
     const companyArray = newCompanies
       ? newCompanies.split(",").map((c) => c.trim()).filter(Boolean)
-      : ["Stripe", "AWS", "Scale AI"];
-
+      : [];
     const skillsArray = newSkills
       ? newSkills.split(",").map((s) => s.trim()).filter(Boolean)
-      : ["Kubernetes", "TypeScript", "Cloud Architecture", "System Design"];
+      : [];
 
-    const created: CareerProfile = {
-      id: `profile-${Date.now()}`,
-      roleTitle: newRole.trim(),
-      domain: newDomain.trim() || "Technology & Engineering",
-      readinessScore: 96,
-      targetCompanies: companyArray,
-      skills: skillsArray,
-      highlight:
-        newHighlight.trim() ||
-        "Architected scalable distributed architectures and led engineering delivery.",
-      cvData: {
-        ...defaultSampleCv,
-        id: `cv-${Date.now()}`,
-        title: `${newRole.trim()} – Master Trajectory`,
-        targetRole: newRole.trim(),
+    try {
+      const profile = await createProfile(newRole.trim());
+      const created: CareerProfile = {
+        id: profile.id,
+        roleTitle: newRole.trim(),
+        domain: newDomain.trim(),
+        readinessScore: 0,
+        targetCompanies: companyArray,
         skills: skillsArray,
-        atsScore: 96,
-      },
-    };
+        highlight: newHighlight.trim(),
+        cvData: {
+          ...defaultSampleCv,
+          id: "cv-new",
+          title: `${newRole.trim()} – Master Trajectory`,
+          targetRole: newRole.trim(),
+          skills: skillsArray,
+          atsScore: 0,
+          personalInfo: { ...defaultSampleCv.personalInfo, fullName: "", email: "", phone: "" },
+        },
+      };
 
-    setTrajectoryList((prev) => [created, ...prev]);
-    onSaveTrajectory?.(created);
+      setTrajectoryList((prev) => [created, ...prev]);
+      onSaveTrajectory?.(created);
 
-    // Reset and close
-    setNewRole("");
-    setNewDomain("");
-    setNewCompanies("");
-    setNewHighlight("");
-    setNewSkills("");
-    setIsNewTrajectoryModalOpen(false);
+      // Reset and close
+      setNewRole("");
+      setNewDomain("");
+      setNewCompanies("");
+      setNewHighlight("");
+      setNewSkills("");
+      setIsNewTrajectoryModalOpen(false);
+    } catch (err) {
+      setCreateTrajectoryError(err instanceof ApiError ? err.message : "Could not save this trajectory. Please try again.");
+    } finally {
+      setIsCreatingTrajectory(false);
+    }
   };
 
   return (
@@ -209,96 +227,31 @@ export function CareerProfilesView({
 
       {/* Skills Inventory Grid */}
       <div className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs p-6 sm:p-8">
-        <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-100">
-          <div>
-            <h3 className="text-base font-bold text-neutral-950">
-              Master Skills Inventory
-            </h3>
-            <p className="text-xs text-neutral-500">
-              Verified skills auto-injected during ATS keyword optimization
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsNewTrajectoryModalOpen(true)}
-            className="px-3.5 py-1.5 rounded-xl border border-neutral-200 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
-          >
-            + Add Skill
-          </button>
+        <div className="mb-6 pb-4 border-b border-neutral-100">
+          <h3 className="text-base font-bold text-neutral-950">
+            Master Skills Inventory
+          </h3>
+          <p className="text-xs text-neutral-500">
+            Skills aggregated from every resume across your career profiles
+          </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5">
-              Cloud &amp; Distributed Systems
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                "AWS (ECS, Lambda, S3)",
-                "Kubernetes",
-                "Docker",
-                "Terraform",
-                "Apache Kafka",
-                "gRPC & REST",
-                "Redis Cache",
-              ].map((skill, i) => (
-                <span
-                  key={i}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-800"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
+        {profileSkills && profileSkills.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {profileSkills.map((skill, i) => (
+              <span
+                key={i}
+                className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-800"
+              >
+                {skill}
+              </span>
+            ))}
           </div>
-
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5">
-              Frontend &amp; Architecture
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                "React 19",
-                "Next.js 16",
-                "TypeScript",
-                "Tailwind CSS",
-                "Micro-frontends",
-                "Turbopack",
-                "GraphQL APIs",
-              ].map((skill, i) => (
-                <span
-                  key={i}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-800"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-2.5">
-              Execution &amp; Strategy
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                "Google XYZ Formula",
-                "ATS Keyword Tuning",
-                "Latency Profiling",
-                "Agile Delivery",
-                "Team Mentorship",
-                "CI/CD Automation",
-              ].map((skill, i) => (
-                <span
-                  key={i}
-                  className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-800"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
+        ) : (
+          <p className="text-xs text-neutral-400">
+            No skills yet — generate a CV under one of your career profiles to populate this.
+          </p>
+        )}
       </div>
 
       {/* ================= PROFILE PREVIEW MODAL ================= */}
@@ -325,11 +278,11 @@ export function CareerProfilesView({
                     {previewProfile.roleTitle}
                   </h3>
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    {previewProfile.readinessScore}% Match
+                    {isSummaryLoading ? "Analyzing..." : `${previewSummary?.readinessScore ?? 0}% Match`}
                   </span>
                 </div>
                 <p className="text-xs text-neutral-500">
-                  {previewProfile.domain}
+                  {isSummaryLoading ? "Analyzing your resumes..." : previewSummary?.domain || "No domain identified yet"}
                 </p>
               </div>
             </div>
@@ -342,7 +295,11 @@ export function CareerProfilesView({
                   Key Career Highlight
                 </div>
                 <p className="text-xs text-neutral-800 leading-relaxed italic">
-                  &ldquo;{previewProfile.highlight}&rdquo;
+                  {isSummaryLoading
+                    ? "Analyzing your resumes for a standout achievement..."
+                    : previewSummary?.highlight
+                      ? `“${previewSummary.highlight}”`
+                      : "No highlight identified yet — generate a CV under this profile first."}
                 </p>
               </div>
 
@@ -352,31 +309,43 @@ export function CareerProfilesView({
                   Target Companies
                 </div>
                 <div className="flex flex-wrap gap-1.5">
-                  {previewProfile.targetCompanies.map((c, i) => (
-                    <span
-                      key={i}
-                      className="px-2.5 py-1 rounded-xl bg-white border border-neutral-200 text-xs font-medium text-neutral-800 shadow-2xs"
-                    >
-                      {c}
-                    </span>
-                  ))}
+                  {isSummaryLoading ? (
+                    <span className="text-xs text-neutral-400">Analyzing...</span>
+                  ) : previewSummary?.targetCompanies.length ? (
+                    previewSummary.targetCompanies.map((c, i) => (
+                      <span
+                        key={i}
+                        className="px-2.5 py-1 rounded-xl bg-white border border-neutral-200 text-xs font-medium text-neutral-800 shadow-2xs"
+                      >
+                        {c}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-neutral-400">None identified yet</span>
+                  )}
                 </div>
               </div>
 
               {/* Core Skills */}
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2">
-                  Verified Skills ({previewProfile.skills.length})
+                  Verified Skills ({previewSummary?.skills.length ?? 0})
                 </div>
                 <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-                  {previewProfile.skills.map((s, i) => (
-                    <span
-                      key={i}
-                      className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-700"
-                    >
-                      {s}
-                    </span>
-                  ))}
+                  {isSummaryLoading ? (
+                    <span className="text-xs text-neutral-400">Analyzing your resumes for skills...</span>
+                  ) : previewSummary?.skills.length ? (
+                    previewSummary.skills.map((s, i) => (
+                      <span
+                        key={i}
+                        className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-700"
+                      >
+                        {s}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-xs text-neutral-400">None identified yet</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -395,6 +364,15 @@ export function CareerProfilesView({
                 <Sparkles className="w-4 h-4 text-amber-400" />
                 <span>Create a Resume from this Profile</span>
                 <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => router.push(`/dashboard/career-profiles/${previewProfile.id}`)}
+                className="w-full py-2.5 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-800 hover:bg-neutral-50 transition-colors cursor-pointer flex items-center justify-center gap-2"
+              >
+                <span>View Resumes for this Profile</span>
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
 
               <button
@@ -500,6 +478,10 @@ export function CareerProfilesView({
                 />
               </div>
 
+              {createTrajectoryError && (
+                <p className="text-[11px] text-red-600 font-medium text-center">{createTrajectoryError}</p>
+              )}
+
               <div className="pt-2 flex items-center gap-3">
                 <button
                   type="button"
@@ -510,9 +492,10 @@ export function CareerProfilesView({
                 </button>
                 <button
                   type="submit"
-                  className="w-2/3 py-3 rounded-xl bg-neutral-950 text-white text-xs font-bold hover:bg-neutral-800 transition-colors shadow-md cursor-pointer"
+                  disabled={isCreatingTrajectory}
+                  className="w-2/3 py-3 rounded-xl bg-neutral-950 text-white text-xs font-bold hover:bg-neutral-800 transition-colors shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Save Trajectory
+                  {isCreatingTrajectory ? "Saving..." : "Save Trajectory"}
                 </button>
               </div>
             </form>

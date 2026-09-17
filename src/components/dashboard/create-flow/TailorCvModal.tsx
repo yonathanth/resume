@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Briefcase,
   Layers,
@@ -30,6 +30,15 @@ import {
   SAMPLE_JOB_DESCRIPTIONS,
   defaultSampleCv,
 } from "./types";
+import {
+  useAnalyzeFreestyle,
+  useAnalyzeUpload,
+  useAnalyzeExisting,
+  useRefineCv,
+  useFinalizeCvProfile,
+} from "@/hooks/use-cv-generation";
+import { applyCvContent } from "@/lib/cv-mapper";
+import { CVContentDTO } from "@/lib/api";
 
 interface TailorCvModalProps {
   isOpen: boolean;
@@ -78,13 +87,12 @@ export function TailorCvModal({
   const [newCvMethod, setNewCvMethod] = useState<"scratch" | "upload">("scratch");
   const [scratchType, setScratchType] = useState<"freestyle" | "guided">("freestyle");
   const [freestyleStory, setFreestyleStory] = useState("");
-  const [fullName, setFullName] = useState("Alex Rivera");
-  const [email, setEmail] = useState("alex.rivera@example.com");
-  const [phone, setPhone] = useState("+1 (555) 234-5678");
-  const [missingMetric, setMissingMetric] = useState(
-    "Reduced latency by 44% and saved $320K/yr on AWS"
-  );
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [missingMetric, setMissingMetric] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
 
   // Job Description state
@@ -98,47 +106,126 @@ export function TailorCvModal({
   const [alignmentLevel, setAlignmentLevel] = useState<number>(7);
 
   // AI Clarifying questions state
-  const [clarifyingMetric, setClarifyingMetric] = useState(
-    "Scaled payment processing cluster to 14M+ daily transactions at 99.999% uptime"
-  );
-  const [clarifyingTech, setClarifyingTech] = useState(
-    "AWS EKS, Terraform Cloud, Go, Redis, Prometheus"
-  );
+  const [clarifyingMetric, setClarifyingMetric] = useState("");
+  const [clarifyingTech, setClarifyingTech] = useState("");
   const [isEditingJdInDrawer, setIsEditingJdInDrawer] = useState(false);
 
   // Template selection state
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("tech");
 
+  // Real backend integration now covers every source — "new-cv" via
+  // analyze/upload, "profile"/"past-project" via pulling their real saved
+  // content (see handlePrepareExistingSource). All downstream logic keys off
+  // `cvDocumentId` actually being set, not the source type itself.
+  const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
+  const [defaultProfileId, setDefaultProfileId] = useState<string | null>(null);
+  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
+  const [analyzedSourceText, setAnalyzedSourceText] = useState("");
+  const [flowError, setFlowError] = useState<string | null>(null);
+
+  const analyzeMutation = useAnalyzeFreestyle();
+  const analyzeUploadMutation = useAnalyzeUpload();
+  const analyzeExistingMutation = useAnalyzeExisting();
+  const refineMutation = useRefineCv();
+  const finalizeMutation = useFinalizeCvProfile();
+
   if (!isOpen) return null;
 
-  // Handle upload simulation
-  const handleSimulateUpload = (fileName: string) => {
-    setUploadedFileName(fileName);
-    setStep("new-cv-analyzing");
-    setUploadProgress(20);
-
-    const timer1 = setTimeout(() => setUploadProgress(60), 350);
-    const timer2 = setTimeout(() => setUploadProgress(90), 750);
-    const timer3 = setTimeout(() => {
-      setUploadProgress(100);
-      setStep("new-cv-missing");
-    }, 1200);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
+  // Pulls the REAL content behind the selected career profile or past
+  // project (never the fabricated skeleton) before moving to the JD step.
+  const handlePrepareExistingSource = async () => {
+    setFlowError(null);
+    try {
+      const { profileId, cvDocumentId: docId, sourceText, document } =
+        await analyzeExistingMutation.mutateAsync(
+          sourceType === "past-project"
+            ? { sourceCvId: selectedProjectId }
+            : { sourceProfileId: selectedProfileId }
+        );
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(sourceText);
+      const personal = document.content?.personal ?? {};
+      setFullName(personal.full_name || fullName);
+      setPhone(personal.phone || phone);
+      setStep("jd-and-slider");
+    } catch (err) {
+      setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
+    }
   };
 
-  // Handle freestyle story analysis
-  const handleAnalyzeStory = () => {
-    if (!freestyleStory.trim()) {
-      setFreestyleStory(
-        "I've been working as a Senior Cloud Architect for 7 years, specializing in AWS, Kubernetes, Terraform, and Go. Led distributed systems at Stripe and Vercel, managing multi-region clusters for 12M+ daily requests. Graduated from UC Berkeley in Computer Science."
+  // Handle real file upload — OCRs/extracts the file server-side, then runs
+  // the extracted text through the AI parse (same as CreateCvModal's upload flow).
+  const handleUploadFile = async (file: File) => {
+    setFlowError(null);
+    setUploadedFileName(file.name);
+    setStep("new-cv-analyzing");
+    setUploadProgress(15);
+
+    const progressTimer = setInterval(() => {
+      setUploadProgress((p) => (p < 90 ? p + 15 : p));
+    }, 400);
+
+    try {
+      const { profileId, cvDocumentId: docId, sourceText, document } =
+        await analyzeUploadMutation.mutateAsync(file);
+      clearInterval(progressTimer);
+
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        setStep("new-cv-upload");
+        return;
+      }
+
+      setUploadProgress(100);
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(sourceText);
+      const personal = document.content?.personal ?? {};
+      setFullName(personal.full_name ?? "");
+      setPhone(personal.phone ?? "");
+      setStep("new-cv-missing");
+    } catch (err) {
+      clearInterval(progressTimer);
+      setFlowError(
+        err instanceof Error ? err.message : "Could not read this file. Please try a different one."
       );
+      setStep("new-cv-upload");
     }
-    setStep("new-cv-missing");
+  };
+
+  // Handle freestyle story analysis — sends the story to the backend AI
+  // parser and seeds the baseline-details form with what it actually found.
+  const handleAnalyzeStory = async () => {
+    setFlowError(null);
+    const text =
+      freestyleStory.trim() ||
+      "I've been working as a Senior Cloud Architect for 7 years, specializing in AWS, Kubernetes, Terraform, and Go. Led distributed systems at Stripe and Vercel, managing multi-region clusters for 12M+ daily requests. Graduated from UC Berkeley in Computer Science.";
+    setFreestyleStory(text);
+
+    try {
+      const { profileId, cvDocumentId: docId, document } = await analyzeMutation.mutateAsync(text);
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setDefaultProfileId(profileId);
+      setCvDocumentId(docId);
+      setLatestContent(document.content);
+      setAnalyzedSourceText(text);
+      const personal = document.content?.personal ?? {};
+      setFullName(personal.full_name ?? "");
+      setPhone(personal.phone ?? "");
+      setStep("new-cv-missing");
+    } catch (err) {
+      setFlowError(err instanceof Error ? err.message : "Could not analyze your story. Please try again.");
+    }
   };
 
   // Derive active base CV from source
@@ -192,7 +279,7 @@ export function TailorCvModal({
   // Generate finalized tailored CV
   const buildTailoredCv = (): CvData => {
     const base = getBaseCv();
-    const tailored: CvData = {
+    let tailored: CvData = {
       ...base,
       id: `tailored-${Date.now()}`,
       title: `${targetRole} (${targetCompany || "Tailored"})`,
@@ -203,7 +290,9 @@ export function TailorCvModal({
       tailorAlignmentScore: alignmentLevel,
     };
 
-    if (tailored.experiences.length > 0) {
+    if (cvDocumentId && latestContent) {
+      tailored = applyCvContent(tailored, latestContent);
+    } else if (tailored.experiences.length > 0) {
       const updatedBullets = [...tailored.experiences[0].bullets];
       if (clarifyingMetric || missingMetric) {
         updatedBullets[0] = `Engineered and scaled distributed infrastructure: ${clarifyingMetric || missingMetric}, directly aligning with ${targetCompany} performance benchmarks.`;
@@ -221,24 +310,84 @@ export function TailorCvModal({
     return tailored;
   };
 
-  const handleFinish = (shouldSaveProfile: boolean) => {
-    const finalCv = buildTailoredCv();
+  const saveNewProfile = (finalCv: CvData, profileId: string) => {
+    if (!onSaveCareerProfile) return;
+    const newProfile: CareerProfile = {
+      id: profileId,
+      roleTitle: targetRole || finalCv.targetRole,
+      domain: "Tailored Architecture & Systems",
+      readinessScore: finalCv.atsScore,
+      targetCompanies: [targetCompany || "Target Employer"],
+      skills: finalCv.skills.slice(0, 8),
+      highlight: clarifyingMetric || missingMetric || finalCv.experiences[0]?.bullets[0] || "Tailored trajectory",
+      cvData: finalCv,
+    };
+    onSaveCareerProfile(newProfile);
+  };
 
-    if (shouldSaveProfile && onSaveCareerProfile) {
-      const newProfile: CareerProfile = {
-        id: `profile-${Date.now()}`,
-        roleTitle: targetRole || finalCv.targetRole,
-        domain: "Tailored Architecture & Systems",
-        readinessScore: finalCv.atsScore,
-        targetCompanies: [targetCompany || "Target Employer"],
-        skills: finalCv.skills.slice(0, 8),
-        highlight: clarifyingMetric || missingMetric || finalCv.experiences[0]?.bullets[0] || "Tailored trajectory",
-        cvData: finalCv,
-      };
-      onSaveCareerProfile(newProfile);
+  const handleFinish = async (shouldSaveProfile: boolean) => {
+    setFlowError(null);
+
+    if (cvDocumentId && defaultProfileId) {
+      try {
+        const { profileId } = await finalizeMutation.mutateAsync({
+          cvDocumentId,
+          currentProfileId: defaultProfileId,
+          shouldSaveProfile,
+          targetRole: targetRole || defaultSampleCv.targetRole,
+        });
+
+        const finalCv = { ...buildTailoredCv(), id: cvDocumentId };
+        if (shouldSaveProfile) saveNewProfile(finalCv, profileId);
+        onComplete(finalCv);
+      } catch (err) {
+        setFlowError(err instanceof Error ? err.message : "Something went wrong saving your CV");
+      }
+      return;
     }
 
+    const finalCv = buildTailoredCv();
+    if (shouldSaveProfile) saveNewProfile(finalCv, `profile-${Date.now()}`);
     onComplete(finalCv);
+  };
+
+  // "Continue to Template" from AI Clarification — folds the job description,
+  // alignment slider, and clarifying answers into the backend document via
+  // the same refine endpoint CreateCvModal uses (enhancementLevel here comes
+  // from the 0–10 alignment slider instead of a fixed default).
+  const handleContinueToTemplate = async () => {
+    setFlowError(null);
+    if (!cvDocumentId) {
+      setStep("select-template");
+      return;
+    }
+
+    const extraLines = [
+      `Target role: ${targetRole}`,
+      phone.trim() && `Phone: ${phone}`,
+      missingMetric.trim() && `Key achievement: ${missingMetric}`,
+      clarifyingMetric.trim() && `Strongest verifiable metric: ${clarifyingMetric}`,
+      clarifyingTech.trim() && `Key tools/frameworks to emphasize: ${clarifyingTech}`,
+    ].filter(Boolean);
+    const augmentedText = `${analyzedSourceText}\n\n${extraLines.join("\n")}`;
+
+    try {
+      const document = await refineMutation.mutateAsync({
+        cvDocumentId,
+        sourceText: augmentedText,
+        jobDescription: jobDescription || undefined,
+        name: fullName || undefined,
+        enhancementLevel: alignmentLevel / 10,
+      });
+      if ("mismatch" in document) {
+        setFlowError(document.reason);
+        return;
+      }
+      setLatestContent(document.content);
+      setStep("select-template");
+    } catch (err) {
+      setFlowError(err instanceof Error ? err.message : "Could not tailor your CV. Please try again.");
+    }
   };
 
   return (
@@ -456,13 +605,17 @@ export function TailorCvModal({
               </button>
               <button
                 type="button"
-                onClick={() => setStep("jd-and-slider")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                disabled={analyzeExistingMutation.isPending}
+                onClick={handlePrepareExistingSource}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Add Job Description</span>
+                <span>{analyzeExistingMutation.isPending ? "Loading..." : "Add Job Description"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -658,13 +811,17 @@ export function TailorCvModal({
               </button>
               <button
                 type="button"
+                disabled={analyzeMutation.isPending}
                 onClick={handleAnalyzeStory}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Analyze &amp; Complete Details</span>
+                <span>{analyzeMutation.isPending ? "Analyzing..." : "Analyze & Complete Details"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -680,8 +837,19 @@ export function TailorCvModal({
               </p>
             </div>
 
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) handleUploadFile(file);
+              }}
+            />
             <div
-              onClick={() => handleSimulateUpload("Alex_Rivera_Resume_2024.pdf")}
+              onClick={() => fileInputRef.current?.click()}
               className="border-2 border-dashed border-neutral-300 hover:border-neutral-950 rounded-2xl p-6 text-center transition-all cursor-pointer bg-neutral-50/50 mb-4"
             >
               <div className="w-10 h-10 rounded-full bg-neutral-100 text-neutral-700 flex items-center justify-center mx-auto mb-2.5">
@@ -694,24 +862,9 @@ export function TailorCvModal({
                 Supports PDF, DOCX (up to 10MB)
               </p>
             </div>
-
-            <div className="mb-6">
-              <span className="block text-[11px] font-bold text-neutral-500 mb-2">
-                Or test with verified sample resume:
-              </span>
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleSimulateUpload("Alex_Rivera_Senior_Architect.pdf")}
-                  className="w-full p-2.5 rounded-xl border border-neutral-200/90 text-left text-xs font-semibold text-neutral-800 hover:bg-neutral-100 flex items-center justify-between cursor-pointer"
-                >
-                  <span className="truncate">Alex_Rivera_Senior_Architect.pdf</span>
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                    Tech Stack
-                  </span>
-                </button>
-              </div>
-            </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mb-4">{flowError}</p>
+            )}
 
             <button
               type="button"
@@ -792,7 +945,7 @@ export function TailorCvModal({
 
               <div>
                 <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                  Key Accomplishment Metric (Google XYZ)
+                  Key Accomplishment Metric (Google XYZ) (Optional)
                 </label>
                 <input
                   type="text"
@@ -820,8 +973,9 @@ export function TailorCvModal({
               </button>
               <button
                 type="button"
+                disabled={!targetRole.trim() || !phone.trim()}
                 onClick={() => setStep("jd-and-slider")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Add Job Description &amp; Calibrate</span>
                 <ArrowRight className="w-4 h-4" />
@@ -1043,13 +1197,17 @@ export function TailorCvModal({
               </button>
               <button
                 type="button"
-                onClick={() => setStep("select-template")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                disabled={refineMutation.isPending}
+                onClick={handleContinueToTemplate}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Continue to Template</span>
+                <span>{refineMutation.isPending ? "Tailoring..." : "Continue to Template"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
@@ -1119,13 +1277,17 @@ export function TailorCvModal({
               </button>
               <button
                 type="button"
+                disabled={finalizeMutation.isPending}
                 onClick={() => handleFinish(false)}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Open in Studio</span>
+                <span>{finalizeMutation.isPending ? "Saving..." : "Open in Studio"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
       </div>
