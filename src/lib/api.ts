@@ -356,6 +356,43 @@ export function renderCvDocument(cvId: string) {
   return apiFetch<{ pdfPath: string }>(`/api/v1/cv/${cvId}/render`, { method: "POST" });
 }
 
+export type PaymentProductType = "CV_DOWNLOAD";
+export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED";
+
+export interface ApiPayment {
+  id: string;
+  productType: PaymentProductType;
+  resourceId: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InitializePaymentResult {
+  paymentId: string;
+  // null when the resource was already paid for — nothing to redirect to.
+  checkoutUrl: string | null;
+  alreadyPaid: boolean;
+}
+
+// Creates (or reuses) a pending payment for one specific resource — the
+// backend determines the price, never trust an amount from the frontend.
+export function initializePayment(input: { productType: PaymentProductType; resourceId: string }) {
+  return apiFetch<InitializePaymentResult>("/api/v1/payments/initialize", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// Re-verifies a still-pending payment against the provider server-side and
+// returns its current status — never resolve access from a redirect's query
+// string alone, always confirm through this endpoint.
+export function getPaymentStatus(paymentId: string) {
+  return apiFetch<ApiPayment>(`/api/v1/payments/${paymentId}/status`);
+}
+
 // Not run through apiFetch: the response body is a raw PDF stream, not JSON.
 export async function downloadCvPdf(cvId: string): Promise<Blob> {
   const token = getAccessToken();
