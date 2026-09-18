@@ -381,14 +381,18 @@ export function TailorCvModal({
 
   const saveNewProfile = (finalCv: CvData, profileId: string) => {
     if (!onSaveCareerProfile) return;
+    // Local-only fallback path (no real backend document) — domain is
+    // normally AI-derived from real CV content, so there's nothing real to
+    // put here rather than a fabricated one; targetCompanies only includes
+    // what the user actually typed.
     const newProfile: CareerProfile = {
       id: profileId,
       roleTitle: targetRole || finalCv.targetRole,
-      domain: "Tailored Architecture & Systems",
+      domain: "",
       readinessScore: finalCv.atsScore,
-      targetCompanies: [targetCompany || "Target Employer"],
+      targetCompanies: targetCompany ? [targetCompany] : [],
       skills: finalCv.skills.slice(0, 8),
-      highlight: clarifyingMetric || missingMetric || finalCv.experiences[0]?.bullets[0] || "Tailored trajectory",
+      highlight: clarifyingMetric || missingMetric || finalCv.experiences[0]?.bullets[0] || "",
       cvData: finalCv,
     };
     onSaveCareerProfile(newProfile);
@@ -978,10 +982,10 @@ export function TailorCvModal({
         {step === "new-cv-missing" && (
           <div className="flex-1 overflow-y-auto pr-1">
             <div className="text-center mb-5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold mb-2">
+              {/* <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold mb-2">
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>Essential Verification</span>
-              </div>
+              </div> */}
               <h2 className="text-xl font-bold tracking-tight text-neutral-950">
                 Confirm Baseline Details
               </h2>

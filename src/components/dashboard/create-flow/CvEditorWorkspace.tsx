@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ArrowLeft,
   Download,
@@ -31,6 +31,7 @@ import {
   getPaymentStatus,
   ApiError,
 } from "@/lib/api";
+import { usePolishSummary } from "@/hooks/use-cv-generation";
 import { toCVContentPatch } from "@/lib/cv-mapper";
 import { savePendingPayment, readPendingPayment, clearPendingPayment, saveLastPaymentRedirect } from "@/lib/payment-session";
 
@@ -44,6 +45,54 @@ interface CvEditorWorkspaceProps {
   autoDownload?: boolean;
 }
 
+type EditorSection = "personal" | "summary" | "experience" | "education" | "skills";
+
+// A CV opened with real gaps (blank from a skipped/new-profile guided flow,
+// or a profile attach whose latest CV is itself incomplete) gets an
+// unsolicited, skippable guided tour — see showGuidance below. Education is
+// intentionally not a trigger; it's genuinely optional for many resumes.
+function isCvIncomplete(data: CvData): boolean {
+  return (
+    !data.personalInfo.fullName.trim() ||
+    !data.summary.trim() ||
+    data.experiences.length === 0 ||
+    data.skills.length === 0
+  );
+}
+
+const GUIDANCE_STEPS: { section: EditorSection; title: string; description: string; doneNote: string }[] = [
+  {
+    section: "personal",
+    title: "Start with the basics",
+    description: "Add your full name, target job title, email, and phone number — these anchor the rest of your resume.",
+    doneNote: "Your contact info is already filled in — just double-check it.",
+  },
+  {
+    section: "summary",
+    title: "Write your summary",
+    description: "In 2-4 sentences, sum up your experience and biggest strengths. Once you have a rough draft, try AI Polish.",
+    doneNote: "You've already got a summary — review it or refine it with AI Polish.",
+  },
+  {
+    section: "experience",
+    title: "Add your work experience",
+    description: "List each role with the company, dates, and 2-4 bullet points describing what you did and achieved.",
+    doneNote: "Your experience is filled in — check it's complete and add any missing roles.",
+  },
+  {
+    section: "education",
+    title: "Add your education",
+    description: "Include your degree, school, and graduation year (optional, but strengthens most resumes).",
+    doneNote: "Your education section already has entries.",
+  },
+  {
+    section: "skills",
+    title: "List your key skills",
+    description: "Add the technical and soft skills most relevant to the role you're targeting.",
+    doneNote: "You've already listed skills — make sure they match your target role.",
+  },
+];
+
 export function CvEditorWorkspace({
   initialData,
   onBack,
@@ -54,9 +103,20 @@ export function CvEditorWorkspace({
   const [isSaving, setIsSaving] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<
-    "personal" | "summary" | "experience" | "education" | "skills"
-  >("personal");
+  const [polishError, setPolishError] = useState<string | null>(null);
+  const polishSummaryMutation = usePolishSummary();
+  // Snapshots from the most recent "AI Polish" run, so the user can bounce
+  // between the pre-polish and polished wording without re-running the AI.
+  const [prePolishSummary, setPrePolishSummary] = useState<string | null>(null);
+  const [polishedSummary, setPolishedSummary] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState<EditorSection>("personal");
+  // Whether this CV was incomplete when the editor opened decides whether the
+  // guided tour is offered at all — recomputed only once, from the initial
+  // data, so filling fields in during the session doesn't make the "Reopen
+  // guide" affordance disappear.
+  const [wasGuidanceOffered] = useState(() => isCvIncomplete(initialData));
+  const [showGuidance, setShowGuidance] = useState(() => isCvIncomplete(initialData));
+  const [guidanceStep, setGuidanceStep] = useState(0);
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [mobilePreviewOpen, setMobilePreviewOpen] = useState<boolean>(false);
   const [downloadSuccess, setDownloadSuccess] = useState<string | null>(null);
@@ -270,6 +330,7 @@ export function CvEditorWorkspace({
         content: toCVContentPatch(cv),
         jobDescription: cv.jobDescription ?? null,
         title: cv.title,
+        templateId: cv.templateStyle,
       });
       await finalizeCvDocument(cv.id);
       await renderCvDocument(cv.id);
@@ -313,14 +374,39 @@ export function CvEditorWorkspace({
   };
 
   // Coming back from a completed Chapa checkout for this CV — finish the
-  // download automatically instead of requiring a second manual click.
+  // download automatically instead of requiring a second manual click. Guarded
+  // by a ref (not just the `[]` deps array) because React Strict Mode
+  // double-invokes effects on mount in dev, which was firing handleDownload
+  // twice and downloading the PDF twice.
+  const hasAutoDownloaded = useRef(false);
   React.useEffect(() => {
-    if (autoDownload) {
+    if (autoDownload && !hasAutoDownloaded.current) {
+      hasAutoDownloaded.current = true;
       handleDownload("pdf");
     }
     // Only ever run once, right after mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const isSectionComplete = (section: EditorSection): boolean => {
+    switch (section) {
+      case "personal":
+        return Boolean(cv.personalInfo.fullName.trim() && cv.personalInfo.email.trim());
+      case "summary":
+        return Boolean(cv.summary.trim());
+      case "experience":
+        return cv.experiences.length > 0;
+      case "education":
+        return cv.education.length > 0;
+      case "skills":
+        return cv.skills.length > 0;
+    }
+  };
+
+  const goToGuidanceStep = (index: number) => {
+    setGuidanceStep(index);
+    setActiveSection(GUIDANCE_STEPS[index].section);
+  };
 
   // "Done" — persists edits to the backend CV document (when this CV is
   // backed by one and something actually changed) before closing the editor.
@@ -335,6 +421,7 @@ export function CvEditorWorkspace({
           content: toCVContentPatch(cv),
           jobDescription: cv.jobDescription ?? null,
           title: cv.title,
+          templateId: cv.templateStyle,
         });
       } catch (err) {
         console.error("Failed to save CV changes", err);
@@ -440,27 +527,113 @@ export function CvEditorWorkspace({
         <div className="w-full lg:w-[48%] h-full overflow-y-auto bg-white border-r border-neutral-200/90 p-6 sm:p-8 lg:p-10 space-y-8">
           {/* Section Navigation Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none border-b border-neutral-100">
-            {[
-              { id: "personal", label: "Contact Info" },
-              { id: "summary", label: "Summary" },
-              { id: "experience", label: "Experience" },
-              { id: "education", label: "Education" },
-              { id: "skills", label: "Skills" },
-            ].map((sec) => (
+            {(
+              [
+                { id: "personal", label: "Contact Info" },
+                { id: "summary", label: "Summary" },
+                { id: "experience", label: "Experience" },
+                { id: "education", label: "Education" },
+                { id: "skills", label: "Skills" },
+              ] as { id: EditorSection; label: string }[]
+            ).map((sec) => (
               <button
                 key={sec.id}
                 type="button"
-                onClick={() => setActiveSection(sec.id as any)}
+                onClick={() => {
+                  setActiveSection(sec.id);
+                  if (showGuidance) {
+                    const idx = GUIDANCE_STEPS.findIndex((s) => s.section === sec.id);
+                    if (idx !== -1) setGuidanceStep(idx);
+                  }
+                }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activeSection === sec.id
                     ? "bg-neutral-950 text-white shadow-2xs"
                     : "text-neutral-500 hover:text-neutral-950 hover:bg-neutral-100"
+                } ${
+                  showGuidance && GUIDANCE_STEPS[guidanceStep].section === sec.id
+                    ? "ring-2 ring-violet-500 ring-offset-2"
+                    : ""
                 }`}
               >
                 {sec.label}
               </button>
             ))}
           </div>
+
+          {/* Guided Setup Tour — only offered when the CV opened incomplete
+              (blank guided-flow start, or an attached profile with gaps);
+              fully skippable/dismissible and never blocks editing. */}
+          {showGuidance && (
+            <div className="rounded-2xl border border-violet-200 bg-violet-50/70 p-4 flex flex-col gap-3 animate-in fade-in">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-violet-600">
+                    Guided Setup · Step {guidanceStep + 1} of {GUIDANCE_STEPS.length}
+                  </span>
+                  <h4 className="text-sm font-bold text-neutral-950 mt-0.5">
+                    {GUIDANCE_STEPS[guidanceStep].title}
+                  </h4>
+                  <p className="text-xs text-neutral-600 mt-1 leading-relaxed">
+                    {isSectionComplete(GUIDANCE_STEPS[guidanceStep].section)
+                      ? GUIDANCE_STEPS[guidanceStep].doneNote
+                      : GUIDANCE_STEPS[guidanceStep].description}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowGuidance(false)}
+                  className="shrink-0 p-1 rounded-full text-violet-400 hover:text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer"
+                  title="Dismiss guide"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={guidanceStep === 0}
+                  onClick={() => goToGuidanceStep(guidanceStep - 1)}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-violet-700 hover:bg-violet-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (guidanceStep === GUIDANCE_STEPS.length - 1) {
+                      setShowGuidance(false);
+                    } else {
+                      goToGuidanceStep(guidanceStep + 1);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-violet-700 text-white hover:bg-violet-800 transition-colors cursor-pointer"
+                >
+                  {guidanceStep === GUIDANCE_STEPS.length - 1 ? "Finish Guide" : "Next"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowGuidance(false)}
+                  className="ml-auto text-[11px] font-semibold text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
+                >
+                  Skip guide
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!showGuidance && wasGuidanceOffered && (
+            <button
+              type="button"
+              onClick={() => {
+                goToGuidanceStep(0);
+                setShowGuidance(true);
+              }}
+              className="self-start text-[11px] font-semibold text-violet-700 hover:text-violet-900 transition-colors cursor-pointer"
+            >
+              Need help? Reopen guide
+            </button>
+          )}
 
           {/* SECTION 1: PERSONAL INFO */}
           {activeSection === "personal" && (
@@ -607,17 +780,30 @@ export function CvEditorWorkspace({
                 </h3>
                 <button
                   type="button"
-                  onClick={() =>
-                    setCv((prev) => ({
-                      ...prev,
-                      summary:
-                        "Results-driven engineering leader with 7+ years of experience spearheading distributed systems and cloud platforms. Proven track record reducing infrastructure latency by 44% and driving $320K/yr in AWS efficiency gains across high-traffic fintech environments.",
-                    }))
-                  }
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-700 hover:text-violet-900 cursor-pointer"
+                  disabled={polishSummaryMutation.isPending || !cv.summary.trim()}
+                  onClick={async () => {
+                    setPolishError(null);
+                    const beforePolish = cv.summary;
+                    try {
+                      const { summary } = await polishSummaryMutation.mutateAsync({
+                        summary: cv.summary,
+                        title: cv.targetRole || cv.personalInfo.headline,
+                        skills: cv.skills,
+                        experienceBullets: cv.experiences.flatMap((exp) => exp.bullets).slice(0, 20),
+                      });
+                      setCv((prev) => ({ ...prev, summary }));
+                      setPrePolishSummary(beforePolish);
+                      setPolishedSummary(summary);
+                    } catch (err) {
+                      setPolishError(
+                        err instanceof ApiError ? err.message : "Could not polish this summary right now."
+                      );
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-violet-700 hover:text-violet-900 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>AI Polish</span>
+                  <span>{polishSummaryMutation.isPending ? "Polishing..." : "AI Polish"}</span>
                 </button>
               </div>
 
@@ -633,6 +819,29 @@ export function CvEditorWorkspace({
                 <p className="text-[11px] text-neutral-400 mt-1">
                   Keep it between 2-4 sentences highlighting career longevity, domain mastery, and major metrics.
                 </p>
+                {polishError && (
+                  <p className="text-[11px] text-red-600 font-medium mt-1">{polishError}</p>
+                )}
+                {prePolishSummary !== null && polishedSummary !== null && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <button
+                      type="button"
+                      disabled={cv.summary === prePolishSummary}
+                      onClick={() => setCv((prev) => ({ ...prev, summary: prePolishSummary }))}
+                      className="text-[11px] font-semibold text-neutral-500 hover:text-neutral-900 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-neutral-500"
+                    >
+                      Revert to original
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cv.summary === polishedSummary}
+                      onClick={() => setCv((prev) => ({ ...prev, summary: polishedSummary }))}
+                      className="text-[11px] font-semibold text-violet-700 hover:text-violet-900 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:text-violet-700"
+                    >
+                      Use AI polished version
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}

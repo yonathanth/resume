@@ -155,80 +155,33 @@ export interface JobDescriptionPreset {
   keySkills: string[];
 }
 
+// Deliberately blank, not a fabricated sample — this is the merge base used
+// throughout the create/tailor/enhance flows whenever a real field hasn't
+// been filled in yet (e.g. buildLocalCv's local-only fallback path). A
+// realistic-looking fake person here would silently leak into a real user's
+// generated CV wherever a field was actually missing, indistinguishable from
+// their own data — exactly the fabrication risk the AI pipeline itself is
+// built to avoid.
 export const defaultSampleCv: CvData = {
   id: "cv-new",
-  title: "Senior Full Stack & Cloud Architect",
-  targetRole: "Senior Cloud Architect",
+  title: "Untitled Resume",
+  targetRole: "",
   templateStyle: "tech",
-  atsScore: 98,
+  atsScore: 0,
   personalInfo: {
-    fullName: "Alex Rivera",
-    email: "alex.rivera@example.com",
-    phone: "+1 (555) 234-5678",
-    location: "San Francisco, CA",
-    linkedin: "linkedin.com/in/alexrivera-cloud",
-    website: "alexrivera.dev",
-    headline: "Senior Cloud Architect & Distributed Systems Engineer",
+    fullName: "",
+    email: "",
+    phone: "",
+    location: "",
+    linkedin: "",
+    website: "",
+    headline: "",
   },
-  summary:
-    "Engineering leader with 7+ years architecting high-throughput cloud infrastructure and fault-tolerant microservices. Proven record reducing p99 latency by 44% and optimizing multi-region AWS footprints serving 12M+ active requests daily.",
-  experiences: [
-    {
-      id: "exp-1",
-      role: "Lead Cloud Infrastructure Architect",
-      company: "Stripe & FinScale",
-      location: "San Francisco, CA",
-      startDate: "2022",
-      endDate: "Present",
-      isCurrent: true,
-      bullets: [
-        "Architected multi-region Kubernetes clusters on AWS EKS across 3 availability zones, maintaining 99.995% service uptime across 12M+ daily transactions.",
-        "Engineered automated Terraform & GitOps pipelines reducing deployment rollback incidence by 62% while enabling 28 daily zero-downtime releases.",
-        "Optimized AWS infrastructure cost efficiency by $320K/yr through reserved instances, spot fleet management, and automated node pool autoscaling.",
-      ],
-    },
-    {
-      id: "exp-2",
-      role: "Senior Distributed Systems Engineer",
-      company: "Vercel / CloudPlatform",
-      location: "Remote",
-      startDate: "2019",
-      endDate: "2022",
-      isCurrent: false,
-      bullets: [
-        "Spearheaded redesign of real-time edge caching layer utilizing Redis and Go, accelerating API response speeds by 44% across 8 global edge POPs.",
-        "Mentored a pod of 6 backend engineers, instituting automated unit and integration tests yielding 94% test coverage.",
-      ],
-    },
-  ],
-  education: [
-    {
-      id: "edu-1",
-      degree: "B.S. in Computer Science & Distributed Systems",
-      school: "University of California, Berkeley",
-      location: "Berkeley, CA",
-      gradYear: "2019",
-      honors: "Summa Cum Laude, Dean's Honors List",
-    },
-  ],
-  skills: [
-    "AWS & GCP",
-    "Kubernetes (EKS)",
-    "Terraform",
-    "Docker",
-    "Go (Golang)",
-    "TypeScript",
-    "Node.js",
-    "PostgreSQL",
-    "Redis",
-    "Distributed Systems",
-    "CI/CD (GitHub Actions)",
-    "System Architecture",
-  ],
-  certifications: [
-    "AWS Certified Solutions Architect - Professional",
-    "Certified Kubernetes Administrator (CKA)",
-  ],
+  summary: "",
+  experiences: [],
+  education: [],
+  skills: [],
+  certifications: [],
 };
 
 export const SAMPLE_CAREER_PROFILES: CareerProfile[] = [

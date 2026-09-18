@@ -6,7 +6,11 @@ import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWo
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { getCvDocument } from "@/lib/api";
 import { applyCvContent, createBlankCv, toResumeDraft } from "@/lib/cv-mapper";
-import { CvData } from "@/components/dashboard/create-flow/types";
+import { CvData, TEMPLATE_OPTIONS, TemplateId } from "@/components/dashboard/create-flow/types";
+
+function toTemplateId(value: string | undefined): TemplateId | undefined {
+  return TEMPLATE_OPTIONS.find((t) => t.id === value)?.id;
+}
 
 // A dedicated page (its own route) for editing a CV, rather than an overlay
 // component swapped in over whichever page triggered it — reachable and
@@ -43,6 +47,7 @@ export default function CvEditorPage({
           targetRole: draft.targetRole,
           atsScore: draft.atsScore,
           skills: draft.matchedKeywords,
+          templateStyle: toTemplateId(doc.templateId) ?? "tech",
         });
         setCvData(applyCvContent(blank, doc.content));
       })

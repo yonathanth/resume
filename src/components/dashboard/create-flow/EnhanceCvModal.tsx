@@ -271,14 +271,17 @@ export function EnhanceCvModal({
 
   const saveNewProfile = (finalCv: CvData, profileId: string) => {
     if (!onSaveCareerProfile) return;
+    // Local-only fallback path (no real backend document) — domain/
+    // targetCompanies are normally AI-derived from real CV content, so
+    // there's nothing real to put here rather than a fabricated one.
     const newProfile: CareerProfile = {
       id: profileId,
       roleTitle: finalCv.targetRole,
-      domain: "Enhanced Systems Trajectory",
+      domain: "",
       readinessScore: finalCv.atsScore,
-      targetCompanies: ["Top Tech & Scale-ups"],
+      targetCompanies: [],
       skills: finalCv.skills.slice(0, 8),
-      highlight: finalCv.experiences[0]?.bullets[0] || "Enhanced master trajectory",
+      highlight: finalCv.experiences[0]?.bullets[0] || "",
       cvData: finalCv,
     };
     onSaveCareerProfile(newProfile);

@@ -9,6 +9,7 @@ import {
   getCvDocument,
   listCvDocuments,
   moveCvDocumentProfile,
+  polishSummary,
   uploadCvImport,
   ApiCvDocument,
   GenerateCvMismatch,
@@ -24,15 +25,23 @@ import { serializeCvContentToText } from "@/lib/cv-mapper";
 // they already had, with the new fields available additively.
 async function analyzeAndPersist(
   sourceText: string,
-  profileId?: string
+  profileId?: string,
+  options?: { jobDescription?: string; focusInstructions?: string }
 ): Promise<{ profileId: string | null; cvDocumentId: string | null; document: ApiCvDocument | GenerateCvMismatch }> {
-  const analyzed = await analyzeCv({ sourceText });
+  const analyzed = await analyzeCv({
+    sourceText,
+    jobDescription: options?.jobDescription,
+    focusInstructions: options?.focusInstructions,
+  });
   if ("mismatch" in analyzed) {
     return { profileId: profileId ?? null, cvDocumentId: null, document: analyzed };
   }
 
   const doc = await createCvDocument(profileId);
-  const document = await generateCv(doc.id, { analyzedContent: analyzed.candidateData });
+  const document = await generateCv(doc.id, {
+    analyzedContent: analyzed.candidateData,
+    jobDescription: options?.jobDescription,
+  });
   if ("mismatch" in document) {
     return { profileId: profileId ?? null, cvDocumentId: doc.id, document };
   }
@@ -90,6 +99,14 @@ export interface AnalyzeExistingInput {
   /** Where the new working document should be created — omit to create a
    * standalone document not attached to any career profile. */
   targetProfileId?: string;
+  /** New factual content the user typed in that isn't in the source yet
+   * (a recent role, project, achievement...) — folded into the source text
+   * so the AI can incorporate it, never fabricated on its own. */
+  extraDetails?: string;
+  jobDescription?: string;
+  /** A short instruction for what to emphasize/rewrite toward — sent as its
+   * own high-priority prompt block instead of being folded into sourceText. */
+  focusInstructions?: string;
 }
 
 export interface AnalyzeExistingResult {
@@ -117,8 +134,14 @@ export function useAnalyzeExisting() {
         throw new Error("This profile doesn't have any resume content yet.");
       }
 
-      const sourceText = serializeCvContentToText(sourceDoc.content);
-      const { profileId, cvDocumentId, document } = await analyzeAndPersist(sourceText, input.targetProfileId);
+      const baseText = serializeCvContentToText(sourceDoc.content);
+      const sourceText = input.extraDetails?.trim()
+        ? `${baseText}\n\nAdditional details to incorporate:\n${input.extraDetails.trim()}`
+        : baseText;
+      const { profileId, cvDocumentId, document } = await analyzeAndPersist(sourceText, input.targetProfileId, {
+        jobDescription: input.jobDescription,
+        focusInstructions: input.focusInstructions,
+      });
       return { profileId, cvDocumentId, sourceText, document };
     },
   });
@@ -198,5 +221,18 @@ export function useFinalizeCvProfile() {
       await moveCvDocumentProfile(input.cvDocumentId, profile.id);
       return { profileId: profile.id };
     },
+  });
+}
+
+// Powers the CV editor's "AI Polish" action on the Summary section — a
+// stateless rewrite of just the summary text, grounded by the rest of the CV.
+export function usePolishSummary() {
+  return useMutation({
+    mutationFn: (input: {
+      summary: string;
+      title?: string;
+      skills?: string[];
+      experienceBullets?: string[];
+    }) => polishSummary(input),
   });
 }

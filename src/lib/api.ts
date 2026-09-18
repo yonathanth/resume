@@ -306,6 +306,21 @@ export function analyzeCv(input: {
   });
 }
 
+// Stateless AI rewrite of just the summary field — grounded by (but never
+// adding facts from) the rest of the CV. Powers the editor's "AI Polish"
+// action on the Summary section.
+export function polishSummary(input: {
+  summary: string;
+  title?: string;
+  skills?: string[];
+  experienceBullets?: string[];
+}) {
+  return apiFetch<{ summary: string }>("/api/v1/cv/polish-summary", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 // Persists a CV document. Either pass sourceText (runs the AI here, same as
 // analyzeCv) or analyzedContent (the candidateData from a prior analyzeCv()
 // call — skips the AI call and just validates + saves it).
@@ -336,7 +351,7 @@ export function moveCvDocumentProfile(cvId: string, profileId: string | null) {
 
 export function updateCvContent(
   cvId: string,
-  input: { content?: CVContentDTO; jobDescription?: string | null; title?: string }
+  input: { content?: CVContentDTO; jobDescription?: string | null; title?: string; templateId?: string }
 ) {
   return apiFetch<ApiCvDocument>(`/api/v1/cv/${cvId}`, {
     method: "PATCH",

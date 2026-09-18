@@ -32,9 +32,30 @@ import {
   useRefineCv,
   useFinalizeCvProfile,
 } from "@/hooks/use-cv-generation";
-import { applyCvContent } from "@/lib/cv-mapper";
-import { ApiError, ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { applyCvContent, createBlankCv } from "@/lib/cv-mapper";
+import { ApiError, ClarificationQuestion, CVContentDTO, listCvDocuments } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
+
+// Quick-select starting points for "what should this CV focus on?" — a
+// career profile can back many different CVs, so there's no default intent
+// to assume; these just make it faster to express a common one.
+const PROFILE_FOCUS_PRESETS = [
+  "Tailor this CV for a specific job I'm applying to",
+  "Emphasize leadership and cross-team impact",
+  "Highlight my most recent and relevant experience",
+  "Make it concise and modern for a fast-scanning recruiter",
+  "Focus on technical depth and hands-on skills",
+];
+
+// Same idea for an uploaded CV — without direction, refining it just
+// reformats the same content back with barely any real change.
+const UPLOAD_FOCUS_PRESETS = [
+  "Modernize the language and structure of this CV",
+  "Tailor this CV for a specific job I'm applying to",
+  "Quantify my achievements with real metrics wherever possible",
+  "Make it more ATS-friendly and keyword-optimized",
+  "Condense this down to a tighter, one-page resume",
+];
 
 interface CreateCvModalProps {
   isOpen: boolean;
@@ -52,14 +73,19 @@ type Step =
   | "select-template-first"
   | "select-method"
   | "select-career-profile"
+  | "profile-instructions"
   | "scratch-choice"
   | "scratch-freestyle"
   | "scratch-missing"
+  | "guided-source"
   | "upload-cv"
   | "upload-analyzing"
+  | "upload-instructions"
   | "upload-missing"
   | "select-template"
   | "save-profile-prompt";
+
+type GuidedSourceChoice = "attach" | "create" | "skip" | null;
 
 export function CreateCvModal({
   isOpen,
@@ -96,7 +122,7 @@ export function CreateCvModal({
         if (initialCareerProfile.highlight) {
           setMissingMetric(initialCareerProfile.highlight);
         }
-        handlePrepareProfileSource(initialCareerProfile.id);
+        setStep("profile-instructions");
       } else if (startWithTemplate) {
         if (initialTemplate) {
           setSelectedTemplate(initialTemplate);
@@ -142,6 +168,13 @@ export function CreateCvModal({
   const [optionalJd, setOptionalJd] = useState("");
   const [showJdInput, setShowJdInput] = useState(false);
 
+  // "Start from career profile" — before generating, the user tells the AI
+  // what this particular CV should focus on (mandatory: a profile can back
+  // many different CVs, so there's no default intent to assume) and,
+  // optionally, any new facts to fold in that aren't in the profile yet.
+  const [flowFocusInstructions, setFlowFocusInstructions] = useState("");
+  const [flowExtraDetails, setFlowExtraDetails] = useState("");
+
   // Upload state
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [analysisProgress, setAnalysisProgress] = useState(0);
@@ -165,6 +198,26 @@ export function CreateCvModal({
   const [jobGaps, setJobGaps] = useState<string[]>([]);
   const [showAttachProfile, setShowAttachProfile] = useState(false);
 
+  // Naming confirmation shown right before a new career profile is created —
+  // prefilled from targetRole but editable so the saved profile name doesn't
+  // have to match the resume's job title field.
+  const [isNameProfileModalOpen, setIsNameProfileModalOpen] = useState(false);
+  const [profileNameDraft, setProfileNameDraft] = useState("");
+
+  // The guided (Filling Form) sub-flow's own source-of-truth choice, made
+  // before the user ever sees the editor: attach an existing profile's
+  // latest CV (real fetch, no AI), explicitly start a new profile, or skip
+  // entirely. "create" and "skip" both leave the form genuinely blank —
+  // they only differ in intent, not in what gets pre-filled.
+  const [guidedSourceChoice, setGuidedSourceChoice] = useState<GuidedSourceChoice>(null);
+  const [isFetchingGuidedSource, setIsFetchingGuidedSource] = useState(false);
+  const [guidedSourceNotice, setGuidedSourceNotice] = useState<string | null>(null);
+  // True only once a real fetch attempt has run for the profile currently
+  // selected in this step — `selectedProfileId` alone isn't enough to gate
+  // "Continue" because it defaults to the first available profile's id
+  // before the user has clicked anything here.
+  const [hasFetchedGuidedSource, setHasFetchedGuidedSource] = useState(false);
+
   // A CV document created mid-flow should never outlive an abandoned
   // session — only a completed flow keeps it (see markCompleted() below).
   const { markCompleted } = useDraftCvLifecycle(isOpen, cvDocumentId);
@@ -185,6 +238,9 @@ export function CreateCvModal({
       const { cvDocumentId: docId, document } = await analyzeExistingMutation.mutateAsync({
         sourceProfileId: profileId,
         targetProfileId: profileId,
+        extraDetails: flowExtraDetails || undefined,
+        focusInstructions: flowFocusInstructions || undefined,
+        jobDescription: optionalJd || undefined,
       });
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -203,6 +259,52 @@ export function CreateCvModal({
       // whatever was typed manually; handleFinish falls back to local-only.
     }
     setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
+  };
+
+  // Guided flow's "Attach to Existing Profile" — a direct, non-AI fetch of
+  // the profile's most recently updated CV document, dropped straight into
+  // the editor as-is. Deliberately skips the AI re-analysis pipeline that
+  // handlePrepareProfileSource uses (that's for the AI-driven "start from
+  // career profile" method) since guided mode never calls the AI.
+  const handleAttachGuidedProfile = async (profileId: string) => {
+    setSelectedProfileId(profileId);
+    setGuidedSourceChoice("attach");
+    setGuidedSourceNotice(null);
+    setHasFetchedGuidedSource(false);
+    setIsFetchingGuidedSource(true);
+    try {
+      const docs = await listCvDocuments(profileId);
+      const latest = docs[0];
+      if (!latest) {
+        setLatestContent(undefined);
+        setGuidedSourceNotice("This profile doesn't have a saved resume yet — starting with a blank form.");
+        return;
+      }
+      setLatestContent(latest.content);
+      const personal = latest.content?.personal ?? {};
+      setFullName(personal.full_name || fullName);
+      setEmail(personal.email || email);
+      setPhone(personal.phone || phone);
+      setTargetRole(personal.title || targetRole);
+    } catch (err) {
+      setLatestContent(undefined);
+      setGuidedSourceNotice(
+        err instanceof ApiError
+          ? `Couldn't load this profile's latest resume (${err.message}) — you can continue with a blank form.`
+          : "Couldn't load this profile's latest resume — you can continue with a blank form."
+      );
+    } finally {
+      setIsFetchingGuidedSource(false);
+      setHasFetchedGuidedSource(true);
+    }
+  };
+
+  // "Create Another Career Profile" and "Skip" both mean: don't pre-fill
+  // from anything real — the editor opens on a genuinely blank form.
+  const handleDeclineGuidedSource = (choice: "create" | "skip") => {
+    setGuidedSourceChoice(choice);
+    setGuidedSourceNotice(null);
+    setLatestContent(undefined);
   };
 
   if (!isOpen) return null;
@@ -272,7 +374,9 @@ export function CreateCvModal({
       setTargetRole(personal.title ?? "");
       setPhone(personal.phone ?? "");
       setMissingMetric("");
-      setStep("upload-missing");
+      setFlowFocusInstructions("");
+      setFlowExtraDetails("");
+      setStep("upload-instructions");
     } catch (err) {
       clearInterval(progressTimer);
       setFlowError(
@@ -297,6 +401,7 @@ export function CreateCvModal({
       `Target role: ${targetRole}`,
       phone.trim() && `Phone: ${phone}`,
       missingMetric.trim() && `Key recent achievement: ${missingMetric}`,
+      flowExtraDetails.trim() && `Additional details to incorporate: ${flowExtraDetails.trim()}`,
       ...clarifyingQuestions
         .filter((q) => questionAnswers[q.id]?.trim())
         .map((q) => `${q.question} ${questionAnswers[q.id].trim()}`),
@@ -309,6 +414,7 @@ export function CreateCvModal({
         sourceText: augmentedText,
         jobDescription: optionalJd || undefined,
         name: fullName || undefined,
+        focusInstructions: flowFocusInstructions || undefined,
       });
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -375,62 +481,77 @@ export function CreateCvModal({
     );
   };
 
+  // Base is always a genuinely blank skeleton, never defaultSampleCv's mock
+  // "Alex Rivera" content — a field is only ever filled from something real:
+  // what the user actually typed in this flow, or real fetched/AI-analyzed
+  // `content`. A field neither source supplies stays empty rather than
+  // silently falling back to fabricated sample data.
   const buildLocalCv = (content?: CVContentDTO): CvData => {
-    let generatedCv: CvData = {
-      ...defaultSampleCv,
-      targetRole: targetRole || defaultSampleCv.targetRole,
-      title: `${targetRole || "Senior Cloud Architect"} - Resume`,
+    let generatedCv: CvData = createBlankCv({
+      targetRole: targetRole || "",
+      title: targetRole ? `${targetRole} - Resume` : "Untitled Resume",
       templateStyle: selectedTemplate,
       jobDescription: optionalJd || undefined,
       personalInfo: {
-        ...defaultSampleCv.personalInfo,
-        fullName: fullName || defaultSampleCv.personalInfo.fullName,
-        email: email || defaultSampleCv.personalInfo.email,
-        phone: phone || defaultSampleCv.personalInfo.phone,
+        ...createBlankCv().personalInfo,
+        fullName: fullName || "",
+        email: email || "",
+        phone: phone || "",
       },
-    };
+    });
 
     if (content) {
       generatedCv = applyCvContent(generatedCv, content);
     }
 
-    if (missingMetric) {
-      generatedCv.experiences[0].bullets[2] = `Spearheaded cost and performance optimization: ${missingMetric}.`;
+    if (missingMetric && generatedCv.experiences[0]) {
+      generatedCv.experiences[0].bullets.push(
+        `Spearheaded cost and performance optimization: ${missingMetric}.`
+      );
     }
 
     return generatedCv;
   };
 
-  const saveNewProfile = (generatedCv: CvData, profileId: string) => {
+  const saveNewProfile = (generatedCv: CvData, profileId: string, profileName?: string) => {
     if (!onSaveCareerProfile) return;
+    // This only runs in the local-only fallback path (no real backend
+    // document) — domain/targetCompanies are normally AI-derived from real
+    // CV content (see getProfileSummary), so there's nothing real to put
+    // here rather than a fabricated domain/company list.
     const newProfile: CareerProfile = {
       id: profileId,
-      roleTitle: targetRole || defaultSampleCv.targetRole,
-      domain: "Architecture & Distributed Systems",
+      roleTitle: profileName || targetRole,
+      domain: "",
       readinessScore: generatedCv.atsScore,
-      targetCompanies: ["Stripe", "AWS", "Top Scale-ups"],
+      targetCompanies: [],
       skills: generatedCv.skills.slice(0, 8),
-      highlight: missingMetric || generatedCv.experiences[0]?.bullets[0] || "Master trajectory",
+      highlight: missingMetric || generatedCv.experiences[0]?.bullets[0] || "",
       cvData: generatedCv,
     };
     onSaveCareerProfile(newProfile);
   };
 
   // Handle Finish Flow and Launch Editor
-  const handleFinish = async (action: "create" | "attach" | "none", existingProfileId?: string) => {
+  const handleFinish = async (
+    action: "create" | "attach" | "none",
+    existingProfileId?: string,
+    profileName?: string
+  ) => {
     setFlowError(null);
+    const resolvedProfileName = (profileName || targetRole || defaultSampleCv.targetRole).trim();
 
     if (cvDocumentId) {
       try {
         const { profileId } = await finalizeMutation.mutateAsync({
           cvDocumentId,
           action,
-          targetRole: targetRole || defaultSampleCv.targetRole,
+          targetRole: resolvedProfileName,
           existingProfileId,
         });
 
         const generatedCv = { ...buildLocalCv(latestContent), id: cvDocumentId };
-        if (action === "create" && profileId) saveNewProfile(generatedCv, profileId);
+        if (action === "create" && profileId) saveNewProfile(generatedCv, profileId, resolvedProfileName);
         markCompleted();
         onComplete(generatedCv);
       } catch (err) {
@@ -439,9 +560,14 @@ export function CreateCvModal({
       return;
     }
 
-    const generatedCv = buildLocalCv();
-    if (action === "create") saveNewProfile(generatedCv, `profile-${Date.now()}`);
+    const generatedCv = buildLocalCv(latestContent);
+    if (action === "create") saveNewProfile(generatedCv, `profile-${Date.now()}`, resolvedProfileName);
     onComplete(generatedCv);
+  };
+
+  const openNameProfileModal = () => {
+    setProfileNameDraft((targetRole || defaultSampleCv.targetRole).trim());
+    setIsNameProfileModalOpen(true);
   };
 
   const isFlowBusy = analyzeMutation.isPending || refineMutation.isPending || finalizeMutation.isPending;
@@ -637,11 +763,126 @@ export function CreateCvModal({
               </button>
               <button
                 type="button"
-                disabled={!selectedProfileId || analyzeExistingMutation.isPending}
+                disabled={!selectedProfileId}
+                onClick={() => setStep("profile-instructions")}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+            {flowError && (
+              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
+          </div>
+        )}
+
+        {/* ================= STEP: PROFILE INSTRUCTIONS ================= */}
+        {step === "profile-instructions" && (
+          <div>
+            <div className="text-center mb-5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-[11px] font-semibold mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Guides the AI Before Generating</span>
+              </div>
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">
+                What Should This CV Focus On?
+              </h2>
+              <p className="text-xs text-neutral-500 mt-1">
+                This profile can back many different resumes — tell the AI what this one is for.
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <div>
+                <span className="text-[11px] font-semibold text-neutral-500 block mb-1.5">
+                  Quick starting points:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {PROFILE_FOCUS_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setFlowFocusInstructions(preset)}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+                        flowFocusInstructions === preset
+                          ? "bg-neutral-950 border-neutral-950 text-white"
+                          : "border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  What should this CV focus on? <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={flowFocusInstructions}
+                  onChange={(e) => setFlowFocusInstructions(e.target.value)}
+                  placeholder="e.g. Tailor this for a Staff Engineer role, leading with distributed systems experience"
+                  className="w-full p-3 rounded-xl bg-neutral-100/90 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 border-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Anything new to add? (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={flowExtraDetails}
+                  onChange={(e) => setFlowExtraDetails(e.target.value)}
+                  placeholder="A recent role, project, certification, or achievement not yet in your profile..."
+                  className="w-full p-3 rounded-xl bg-neutral-100/90 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 border-none resize-none"
+                />
+              </div>
+
+              {/* Optional Job Description */}
+              <div className="rounded-xl border border-neutral-200 p-3 bg-neutral-50/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-neutral-700">
+                    Target Job Description (Optional)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowJdInput(!showJdInput)}
+                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                  >
+                    {showJdInput ? "Hide" : optionalJd ? "Edit JD" : "+ Add JD"}
+                  </button>
+                </div>
+                {showJdInput && (
+                  <textarea
+                    rows={3}
+                    value={optionalJd}
+                    onChange={(e) => setOptionalJd(e.target.value)}
+                    placeholder="Paste target job requirements if you want the CV tailored to a specific role..."
+                    className="w-full mt-2 p-2.5 rounded-lg border border-neutral-300 text-xs bg-white text-neutral-900"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setStep("select-career-profile")}
+                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={!flowFocusInstructions.trim() || analyzeExistingMutation.isPending}
                 onClick={() => handlePrepareProfileSource()}
                 className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>{analyzeExistingMutation.isPending ? "Loading..." : "Continue"}</span>
+                <span>{analyzeExistingMutation.isPending ? "Generating..." : "Generate CV"}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -725,10 +966,157 @@ export function CreateCvModal({
                   if (scratchType === "freestyle") {
                     setStep("scratch-freestyle");
                   } else {
-                    setStep("select-template");
+                    setStep("guided-source");
                   }
                 }}
                 className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md cursor-pointer"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ================= STEP 2A-G: GUIDED FORM SOURCE ================= */}
+        {step === "guided-source" && (
+          <div>
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold tracking-tight text-neutral-950">
+                Where Should This Start From?
+              </h2>
+              <p className="text-xs text-neutral-500 mt-1.5 leading-relaxed">
+                Attach a saved career profile to pull in its latest real resume data, or start completely blank.
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              {availableProfiles.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setGuidedSourceChoice("attach")}
+                  className={`w-full p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                    guidedSourceChoice === "attach"
+                      ? "bg-neutral-100/90 border-neutral-950 shadow-xs"
+                      : "bg-neutral-50/70 border-neutral-200 hover:bg-neutral-100/60"
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-bold text-neutral-950">
+                      Attach to Existing Profile
+                    </div>
+                    <div className="text-xs text-neutral-500 mt-0.5 leading-snug">
+                      Fetches the latest real resume saved under a career profile and fills the form with it.
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleDeclineGuidedSource("create")}
+                className={`w-full p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                  guidedSourceChoice === "create"
+                    ? "bg-neutral-100/90 border-neutral-950 shadow-xs"
+                    : "bg-neutral-50/70 border-neutral-200 hover:bg-neutral-100/60"
+                }`}
+              >
+                <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <PenTool className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-neutral-950">
+                    Create Another Career Profile
+                  </div>
+                  <div className="text-xs text-neutral-500 mt-0.5 leading-snug">
+                    Start a brand-new trajectory. The form opens completely blank — you decide the name when saving.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeclineGuidedSource("skip")}
+                className={`w-full p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3.5 ${
+                  guidedSourceChoice === "skip"
+                    ? "bg-neutral-100/90 border-neutral-950 shadow-xs"
+                    : "bg-neutral-50/70 border-neutral-200 hover:bg-neutral-100/60"
+                }`}
+              >
+                <div className="w-9 h-9 rounded-xl bg-neutral-100 text-neutral-600 flex items-center justify-center shrink-0 mt-0.5">
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-neutral-950">
+                    Skip for Now
+                  </div>
+                  <div className="text-xs text-neutral-500 mt-0.5 leading-snug">
+                    Jump straight into a blank form — you can attach or save to a profile later.
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {guidedSourceChoice === "attach" && (
+              <div className="space-y-2 mb-4 max-h-[220px] overflow-y-auto pr-1">
+                {availableProfiles.map((p) => {
+                  // Gated on an actual fetch attempt (not just matching
+                  // selectedProfileId's default value) so the first profile
+                  // in the list doesn't render as pre-selected before the
+                  // user has clicked anything here.
+                  const isSelected =
+                    selectedProfileId === p.id && (isFetchingGuidedSource || hasFetchedGuidedSource);
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => handleAttachGuidedProfile(p.id)}
+                      className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                        isSelected
+                          ? "bg-neutral-100/90 border-neutral-950 ring-1 ring-neutral-950"
+                          : "bg-neutral-50/70 border-neutral-200 hover:bg-neutral-100/60"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-neutral-950 truncate">
+                          {p.roleTitle}
+                        </div>
+                        <div className="text-[11px] text-neutral-500">{p.domain}</div>
+                      </div>
+                      {isSelected && isFetchingGuidedSource && (
+                        <span className="text-[10px] font-semibold text-neutral-500 shrink-0">Loading...</span>
+                      )}
+                      {isSelected && !isFetchingGuidedSource && latestContent && (
+                        <span className="text-[10px] font-bold text-emerald-700 shrink-0 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Loaded
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                {guidedSourceNotice && (
+                  <p className="text-[11px] text-amber-700 font-medium mt-1">{guidedSourceNotice}</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setStep("scratch-choice")}
+                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={
+                  isFetchingGuidedSource ||
+                  (guidedSourceChoice === "attach" && !hasFetchedGuidedSource)
+                }
+                onClick={() => setStep("select-template")}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Continue
               </button>
@@ -804,10 +1192,25 @@ export function CreateCvModal({
         {step === "scratch-missing" && (
           <div>
             <div className="text-center mb-5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold mb-2">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>3 Missing Essentials Detected</span>
-              </div>
+              {(() => {
+                const missingEssentialsCount = [!fullName, !targetRole, !phone].filter(Boolean).length;
+                if (missingEssentialsCount === 0) {
+                  return (
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold mb-2">
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      <span>All Essentials Found</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold mb-2">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>
+                      {missingEssentialsCount} Missing Essential{missingEssentialsCount === 1 ? "" : "s"} Detected
+                    </span>
+                  </div>
+                );
+              })()}
               <h2 className="text-xl font-bold tracking-tight text-neutral-950">
                 Complete Missing Details
               </h2>
@@ -1010,6 +1413,93 @@ export function CreateCvModal({
           </div>
         )}
 
+        {/* ================= STEP 2B-1B: UPLOAD INSTRUCTIONS ================= */}
+        {step === "upload-instructions" && (
+          <div>
+            <div className="text-center mb-5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-violet-50 border border-violet-200 text-violet-700 text-[11px] font-semibold mb-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Guides the AI Before Generating</span>
+              </div>
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">
+                What Should the AI Do With This CV?
+              </h2>
+              <p className="text-xs text-neutral-500 mt-1">
+                Without direction, we&apos;d just hand your resume back to you — tell us what to actually change.
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <div>
+                <span className="text-[11px] font-semibold text-neutral-500 block mb-1.5">
+                  Quick starting points:
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {UPLOAD_FOCUS_PRESETS.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setFlowFocusInstructions(preset)}
+                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+                        flowFocusInstructions === preset
+                          ? "bg-neutral-950 border-neutral-950 text-white"
+                          : "border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-neutral-700"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  What should the AI do with this CV? <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={flowFocusInstructions}
+                  onChange={(e) => setFlowFocusInstructions(e.target.value)}
+                  placeholder="e.g. Rewrite this to target a Senior Product Manager role, emphasizing cross-functional leadership"
+                  className="w-full p-3 rounded-xl bg-neutral-100/90 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 border-none resize-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+                  Anything new to add? (Optional)
+                </label>
+                <textarea
+                  rows={2}
+                  value={flowExtraDetails}
+                  onChange={(e) => setFlowExtraDetails(e.target.value)}
+                  placeholder="A recent role, project, certification, or achievement not on this resume yet..."
+                  className="w-full p-3 rounded-xl bg-neutral-100/90 text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900 border-none resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setStep("upload-cv")}
+                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={!flowFocusInstructions.trim()}
+                onClick={() => setStep("upload-missing")}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ================= STEP 2B-2: UPLOAD MISSING DETAILS PROMPT ================= */}
         {step === "upload-missing" && (
           <div>
@@ -1091,21 +1581,30 @@ export function CreateCvModal({
               </div>
             </div>
 
-            <button
-              type="button"
-              disabled={!fullName.trim() || !targetRole.trim() || refineMutation.isPending}
-              onClick={handleContinueFromMissing}
-              className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span>
-                {refineMutation.isPending
-                  ? "Saving..."
-                  : startWithTemplate
-                    ? "Continue & Save"
-                    : "Choose Template & Continue"}
-              </span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setStep("upload-instructions")}
+                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={!fullName.trim() || !targetRole.trim() || refineMutation.isPending}
+                onClick={handleContinueFromMissing}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>
+                  {refineMutation.isPending
+                    ? "Saving..."
+                    : startWithTemplate
+                      ? "Continue & Save"
+                      : "Choose Template & Continue"}
+                </span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
             {flowError && (
               <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
             )}
@@ -1268,10 +1767,10 @@ export function CreateCvModal({
                 type="button"
                 onClick={() => {
                   if (selectedMethod === "profile") {
-                    setStep("select-career-profile");
+                    setStep("profile-instructions");
                   } else if (selectedMethod === "scratch") {
                     if (scratchType === "guided") {
-                      setStep("scratch-choice");
+                      setStep("guided-source");
                     } else {
                       setStep("scratch-missing");
                     }
@@ -1285,10 +1784,32 @@ export function CreateCvModal({
               </button>
               <button
                 type="button"
-                onClick={() => setStep("save-profile-prompt")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                disabled={isFlowBusy}
+                onClick={() => {
+                  // The guided flow already answered "attach / create / skip"
+                  // back in the guided-source step — don't ask again here,
+                  // just carry that choice straight through to the editor.
+                  if (selectedMethod === "scratch" && scratchType === "guided") {
+                    if (guidedSourceChoice === "attach" && selectedProfileId) {
+                      handleFinish("attach", selectedProfileId);
+                    } else if (guidedSourceChoice === "create") {
+                      handleFinish("create");
+                    } else {
+                      handleFinish("none");
+                    }
+                    return;
+                  }
+                  setStep("save-profile-prompt");
+                }}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>Continue &amp; Save</span>
+                <span>
+                  {selectedMethod === "scratch" && scratchType === "guided"
+                    ? isFlowBusy
+                      ? "Opening Editor..."
+                      : "Open Editor"
+                    : "Continue & Save"}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -1371,7 +1892,7 @@ export function CreateCvModal({
               <button
                 type="button"
                 disabled={isFlowBusy}
-                onClick={() => handleFinish("create")}
+                onClick={openNameProfileModal}
                 className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <BookmarkPlus className="w-4 h-4" />
@@ -1427,6 +1948,67 @@ export function CreateCvModal({
         {/* Bottom subtle bar indicator (as seen in Mobbin reference screenshot) */}
         <div className="h-1 w-12 bg-neutral-950 rounded-full mx-auto mt-6" />
       </div>
+
+      {/* ================= NAME CAREER PROFILE MODAL ================= */}
+      {isNameProfileModalOpen && (
+        <div className="fixed inset-0 z-[60] bg-neutral-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-white rounded-[28px] border border-neutral-200/90 shadow-2xl p-7 relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setIsNameProfileModalOpen(false)}
+              className="absolute top-5 right-5 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+              title="Close modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="w-10 h-10 rounded-2xl bg-neutral-950 text-white flex items-center justify-center mb-4 shadow-xs">
+              <BookmarkPlus className="w-4.5 h-4.5" />
+            </div>
+
+            <h3 className="text-lg font-bold tracking-tight text-neutral-950">
+              Name This Career Profile
+            </h3>
+            <p className="text-xs text-neutral-500 mt-1 mb-4 leading-relaxed">
+              We prefilled this from your target role — feel free to change it before saving.
+            </p>
+
+            <label className="block text-[11px] font-bold text-neutral-700 mb-1">
+              Profile Name
+            </label>
+            <input
+              type="text"
+              autoFocus
+              value={profileNameDraft}
+              onChange={(e) => setProfileNameDraft(e.target.value)}
+              placeholder="e.g. Senior Cloud Architect"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-100/90 text-xs text-neutral-900 border-none focus:ring-2 focus:ring-neutral-900"
+            />
+
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setIsNameProfileModalOpen(false)}
+                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!profileNameDraft.trim() || isFlowBusy}
+                onClick={() => {
+                  setIsNameProfileModalOpen(false);
+                  handleFinish("create", undefined, profileNameDraft.trim());
+                }}
+                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span>{finalizeMutation.isPending ? "Saving..." : "Confirm & Save"}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
