@@ -127,6 +127,25 @@ export function googleAuth(idToken: string) {
   });
 }
 
+// The current user's real profile — the source of truth for the settings
+// page (never hardcode a display name/email).
+export function getMe() {
+  return apiFetch<ApiUser>("/api/v1/auth/me");
+}
+
+export function updateMe(input: { fullName?: string; email?: string }) {
+  return apiFetch<ApiUser>("/api/v1/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+// Best-effort — clears the httpOnly refresh cookie server-side. The access
+// token itself is cleared client-side regardless (see useLogout).
+export function logout() {
+  return apiFetch<{ success: boolean }>("/api/v1/auth/logout", { method: "POST" });
+}
+
 export interface ApiCareerProfile {
   id: string;
   title: string;
@@ -406,6 +425,61 @@ export function initializePayment(input: { productType: PaymentProductType; reso
 // string alone, always confirm through this endpoint.
 export function getPaymentStatus(paymentId: string) {
   return apiFetch<ApiPayment>(`/api/v1/payments/${paymentId}/status`);
+}
+
+// Mirrors the backend's Polar SubscriptionStatus verbatim, plus "revoked"
+// for a hard revocation — see fitcv-backend's entitlement.service.ts. Null
+// until the user's first Polar subscription event has synced.
+export type SubscriptionStatus =
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused"
+  | "revoked"
+  | null;
+
+export interface SubscriptionStatusResult {
+  isPro: boolean;
+  freeGenerationsUsed: number;
+  freeGenerationsRemaining: number;
+  subscriptionStatus: SubscriptionStatus;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+}
+
+// The single source of truth for Pro access and free-generation usage —
+// never derive either from client-side state.
+export function getSubscriptionStatus() {
+  return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/status");
+}
+
+export interface CheckoutResult {
+  checkoutUrl: string;
+}
+
+// Starts a Polar Sandbox checkout for the single FitCV Pro ($5/month)
+// product. The backend identifies the user from the auth token — never pass
+// a user id here.
+export function createSubscriptionCheckout() {
+  return apiFetch<CheckoutResult>("/api/v1/subscriptions/checkout", { method: "POST" });
+}
+
+// Schedules cancellation at the end of the current billing period — Pro
+// access and the subscription stay active until then, nothing already paid
+// is refunded, and it simply won't renew afterward. Never an immediate
+// revoke. Returns the same shape as getSubscriptionStatus().
+export function cancelSubscription() {
+  return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/cancel", { method: "POST" });
+}
+
+// Reverses a pending cancel-at-period-end — the subscription goes back to
+// renewing normally.
+export function resumeSubscription() {
+  return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/resume", { method: "POST" });
 }
 
 // Not run through apiFetch: the response body is a raw PDF stream, not JSON.
