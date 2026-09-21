@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Settings,
@@ -12,21 +12,78 @@ import {
   ExternalLink,
   Sparkles,
   LogOut,
+  Loader2,
 } from "lucide-react";
+import {
+  useSubscriptionStatus,
+  useStartProCheckout,
+  useCancelSubscription,
+  useResumeSubscription,
+} from "@/hooks/use-subscription";
+import { useMe, useUpdateProfile, useLogout } from "@/hooks/use-auth";
+import { ApiError } from "@/lib/api";
+import { CancelPlanModal } from "@/components/dashboard/CancelPlanModal";
+
+function formatPeriodEnd(iso: string | null): string {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
 
 export function SettingsView() {
-  const [fullName, setFullName] = useState("Alex Rivera");
-  const [email, setEmail] = useState("alex.rivera@example.com");
-  const [headline, setHeadline] = useState(
-    "Senior Full Stack & Cloud Architect"
-  );
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [exportFormat, setExportFormat] = useState<"pdf" | "docx">("pdf");
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const { data: subscription, isLoading: isSubscriptionLoading } = useSubscriptionStatus();
+  const checkout = useStartProCheckout();
+  const cancelSubscription = useCancelSubscription();
+  const resumeSubscription = useResumeSubscription();
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const { data: me } = useMe();
+  const updateProfile = useUpdateProfile();
+  const logoutMutation = useLogout();
 
-  const handleSave = (e: React.FormEvent) => {
+  // Seed the editable fields from the real profile once it loads — never
+  // hardcode a placeholder name/email.
+  useEffect(() => {
+    if (me) {
+      setFullName(me.fullName ?? "");
+      setEmail(me.email);
+    }
+  }, [me]);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSavedSuccess(true);
-    setTimeout(() => setSavedSuccess(false), 2500);
+    setProfileError(null);
+    try {
+      await updateProfile.mutateAsync({ fullName: fullName.trim(), email: email.trim() });
+      setSavedSuccess(true);
+      setTimeout(() => setSavedSuccess(false), 2500);
+    } catch (err) {
+      setProfileError(err instanceof ApiError ? err.message : "Could not save your changes. Please try again.");
+    }
+  };
+
+  const handleConfirmCancel = async () => {
+    setCancelError(null);
+    try {
+      await cancelSubscription.mutateAsync();
+      setShowCancelModal(false);
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? err.message : "Could not cancel your subscription. Please try again.");
+    }
+  };
+
+  const handleConfirmResume = async () => {
+    setCancelError(null);
+    try {
+      await resumeSubscription.mutateAsync();
+      setShowCancelModal(false);
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? err.message : "Could not resume your subscription. Please try again.");
+    }
   };
 
   return (
@@ -53,7 +110,7 @@ export function SettingsView() {
                 Personal Information
               </h2>
               <p className="text-xs text-neutral-500">
-                Update your contact details and default title
+                Update your name and email address
               </p>
             </div>
           </div>
@@ -85,30 +142,23 @@ export function SettingsView() {
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                Professional Headline
-              </label>
-              <input
-                type="text"
-                value={headline}
-                onChange={(e) => setHeadline(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900"
-              />
-            </div>
-
             <div className="flex items-center justify-between pt-4">
-              {savedSuccess && (
-                <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5 animate-in fade-in">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Changes saved successfully</span>
-                </span>
+              {profileError ? (
+                <span className="text-xs font-semibold text-rose-600">{profileError}</span>
+              ) : (
+                savedSuccess && (
+                  <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5 animate-in fade-in">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Changes saved successfully</span>
+                  </span>
+                )
               )}
               <button
                 type="submit"
-                className="ml-auto px-6 py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs hover:bg-neutral-800 transition-colors shadow-xs cursor-pointer"
+                disabled={updateProfile.isPending}
+                className="ml-auto px-6 py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs hover:bg-neutral-800 transition-colors shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Save Profile
+                {updateProfile.isPending ? "Saving..." : "Save Profile"}
               </button>
             </div>
           </form>
@@ -131,26 +181,70 @@ export function SettingsView() {
           </div>
 
           <div className="p-5 rounded-2xl bg-neutral-50 border border-neutral-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-base font-bold text-neutral-950">
-                  Resumate Pro Plan
-                </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-950 text-white">
-                  Active
-                </span>
-              </div>
-              <p className="text-xs text-neutral-500 mt-1">
-                $10 per month, billed yearly ($120/yr). Next renewal: Sep 14, 2027.
-              </p>
-            </div>
-
-            <Link
-              href="/pricing"
-              className="px-4 py-2 rounded-xl bg-white border border-neutral-200 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer"
-            >
-              Manage / Switch Plan
-            </Link>
+            {isSubscriptionLoading ? (
+              <div className="text-xs text-neutral-500">Loading subscription status...</div>
+            ) : subscription?.isPro ? (
+              <>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold text-neutral-950">FitCV Pro Plan</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-950 text-white">
+                      Active
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    $5 per month.{" "}
+                    {subscription.cancelAtPeriodEnd
+                      ? `Cancels on ${formatPeriodEnd(subscription.currentPeriodEnd)} — you'll keep Pro access until then.`
+                      : subscription.currentPeriodEnd
+                        ? `Next renewal: ${formatPeriodEnd(subscription.currentPeriodEnd)}.`
+                        : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Link
+                    href="/pricing"
+                    className="px-4 py-2 rounded-xl bg-white border border-neutral-200 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer"
+                  >
+                    Manage Plan
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setShowCancelModal(true)}
+                    className={`px-4 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
+                      subscription.cancelAtPeriodEnd
+                        ? "border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-100"
+                        : "border-red-200 bg-white text-red-600 hover:bg-red-50"
+                    }`}
+                  >
+                    {subscription.cancelAtPeriodEnd ? "Undo Cancellation" : "Cancel Plan"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-base font-bold text-neutral-950">Free Plan</span>
+                  </div>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    {subscription
+                      ? `${subscription.freeGenerationsUsed} of 3 free CV generations used.`
+                      : "3 free CV generations."}{" "}
+                    Upgrade to FitCV Pro ($5/month) for unlimited AI tailoring.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => checkout.mutate()}
+                  disabled={checkout.isPending}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed shrink-0"
+                >
+                  {checkout.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{checkout.isPending ? "Redirecting..." : "Upgrade to Pro"}</span>
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -228,23 +322,43 @@ export function SettingsView() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-neutral-50/80 border border-neutral-200/80">
             <div>
               <div className="text-xs font-bold text-neutral-900">
-                Logged in as Alex Rivera
+                Logged in as {me?.fullName || me?.email || "..."}
               </div>
               <div className="text-[11px] text-neutral-500 mt-0.5">
-                alex.rivera@example.com • Active Pro workspace
+                {me?.email ?? ""} • {subscription?.isPro ? "Active Pro workspace" : "Free workspace"}
               </div>
             </div>
 
-            <Link
-              href="/"
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 font-semibold text-xs transition-colors shadow-2xs cursor-pointer shrink-0"
+            <button
+              type="button"
+              onClick={() => logoutMutation.mutate()}
+              disabled={logoutMutation.isPending}
+              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 font-semibold text-xs transition-colors shadow-2xs cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>Log out of Resumate</span>
-            </Link>
+              {logoutMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <LogOut className="w-3.5 h-3.5" />
+              )}
+              <span>{logoutMutation.isPending ? "Logging out..." : "Log out of Resumate"}</span>
+            </button>
           </div>
         </div>
       </div>
+
+      <CancelPlanModal
+        isOpen={showCancelModal}
+        isCancelScheduled={subscription?.cancelAtPeriodEnd ?? false}
+        periodEndLabel={formatPeriodEnd(subscription?.currentPeriodEnd ?? null) || "the end of your billing period"}
+        isProcessing={cancelSubscription.isPending || resumeSubscription.isPending}
+        error={cancelError}
+        onConfirmCancel={handleConfirmCancel}
+        onConfirmResume={handleConfirmResume}
+        onClose={() => {
+          setShowCancelModal(false);
+          setCancelError(null);
+        }}
+      />
     </div>
   );
 }
