@@ -11,12 +11,9 @@ import {
   ShieldCheck,
   Zap,
   Sparkles,
-  Layers,
   Award,
   Building2,
 } from "lucide-react";
-
-type BillingCadence = "yearly" | "quarterly";
 
 interface FAQItem {
   question: string;
@@ -30,9 +27,9 @@ const faqs: FAQItem[] = [
       "Resumate parses target job descriptions using the exact same parsing algorithms used by Greenhouse, Lever, and Workday. It extracts mandatory hard skills, qualifications, and action verbs, and helps you rewrite bullet points using Google's proven XYZ formula ('Accomplished [X] as measured by [Y], by doing [Z]').",
   },
   {
-    question: "Can I cancel or switch billing plans anytime?",
+    question: "Can I cancel anytime?",
     answer:
-      "Yes. You can switch between quarterly and annual billing or cancel your subscription at any time with a single click from your account dashboard. You will retain full access until the end of your paid billing cycle.",
+      "Yes. You can cancel your Pro subscription at any time with a single click from your account dashboard. You will retain full Pro access until the end of your current paid month.",
   },
   {
     question: "What formats can I export my resume and cover letter to?",
@@ -45,11 +42,6 @@ const faqs: FAQItem[] = [
       "Executive+ unlocks full access to 140+ real, offer-producing resumes, portfolio breakdowns, and recruiter interview notes from verified candidates who landed offers at Google, Goldman Sachs, McKinsey, Stripe, Apple, and Amazon.",
   },
   {
-    question: "How do Team seats and candidate coaching work?",
-    answer:
-      "On the Team plan, you can invite colleagues, clients, or students into a unified workspace. Review candidate draft resumes, provide inline feedback, assign custom branded templates, and batch-score resumes against multiple job descriptions.",
-  },
-  {
     question: "Do you offer student or non-profit discounts?",
     answer:
       "Yes! We offer a 50% discount on the Pro plan for active university students, bootcamps, and non-profit career centers. Reach out to support@resumate.ai with your institutional email.",
@@ -57,10 +49,7 @@ const faqs: FAQItem[] = [
 ];
 
 export default function PricingPage() {
-  const [cadence, setCadence] = useState<BillingCadence>("yearly");
   const [openFaq, setOpenFaq] = useState<number | null>(0);
-
-  const isYearly = cadence === "yearly";
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white selection:bg-white selection:text-neutral-950 relative font-sans flex flex-col justify-between overflow-x-hidden">
@@ -82,51 +71,10 @@ export default function PricingPage() {
             Get full access to AI resume tailoring, ATS keyword optimization,
             unlimited exports, and verified hiring benchmarks.
           </p>
-
-          {/* Billing Switcher Pill */}
-          <div className="flex flex-col items-center justify-center">
-            <div className="inline-flex items-center p-1 rounded-full bg-[#18181a] border border-neutral-800">
-              <button
-                type="button"
-                onClick={() => setCadence("yearly")}
-                className={`px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                  isYearly
-                    ? "bg-[#27272a] text-white shadow-sm"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                Yearly
-              </button>
-              <button
-                type="button"
-                onClick={() => setCadence("quarterly")}
-                className={`px-6 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
-                  !isYearly
-                    ? "bg-[#27272a] text-white shadow-sm"
-                    : "text-neutral-400 hover:text-neutral-200"
-                }`}
-              >
-                Quarterly
-              </button>
-            </div>
-
-            {/* Discount callout matching reference bright blue */}
-            <div className="h-7 mt-3 flex items-center justify-center">
-              {isYearly ? (
-                <span className="text-xs sm:text-sm font-semibold text-[#38bdf8] tracking-tight animate-in fade-in duration-200">
-                  Save 33% on a yearly subscription
-                </span>
-              ) : (
-                <span className="text-xs sm:text-sm font-medium text-neutral-400 tracking-tight animate-in fade-in duration-200">
-                  Billed every 3 months • Cancel anytime
-                </span>
-              )}
-            </div>
-          </div>
         </div>
 
-        {/* 3-Tier Pricing Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12 sm:mt-14 items-stretch">
+        {/* Pricing Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12 sm:mt-14 items-stretch max-w-3xl mx-auto">
           {/* Tier 1: Pro (Popular) */}
           <div className="rounded-3xl bg-[#141416] border border-neutral-700/80 shadow-[0_12px_40px_rgba(0,0,0,0.6)] hover:border-neutral-500 transition-all p-7 sm:p-8 flex flex-col justify-between relative group">
             <div>
@@ -150,11 +98,11 @@ export default function PricingPage() {
               {/* Price & Cadence */}
               <div className="h-16 flex items-baseline gap-2 mb-6">
                 <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
-                  {isYearly ? "$10" : "$15"}
+                  $5
                 </span>
                 <div className="text-[11px] text-neutral-400 leading-tight font-medium">
                   <div>per month</div>
-                  <div>{isYearly ? "billed yearly" : "billed quarterly"}</div>
+                  <div>billed monthly</div>
                 </div>
               </div>
 
@@ -201,82 +149,7 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* Tier 2: Team */}
-          <div className="rounded-3xl bg-[#141416] border border-neutral-800/90 hover:border-neutral-700 transition-all p-7 sm:p-8 flex flex-col justify-between">
-            <div>
-              {/* Title */}
-              <div className="h-8 flex items-center mb-1">
-                <h3 className="text-2xl font-bold text-white tracking-tight">
-                  Team
-                </h3>
-              </div>
-
-              {/* Subtitle */}
-              <p className="h-8 text-xs text-neutral-400 mb-5 font-normal flex items-center">
-                For career coaches, bootcamps & agencies
-              </p>
-
-              {/* Price & Cadence */}
-              <div className="h-16 flex items-baseline gap-2 mb-6">
-                <span className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">
-                  {isYearly ? "$16" : "$24"}
-                </span>
-                <div className="text-[11px] text-neutral-400 leading-tight font-medium">
-                  <div>per member/month</div>
-                  <div>{isYearly ? "billed yearly" : "billed quarterly"}</div>
-                </div>
-              </div>
-
-              {/* CTA Button: Dark with Subtle Border */}
-              <Link
-                href="/signup"
-                className="w-full py-3.5 rounded-full border border-neutral-700 bg-[#1e1e21] text-white font-semibold text-sm hover:bg-neutral-800 hover:border-neutral-600 active:scale-98 transition-all shadow-2xs cursor-pointer flex items-center justify-center"
-              >
-                Create team
-              </Link>
-
-              {/* Note under button */}
-              <div className="h-6 text-[11px] text-neutral-500 text-center mt-2.5 mb-6 flex items-center justify-center">
-                For 1 or more coaches
-              </div>
-
-              {/* Features List */}
-              <div className="pt-6 border-t border-neutral-800">
-                <div className="text-xs font-semibold text-white mb-3.5 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-neutral-300" />
-                  <span>Everything in Pro plus</span>
-                </div>
-                <ul className="space-y-3">
-                  {[
-                    { text: "Invite teammates & candidate cohorts", soon: false },
-                    { text: "Candidate review & feedback dashboard", soon: false },
-                    { text: "Shared custom template library", soon: false },
-                    { text: "Bulk resume tailoring & ATS scoring", soon: false },
-                    { text: "Centralized team billing & seat control", soon: false },
-                    { text: "White-label candidate PDF export", soon: false },
-                    { text: "Slack & email notifications", soon: true },
-                  ].map((item, idx) => (
-                    <li
-                      key={idx}
-                      className="flex items-center gap-2.5 text-xs text-neutral-300 font-medium"
-                    >
-                      <Check className="w-4 h-4 text-white shrink-0 stroke-[2.5]" />
-                      <span className="flex items-center gap-1.5">
-                        <span>{item.text}</span>
-                        {item.soon && (
-                          <span className="text-[9px] font-bold bg-[#27272a] text-neutral-300 px-1.5 py-0.5 rounded border border-neutral-700">
-                            Soon
-                          </span>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Tier 3: Enterprise */}
+          {/* Tier 2: Enterprise */}
           <div className="rounded-3xl bg-[#141416] border border-neutral-800/90 hover:border-neutral-700 transition-all p-7 sm:p-8 flex flex-col justify-between">
             <div>
               {/* Title */}
@@ -319,7 +192,7 @@ export default function PricingPage() {
               <div className="pt-6 border-t border-neutral-800">
                 <div className="text-xs font-semibold text-white mb-3.5 flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-neutral-300" />
-                  <span>Everything in Team plus</span>
+                  <span>Everything in Pro plus</span>
                 </div>
                 <ul className="space-y-3">
                   {[
@@ -378,7 +251,7 @@ export default function PricingPage() {
 
               {/* Footnote */}
               <span className="text-xs text-neutral-500 mt-5">
-                Available on Team &amp; Enterprise plans
+                Available on the Enterprise plan
               </span>
             </div>
 

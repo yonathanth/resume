@@ -5,8 +5,11 @@ import { usePathname } from "next/navigation";
 import { DashboardSidebar, DashboardTab } from "@/components/dashboard/DashboardSidebar";
 import { DashboardProvider, useDashboard } from "@/components/dashboard/DashboardContext";
 import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWorkspace";
-import { Menu, X, FileText, Sparkles, ArrowRight } from "lucide-react";
+import { Menu, X, FileText, Sparkles, ArrowRight, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useSubscriptionStatus, useStartProCheckout } from "@/hooks/use-subscription";
+import { useMe } from "@/hooks/use-auth";
+import { getDisplayName, getInitials } from "@/lib/utils";
 
 const MOBILE_NAV_ITEMS: { href: string; label: string }[] = [
   { href: "/dashboard", label: "The Builder" },
@@ -65,6 +68,12 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showFloatingUpgrade, setShowFloatingUpgrade] = useState(true);
+  const { data: subscription } = useSubscriptionStatus();
+  const checkout = useStartProCheckout();
+  const isPro = subscription?.isPro ?? false;
+  const { data: me } = useMe();
+  const displayName = getDisplayName(me?.fullName, me?.email);
+  const initials = getInitials(me?.fullName, me?.email);
 
   const activeTab: DashboardTab = pathname.startsWith("/dashboard/career-profiles")
     ? "career-profiles"
@@ -94,23 +103,33 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="h-screen w-full overflow-hidden bg-[#fbfbfb] text-neutral-900 flex font-sans antialiased relative">
-      {/* Floating Upgrade Prompt (Top Center, Eye-Catching & Subtle) */}
-      {showFloatingUpgrade && (
+      {/* Floating Upgrade Prompt (Top Center, Eye-Catching & Subtle) — the
+          backend's subscription-status endpoint is the source of truth, so
+          this never shows (or is skipped) for a real Pro user. */}
+      {showFloatingUpgrade && !isPro && (
         <div className="fixed top-3.5 left-1/2 -translate-x-1/2 z-40 animate-in fade-in slide-in-from-top-3 duration-300 pointer-events-auto">
           <div className="flex items-center gap-2.5 pl-3.5 pr-2 py-1.5 rounded-full bg-neutral-950/90 text-white backdrop-blur-md border border-neutral-800 shadow-xl ring-1 ring-white/10 hover:border-neutral-700 transition-all group">
             <div className="flex items-center gap-1.5 text-xs font-medium">
               <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
               <span className="text-neutral-200 text-xs font-medium">
-                Unlock Unlimited AI Tailoring &amp; Exports
+                {subscription
+                  ? `${subscription.freeGenerationsUsed} of 3 free CVs used`
+                  : "Unlock Unlimited AI Tailoring & Exports"}
               </span>
             </div>
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-[11px] transition-all shadow-xs"
+            <button
+              type="button"
+              onClick={() => checkout.mutate()}
+              disabled={checkout.isPending}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-[11px] transition-all shadow-xs cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <span>Upgrade</span>
-              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+              <span>{checkout.isPending ? "Redirecting..." : "Upgrade"}</span>
+              {checkout.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+              )}
+            </button>
             <button
               type="button"
               onClick={() => setShowFloatingUpgrade(false)}
@@ -197,11 +216,13 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
                 className="flex items-center gap-2 text-neutral-950 font-bold hover:opacity-80 transition-opacity cursor-pointer"
               >
                 <div className="w-6 h-6 rounded-lg bg-neutral-950 text-white flex items-center justify-center text-xs">
-                  AR
+                  {initials}
                 </div>
-                <span>Alex Rivera</span>
+                <span>{displayName}</span>
               </Link>
-              <span className="text-[11px] font-semibold text-neutral-400">Pro Plan</span>
+              <span className="text-[11px] font-semibold text-neutral-400">
+                {isPro ? "Pro Plan" : "Free Plan"}
+              </span>
             </div>
           </div>
         </div>
