@@ -1,49 +1,24 @@
-// Tracks in-flight CV-download payments across the full-page redirect to
-// Chapa's checkout and back, without depending on whatever (if anything)
-// Chapa appends to the return URL's query string.
-const PENDING_PAYMENT_KEY_PREFIX = "resumate_pending_payment_";
-const LAST_REDIRECT_KEY = "resumate_last_payment_redirect";
+// Tracks the in-flight Chapa Pro-subscription payment across the full-page
+// redirect to Chapa's checkout and back, without depending on whatever (if
+// anything) Chapa appends to the static CHAPA_RETURN_URL's query string —
+// the Chapa return page has no other way to know which payment to
+// re-verify.
+const LAST_CHAPA_PAYMENT_ID_KEY = "resumate_last_chapa_payment_id";
 
-export function savePendingPayment(cvId: string, paymentId: string) {
+export function saveLastChapaPaymentId(paymentId: string) {
   try {
-    sessionStorage.setItem(`${PENDING_PAYMENT_KEY_PREFIX}${cvId}`, paymentId);
+    sessionStorage.setItem(LAST_CHAPA_PAYMENT_ID_KEY, paymentId);
   } catch {
-    // Best-effort — worst case the user just has to click Download twice.
+    // Best-effort — worst case the return page just shows a generic
+    // "confirming" state and relies on the webhook instead.
   }
 }
 
-export function readPendingPayment(cvId: string): string | null {
+export function readAndClearLastChapaPaymentId(): string | null {
   try {
-    return sessionStorage.getItem(`${PENDING_PAYMENT_KEY_PREFIX}${cvId}`);
-  } catch {
-    return null;
-  }
-}
-
-export function clearPendingPayment(cvId: string) {
-  try {
-    sessionStorage.removeItem(`${PENDING_PAYMENT_KEY_PREFIX}${cvId}`);
-  } catch {
-    // Ignore.
-  }
-}
-
-// A single breadcrumb (not per-CV) recording which CV's payment we most
-// recently sent to Chapa — read by the generic Chapa return page, which has
-// no other way to know which CV to send the user back to.
-export function saveLastPaymentRedirect(cvId: string) {
-  try {
-    sessionStorage.setItem(LAST_REDIRECT_KEY, cvId);
-  } catch {
-    // Ignore.
-  }
-}
-
-export function readAndClearLastPaymentRedirect(): string | null {
-  try {
-    const cvId = sessionStorage.getItem(LAST_REDIRECT_KEY);
-    sessionStorage.removeItem(LAST_REDIRECT_KEY);
-    return cvId;
+    const paymentId = sessionStorage.getItem(LAST_CHAPA_PAYMENT_ID_KEY);
+    sessionStorage.removeItem(LAST_CHAPA_PAYMENT_ID_KEY);
+    return paymentId;
   } catch {
     return null;
   }

@@ -10,6 +10,7 @@ import {
   resumeSubscription,
 } from "@/lib/api";
 import { useHasMounted } from "./use-has-mounted";
+import { saveLastChapaPaymentId } from "@/lib/payment-session";
 
 export const SUBSCRIPTION_STATUS_QUERY_KEY = ["subscription-status"] as const;
 
@@ -43,13 +44,19 @@ export function useRefreshSubscriptionStatus() {
   );
 }
 
-// Starts the $5/month Pro checkout and redirects the browser to Polar. The
-// actual subscription state only updates once Polar's webhook reaches the
-// backend — this mutation only gets the user to the checkout page.
+// Starts a checkout with the chosen provider (Polar's $5/month recurring
+// subscription, or Chapa's 80 ETB / 1-month one-time local alternative) and
+// redirects the browser there. The actual subscription state only updates
+// once the payment is confirmed (Polar's webhook, or Chapa's webhook /
+// the Chapa return page's re-verify call) — this mutation only gets the
+// user to the checkout page.
 export function useStartProCheckout() {
   return useMutation({
     mutationFn: createSubscriptionCheckout,
-    onSuccess: ({ checkoutUrl }) => {
+    onSuccess: ({ checkoutUrl, paymentId }) => {
+      if (paymentId) {
+        saveLastChapaPaymentId(paymentId);
+      }
       window.location.href = checkoutUrl;
     },
   });
