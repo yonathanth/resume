@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWorkspace";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { getCvDocument } from "@/lib/api";
@@ -23,8 +23,6 @@ export default function CvEditorPage({
 }) {
   const { id } = use(params);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const autoDownload = searchParams.get("resumeDownload") === "1";
   const { updateDraftFromSavedCv } = useDashboard();
   const [cvData, setCvData] = useState<CvData | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -91,7 +89,6 @@ export default function CvEditorPage({
         updateDraftFromSavedCv(savedCv);
         router.push("/dashboard");
       }}
-      autoDownload={autoDownload}
     />
   );
 }

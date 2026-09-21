@@ -5,11 +5,12 @@ import { usePathname } from "next/navigation";
 import { DashboardSidebar, DashboardTab } from "@/components/dashboard/DashboardSidebar";
 import { DashboardProvider, useDashboard } from "@/components/dashboard/DashboardContext";
 import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWorkspace";
-import { Menu, X, FileText, Sparkles, ArrowRight, Loader2 } from "lucide-react";
+import { Menu, X, FileText, Sparkles, ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { useSubscriptionStatus, useStartProCheckout } from "@/hooks/use-subscription";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useMe } from "@/hooks/use-auth";
 import { getDisplayName, getInitials } from "@/lib/utils";
+import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 
 const MOBILE_NAV_ITEMS: { href: string; label: string }[] = [
   { href: "/dashboard", label: "The Builder" },
@@ -68,8 +69,8 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showFloatingUpgrade, setShowFloatingUpgrade] = useState(true);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const { data: subscription } = useSubscriptionStatus();
-  const checkout = useStartProCheckout();
   const isPro = subscription?.isPro ?? false;
   const { data: me } = useMe();
   const displayName = getDisplayName(me?.fullName, me?.email);
@@ -119,16 +120,11 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
             </div>
             <button
               type="button"
-              onClick={() => checkout.mutate()}
-              disabled={checkout.isPending}
-              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-[11px] transition-all shadow-xs cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+              onClick={() => setShowUpgradeModal(true)}
+              className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-400 hover:bg-amber-300 text-neutral-950 font-bold text-[11px] transition-all shadow-xs cursor-pointer"
             >
-              <span>{checkout.isPending ? "Redirecting..." : "Upgrade"}</span>
-              {checkout.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
-              )}
+              <span>Upgrade</span>
+              <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
             </button>
             <button
               type="button"
@@ -230,6 +226,8 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area (Independent scroll while sidebar remains fixed) */}
       <main className="flex-1 min-w-0 h-full pt-16 md:pt-0 overflow-y-auto">{children}</main>
+
+      <ProUpgradeModal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
     </div>
   );
 }
