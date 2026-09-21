@@ -35,6 +35,8 @@ import {
 import { applyCvContent, createBlankCv } from "@/lib/cv-mapper";
 import { ApiError, ClarificationQuestion, CVContentDTO, listCvDocuments } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
+import { useProGate } from "@/hooks/use-pro-gate";
+import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 
 // Quick-select starting points for "what should this CV focus on?" — a
 // career profile can back many different CVs, so there's no default intent
@@ -227,6 +229,7 @@ export function CreateCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const finalizeMutation = useFinalizeCvProfile();
+  const proGate = useProGate();
 
   // Pulls the REAL content already saved under the chosen career profile (if
   // any) so continuing from a profile isn't just typed placeholder fields.
@@ -254,9 +257,14 @@ export function CreateCvModal({
       setFullName(personal.full_name || fullName);
       setEmail(personal.email || email);
       setPhone(personal.phone || phone);
-    } catch {
-      // No existing resume content under this profile yet — proceed with
-      // whatever was typed manually; handleFinish falls back to local-only.
+    } catch (err) {
+      // Free generations exhausted — stop here instead of silently falling
+      // through to "no existing content" (which would let the flow continue
+      // as if nothing happened).
+      if (proGate.isProRequired(err)) return;
+      // Otherwise: no existing resume content under this profile yet —
+      // proceed with whatever was typed manually; handleFinish falls back to
+      // local-only.
     }
     setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
   };
@@ -336,6 +344,7 @@ export function CreateCvModal({
       setMissingMetric("");
       setStep("scratch-missing");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof ApiError ? err.message : "Could not analyze your story. Please try again.");
     }
   };
@@ -379,6 +388,10 @@ export function CreateCvModal({
       setStep("upload-instructions");
     } catch (err) {
       clearInterval(progressTimer);
+      if (proGate.isProRequired(err)) {
+        setStep("upload-cv");
+        return;
+      }
       setFlowError(
         err instanceof Error ? err.message : "Could not read this file. Please try a different one."
       );
@@ -424,6 +437,7 @@ export function CreateCvModal({
       setJobGaps(document.jobAnalysis?.gaps ?? []);
       setStep(startWithTemplate ? "save-profile-prompt" : "select-template");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof ApiError ? err.message : "Could not update your CV. Please try again.");
     }
   };
@@ -2009,6 +2023,8 @@ export function CreateCvModal({
           </div>
         </div>
       )}
+
+      <ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />
     </div>
   );
 }

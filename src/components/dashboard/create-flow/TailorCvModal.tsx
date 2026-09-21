@@ -40,6 +40,8 @@ import {
 import { applyCvContent } from "@/lib/cv-mapper";
 import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
+import { useProGate } from "@/hooks/use-pro-gate";
+import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 
 interface TailorCvModalProps {
   isOpen: boolean;
@@ -139,6 +141,7 @@ export function TailorCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const finalizeMutation = useFinalizeCvProfile();
+  const proGate = useProGate();
 
   if (!isOpen) return null;
 
@@ -169,6 +172,7 @@ export function TailorCvModal({
       setPhone(personal.phone || phone);
       setStep("jd-and-slider");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
     }
   };
@@ -208,6 +212,10 @@ export function TailorCvModal({
       setStep("new-cv-missing");
     } catch (err) {
       clearInterval(progressTimer);
+      if (proGate.isProRequired(err)) {
+        setStep("new-cv-upload");
+        return;
+      }
       setFlowError(
         err instanceof Error ? err.message : "Could not read this file. Please try a different one."
       );
@@ -240,6 +248,7 @@ export function TailorCvModal({
       setPhone(personal.phone ?? "");
       setStep("new-cv-missing");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not analyze your story. Please try again.");
     }
   };
@@ -464,6 +473,7 @@ export function TailorCvModal({
       setJobGaps(document.jobAnalysis?.gaps ?? []);
       setStep("select-template");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not tailor your CV. Please try again.");
     }
   };
@@ -1385,6 +1395,8 @@ export function TailorCvModal({
           </div>
         )}
       </div>
+
+      <ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />
     </div>
   );
 }
