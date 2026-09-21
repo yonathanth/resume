@@ -36,6 +36,8 @@ import {
 import { applyCvContent } from "@/lib/cv-mapper";
 import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
+import { useProGate } from "@/hooks/use-pro-gate";
+import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 
 interface EnhanceCvModalProps {
   isOpen: boolean;
@@ -118,6 +120,7 @@ export function EnhanceCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const finalizeMutation = useFinalizeCvProfile();
+  const proGate = useProGate();
 
   if (!isOpen) return null;
 
@@ -139,6 +142,7 @@ export function EnhanceCvModal({
       setClarifyingQuestions(document.questions ?? []);
       setQuestionAnswers({});
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(
         err instanceof Error ? err.message : "Could not read this file. Please try a different one."
       );
@@ -169,6 +173,7 @@ export function EnhanceCvModal({
       setQuestionAnswers({});
       setStep("improvement-goals");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
     }
   };
@@ -323,6 +328,7 @@ export function EnhanceCvModal({
       setJobGaps(document.jobAnalysis?.gaps ?? []);
       setStep("select-template");
     } catch (err) {
+      if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not enhance your CV. Please try again.");
     }
   };
@@ -862,6 +868,8 @@ export function EnhanceCvModal({
           </div>
         )}
       </div>
+
+      <ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />
     </div>
   );
 }
