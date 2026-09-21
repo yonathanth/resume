@@ -14,6 +14,9 @@ import {
   Sparkles,
   LayoutTemplate,
 } from "lucide-react";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { useMe } from "@/hooks/use-auth";
+import { getDisplayName, getInitials } from "@/lib/utils";
 
 export type DashboardTab =
   | "builder"
@@ -34,6 +37,12 @@ export function DashboardSidebar({
   isExpanded,
   onToggleExpanded,
 }: DashboardSidebarProps) {
+  const { data: subscription } = useSubscriptionStatus();
+  const isPro = subscription?.isPro ?? false;
+  const { data: me } = useMe();
+  const displayName = getDisplayName(me?.fullName, me?.email);
+  const initials = getInitials(me?.fullName, me?.email);
+
   const topNavItems: {
     id: DashboardTab;
     label: string;
@@ -73,13 +82,19 @@ export function DashboardSidebar({
     icon: React.ComponentType<{ className?: string }>;
     isExternalAction?: boolean;
   }[] = [
-    {
-      id: "upgrade",
-      label: "Upgrade",
-      icon: Sparkles,
-      href: "/pricing",
-      isExternalAction: true,
-    },
+    // Never shown to a real Pro user — subscriptionStatus is the source of
+    // truth here, not a locally-toggled flag.
+    ...(isPro
+      ? []
+      : [
+          {
+            id: "upgrade" as const,
+            label: "Upgrade",
+            icon: Sparkles,
+            href: "/pricing",
+            isExternalAction: true,
+          },
+        ]),
     {
       id: "settings",
       label: "Account Settings",
@@ -242,14 +257,14 @@ export function DashboardSidebar({
           {isExpanded ? (
             <div className="flex items-center gap-2.5 px-2 py-1.5 select-none">
               <div className="w-8 h-8 rounded-xl bg-neutral-950 text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-2xs">
-                AR
+                {initials}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-bold text-neutral-950 truncate leading-tight">
-                  Alex Rivera
+                  {displayName}
                 </div>
                 <div className="text-[11px] text-neutral-500 truncate">
-                  alex.rivera@example.com
+                  {me?.email ?? ""}
                 </div>
               </div>
             </div>
@@ -257,9 +272,9 @@ export function DashboardSidebar({
             <div className="flex justify-center py-1 select-none">
               <div
                 className="w-8 h-8 rounded-xl bg-neutral-950 text-white flex items-center justify-center text-xs font-bold shadow-2xs"
-                title="Alex Rivera"
+                title={displayName}
               >
-                AR
+                {initials}
               </div>
             </div>
           )}
