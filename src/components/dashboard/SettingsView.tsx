@@ -183,6 +183,23 @@ export function SettingsView() {
           <div className="p-5 rounded-2xl bg-neutral-50 border border-neutral-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             {isSubscriptionLoading ? (
               <div className="text-xs text-neutral-500">Loading subscription status...</div>
+            ) : subscription?.isPro && subscription.subscriptionProvider === "CHAPA" ? (
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-neutral-950">FitCV Pro Plan</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-950 text-white">
+                    Active
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
+                    via Chapa
+                  </span>
+                </div>
+                <p className="text-xs text-neutral-500 mt-1">
+                  80 ETB / month. Active until {formatPeriodEnd(subscription.currentPeriodEnd)} — Chapa
+                  doesn&apos;t auto-renew, so you&apos;ll need to pay again (via Chapa or Polar) after that to
+                  keep Pro access.
+                </p>
+              </div>
             ) : subscription?.isPro ? (
               <>
                 <div>
@@ -225,24 +242,57 @@ export function SettingsView() {
               <>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-base font-bold text-neutral-950">Free Plan</span>
+                    <span className="text-base font-bold text-neutral-950">
+                      {subscription?.isExpired ? "Plan Expired" : "Free Plan"}
+                    </span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-1">
-                    {subscription
-                      ? `${subscription.freeGenerationsUsed} of 3 free CV generations used.`
-                      : "3 free CV generations."}{" "}
-                    Upgrade to FitCV Pro ($5/month) for unlimited AI tailoring.
+                    {subscription?.isExpired
+                      ? "Your FitCV Pro plan has expired and your free generations are already used up."
+                      : subscription
+                        ? `${subscription.freeGenerationsUsed} of 3 free CV generations used.`
+                        : "3 free CV generations."}{" "}
+                    {subscription?.isExpired
+                      ? "Renew below to get unlimited AI tailoring back."
+                      : "Upgrade to FitCV Pro for unlimited AI tailoring."}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => checkout.mutate()}
-                  disabled={checkout.isPending}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed shrink-0"
-                >
-                  {checkout.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{checkout.isPending ? "Redirecting..." : "Upgrade to Pro"}</span>
-                </button>
+                <div className="flex flex-col gap-2 w-full sm:w-auto shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => checkout.mutate("polar")}
+                    disabled={checkout.isPending}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {checkout.isPending && checkout.variables === "polar" && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    )}
+                    <span>
+                      {checkout.isPending && checkout.variables === "polar"
+                        ? "Redirecting..."
+                        : subscription?.isExpired
+                          ? "Renew with Polar — $5/mo"
+                          : "Pay with Polar — $5/mo"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => checkout.mutate("chapa")}
+                    disabled={checkout.isPending}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-neutral-200 bg-white text-neutral-800 text-xs font-semibold hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
+                  >
+                    {checkout.isPending && checkout.variables === "chapa" && (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    )}
+                    <span>
+                      {checkout.isPending && checkout.variables === "chapa"
+                        ? "Redirecting..."
+                        : subscription?.isExpired
+                          ? "Renew with Chapa — 80 ETB/mo"
+                          : "Pay with Chapa (local) — 80 ETB/mo"}
+                    </span>
+                  </button>
+                </div>
               </>
             )}
           </div>

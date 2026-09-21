@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ArrowLeft,
   Download,
@@ -27,22 +27,15 @@ import {
   finalizeCvDocument,
   renderCvDocument,
   downloadCvPdf,
-  initializePayment,
-  getPaymentStatus,
   ApiError,
 } from "@/lib/api";
 import { usePolishSummary } from "@/hooks/use-cv-generation";
 import { toCVContentPatch } from "@/lib/cv-mapper";
-import { savePendingPayment, readPendingPayment, clearPendingPayment, saveLastPaymentRedirect } from "@/lib/payment-session";
 
 interface CvEditorWorkspaceProps {
   initialData: CvData;
   onBack: () => void;
   onSave: (data: CvData) => void;
-  // Set when this page was opened right after returning from a successful
-  // Chapa checkout for this exact CV — automatically resumes the download
-  // instead of making the user click "Download PDF" a second time.
-  autoDownload?: boolean;
 }
 
 type EditorSection = "personal" | "summary" | "experience" | "education" | "skills";
@@ -97,7 +90,6 @@ export function CvEditorWorkspace({
   initialData,
   onBack,
   onSave,
-  autoDownload = false,
 }: CvEditorWorkspaceProps) {
   const [cv, setCv] = useState<CvData>(initialData);
   const [isSaving, setIsSaving] = useState(false);
@@ -278,42 +270,12 @@ export function CvEditorWorkspace({
     }));
   };
 
-  // Ensures a SUCCESS payment exists for this specific CV before it can be
-  // downloaded. Resumes a payment started earlier in this tab (tracked via
-  // sessionStorage, not the redirect's query string) by re-verifying it
-  // server-side; otherwise starts a new one and sends the browser to Chapa's
-  // checkout. Returns "PAID" only when the backend has actually confirmed
-  // SUCCESS — never inferred from the frontend alone.
-  const ensurePaidForDownload = async (cvId: string): Promise<"PAID" | "REDIRECTING"> => {
-    const pendingPaymentId = readPendingPayment(cvId);
-    if (pendingPaymentId) {
-      const status = await getPaymentStatus(pendingPaymentId);
-      if (status.status === "SUCCESS") {
-        clearPendingPayment(cvId);
-        return "PAID";
-      }
-      // Stale, failed, or still pending — drop the marker and re-initialize below.
-      clearPendingPayment(cvId);
-    }
-
-    const init = await initializePayment({ productType: "CV_DOWNLOAD", resourceId: cvId });
-    if (init.alreadyPaid) {
-      return "PAID";
-    }
-
-    savePendingPayment(cvId, init.paymentId);
-    saveLastPaymentRedirect(cvId);
-    setDownloadSuccess("Redirecting you to secure payment...");
-    window.location.href = init.checkoutUrl!;
-    return "REDIRECTING";
-  };
-
   // Real PDF pipeline: save the current edits (PATCH), finalize the document
-  // (validates it's complete), render it server-side (Puppeteer), require
-  // payment for this specific CV, then stream the actual PDF back and save
-  // it. DOCX has no backend renderer, and an unbacked ("cv-new") CV has
-  // nothing to render (or pay for), so both keep the original simulated
-  // confirmation banner.
+  // (validates it's complete), render it server-side (Puppeteer), then
+  // stream the actual PDF back and save it. Downloads are free — the only
+  // paywall is on generation (see the Pro/free-generation gate). DOCX has no
+  // backend renderer, and an unbacked ("cv-new") CV has nothing to render,
+  // so both keep the original simulated confirmation banner.
   const handleDownload = async (type: "pdf" | "docx") => {
     const isBackedByDocument = Boolean(cv.id) && cv.id !== "cv-new";
 
@@ -335,11 +297,6 @@ export function CvEditorWorkspace({
       await finalizeCvDocument(cv.id);
       await renderCvDocument(cv.id);
 
-      const paymentOutcome = await ensurePaidForDownload(cv.id);
-      if (paymentOutcome === "REDIRECTING") {
-        return;
-      }
-
       const blob = await downloadCvPdf(cv.id);
 
       const url = URL.createObjectURL(blob);
@@ -354,17 +311,6 @@ export function CvEditorWorkspace({
       setDownloadSuccess("Your ATS-compliant PDF was generated successfully!");
       setTimeout(() => setDownloadSuccess(null), 3500);
     } catch (err) {
-      // The backend rejects a direct download attempt with no successful
-      // payment (PAYMENT_REQUIRED) even if this flow is somehow bypassed —
-      // send the user through payment instead of just showing a dead end.
-      if (err instanceof ApiError && err.code === "PAYMENT_REQUIRED") {
-        try {
-          await ensurePaidForDownload(cv.id);
-        } catch {
-          setDownloadError("Could not start the payment. Please try again.");
-        }
-        return;
-      }
       setDownloadError(
         err instanceof ApiError ? err.message : "Could not generate the PDF. Please try again."
       );
@@ -372,21 +318,6 @@ export function CvEditorWorkspace({
       setIsDownloading(false);
     }
   };
-
-  // Coming back from a completed Chapa checkout for this CV — finish the
-  // download automatically instead of requiring a second manual click. Guarded
-  // by a ref (not just the `[]` deps array) because React Strict Mode
-  // double-invokes effects on mount in dev, which was firing handleDownload
-  // twice and downloading the PDF twice.
-  const hasAutoDownloaded = useRef(false);
-  React.useEffect(() => {
-    if (autoDownload && !hasAutoDownloaded.current) {
-      hasAutoDownloaded.current = true;
-      handleDownload("pdf");
-    }
-    // Only ever run once, right after mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const isSectionComplete = (section: EditorSection): boolean => {
     switch (section) {
