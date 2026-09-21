@@ -390,12 +390,13 @@ export function renderCvDocument(cvId: string) {
   return apiFetch<{ pdfPath: string }>(`/api/v1/cv/${cvId}/render`, { method: "POST" });
 }
 
-export type PaymentProductType = "CV_DOWNLOAD";
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED";
 
+// A Chapa payment record — today only "PRO_SUBSCRIPTION" (a 1-month FitCV
+// Pro period; Chapa can't auto-renew, see the backend's grantChapaProPeriod).
 export interface ApiPayment {
   id: string;
-  productType: PaymentProductType;
+  productType: string;
   resourceId: string;
   amount: number;
   currency: string;
@@ -404,25 +405,11 @@ export interface ApiPayment {
   updatedAt: string;
 }
 
-export interface InitializePaymentResult {
-  paymentId: string;
-  // null when the resource was already paid for — nothing to redirect to.
-  checkoutUrl: string | null;
-  alreadyPaid: boolean;
-}
-
-// Creates (or reuses) a pending payment for one specific resource — the
-// backend determines the price, never trust an amount from the frontend.
-export function initializePayment(input: { productType: PaymentProductType; resourceId: string }) {
-  return apiFetch<InitializePaymentResult>("/api/v1/payments/initialize", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-}
-
-// Re-verifies a still-pending payment against the provider server-side and
-// returns its current status — never resolve access from a redirect's query
-// string alone, always confirm through this endpoint.
+// Re-verifies a still-pending Chapa payment against Chapa server-side and
+// returns its current status (this is what actually grants the Pro period
+// on success, alongside Chapa's own webhook) — never resolve access from a
+// redirect's query string alone, always confirm through this endpoint. Used
+// by the Chapa return page after a Pro-subscription checkout.
 export function getPaymentStatus(paymentId: string) {
   return apiFetch<ApiPayment>(`/api/v1/payments/${paymentId}/status`);
 }
@@ -442,13 +429,20 @@ export type SubscriptionStatus =
   | "revoked"
   | null;
 
+export type SubscriptionProvider = "POLAR" | "CHAPA" | null;
+
 export interface SubscriptionStatusResult {
   isPro: boolean;
   freeGenerationsUsed: number;
   freeGenerationsRemaining: number;
   subscriptionStatus: SubscriptionStatus;
+  subscriptionProvider: SubscriptionProvider;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  // True once the user has been Pro before (either provider) but isn't
+  // currently — shows a "your plan expired, renew" prompt instead of a
+  // first-time upgrade pitch.
+  isExpired: boolean;
 }
 
 // The single source of truth for Pro access and free-generation usage —
@@ -457,15 +451,26 @@ export function getSubscriptionStatus() {
   return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/status");
 }
 
+export type CheckoutProvider = "polar" | "chapa";
+
 export interface CheckoutResult {
   checkoutUrl: string;
+  // Only present for the Chapa path — the frontend needs this to force a
+  // re-verify (getPaymentStatus) when the user returns from Chapa's
+  // checkout, since Chapa's webhook can lag.
+  paymentId?: string;
 }
 
-// Starts a Polar Sandbox checkout for the single FitCV Pro ($5/month)
-// product. The backend identifies the user from the auth token — never pass
-// a user id here.
-export function createSubscriptionCheckout() {
-  return apiFetch<CheckoutResult>("/api/v1/subscriptions/checkout", { method: "POST" });
+// Starts a checkout with the chosen provider for FitCV Pro. Polar is a real
+// recurring $5/month subscription; Chapa (local-market alternative, no
+// auto-renewal) sells a fixed 1-month period for 80 ETB per payment. The
+// backend identifies the user from the auth token — never pass a user id
+// here.
+export function createSubscriptionCheckout(provider: CheckoutProvider) {
+  return apiFetch<CheckoutResult>("/api/v1/subscriptions/checkout", {
+    method: "POST",
+    body: JSON.stringify({ provider }),
+  });
 }
 
 // Schedules cancellation at the end of the current billing period — Pro
