@@ -84,7 +84,7 @@ export default function ChapaReturnPage() {
             <Loader2 className="w-6 h-6 text-neutral-400 mx-auto mb-3 animate-spin" />
             <p className="text-sm font-semibold text-neutral-900">Still confirming your payment</p>
             <p className="text-xs text-neutral-500 mt-1">
-              This can take a moment — we&apos;ll update your account as soon as it&apos;s confirmed.
+              This can take a moment. We&apos;ll update your account as soon as it&apos;s confirmed.
             </p>
           </>
         ) : (

@@ -1,285 +1,210 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  UploadCloud,
-  FileText,
-  Sparkles,
-  CheckCircle2,
-  Download,
-  PenTool,
-  Check,
-  Search,
-} from "lucide-react";
+import React from "react";
+import { Check, Download, MousePointer2, UploadCloud, UserRound } from "lucide-react";
+import { useCvTemplates } from "@/hooks/use-cv-templates";
+import { Reveal } from "@/components/Reveal";
+import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
+
+// The create flow, in the order the dashboard runs it (CreateCvModal):
+// the user's info, an optional job post, then the editor.
+// Each card's illustration loops a tiny animation of that step.
+
+function Thumb({ index, className = "" }: { index: number; className?: string }) {
+  const { data: templates } = useCvTemplates();
+  const template = templates?.[index] ?? templates?.[0];
+  if (!template) return <div className={`aspect-[210/297] animate-pulse rounded-[5px] bg-neutral-200/70 ${className}`} />;
+  return (
+    <TemplateThumbnail
+      templateId={template.id}
+      persona={index}
+      title={`${template.name} template example`}
+      className={`aspect-[210/297] rounded-[5px] border border-neutral-200 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)] ${className}`}
+    />
+  );
+}
+
+// Step 1's cursor hops across three choices, and the ring + lift follow it.
+// Each item runs the same 4.8s loop shifted by a third; `--hop` is the
+// distance between item centres.
+const hopDelay = (i: number) => `${-((3 - i) % 3) * 1.6}s`;
+
+function Selectable({ index, children }: { index: number; children: React.ReactNode }) {
+  return (
+    <div className="hiw-tpl-lift" style={{ animationDelay: hopDelay(index) }}>
+      {children}
+      <div
+        className="hiw-tpl-ring pointer-events-none absolute -inset-[5px] rounded-[10px] border-2 border-accent"
+        style={{ animationDelay: hopDelay(index) }}
+      >
+        <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-white">
+          <Check className="h-2.5 w-2.5 stroke-[3]" />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// 1 — the three ways to bring your details, each with a tiny motif of its own.
+function UploadMotif() {
+  return (
+    <div className="relative flex h-12 w-10 items-end justify-center rounded-[4px] border border-neutral-200 bg-white pb-1.5 shadow-sm">
+      <div className="w-6 space-y-1">
+        <div className="h-1 rounded-full bg-neutral-200" />
+        <div className="h-1 w-4/5 rounded-full bg-neutral-200" />
+      </div>
+      <span className="hiw-bob absolute -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white shadow-sm">
+        <UploadCloud className="h-3 w-3" />
+      </span>
+    </div>
+  );
+}
+
+function ScratchMotif() {
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      <div className="rounded-lg rounded-bl-sm bg-white px-2 py-1 text-[9px] font-medium text-neutral-600 shadow-sm ring-1 ring-neutral-200">
+        Your last role?
+      </div>
+      <div className="flex gap-0.5 self-end rounded-lg rounded-br-sm bg-neutral-950 px-2 py-1.5">
+        {[0, 1, 2].map((d) => (
+          <span key={d} className="hiw-dot h-1 w-1 rounded-full bg-white" style={{ animationDelay: `${d * 0.15}s` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfileMotif() {
+  return (
+    <div className="flex w-[78px] items-center gap-1.5 rounded-lg bg-white p-1.5 shadow-sm ring-1 ring-neutral-200">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
+        <UserRound className="h-3.5 w-3.5" />
+      </span>
+      <div className="w-full space-y-1">
+        <div className="h-1 rounded-full bg-neutral-300" />
+        <div className="h-1 w-2/3 rounded-full bg-neutral-200" />
+      </div>
+    </div>
+  );
+}
+
+const SOURCES = [
+  { label: "Upload old CV", hint: "PDF or DOCX", Motif: UploadMotif },
+  { label: "Start from scratch", hint: "A few questions", Motif: ScratchMotif },
+  { label: "Career profile", hint: "Reuse saved info", Motif: ProfileMotif },
+];
+
+export function SourceVisual() {
+  return (
+    <div className="relative flex items-center gap-3" style={{ "--hop": "112px" } as React.CSSProperties}>
+      {SOURCES.map(({ label, hint, Motif }, i) => (
+        <div key={label} className="relative w-[100px]">
+          <Selectable index={i}>
+            <div className="flex h-[132px] flex-col items-center justify-between rounded-[10px] border border-neutral-200 bg-white px-2 pb-3 pt-6 shadow-[0_10px_22px_-14px_rgba(15,17,21,0.3)]">
+              <div className="flex h-12 items-center">
+                <Motif />
+              </div>
+              <div className="text-center">
+                <div className="text-[11px] font-semibold leading-tight text-neutral-900">{label}</div>
+                <div className="text-[10px] text-neutral-400">{hint}</div>
+              </div>
+            </div>
+          </Selectable>
+        </div>
+      ))}
+      <MousePointer2 className="hiw-tpl-cursor pointer-events-none absolute left-[58px] top-[72%] h-4 w-4 fill-neutral-950 text-white drop-shadow" />
+    </div>
+  );
+}
+
+// 2 — the job post is scanned and its keywords pop out one by one.
+const KEYWORDS = ["Product strategy", "SQL", "A/B testing", "Roadmaps"];
+
+export function JobVisual() {
+  return (
+    <div className="flex w-[260px] flex-col gap-3">
+      <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-white p-2.5">
+        <div className="space-y-1.5">
+          <div className="h-1.5 w-full rounded-full bg-neutral-200" />
+          <div className="h-1.5 w-11/12 rounded-full bg-neutral-200" />
+          <div className="h-1.5 w-4/5 rounded-full bg-neutral-200" />
+          <div className="h-1.5 w-2/3 rounded-full bg-neutral-200" />
+        </div>
+        <div className="hiw-scan pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-transparent via-accent/20 to-transparent" />
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {KEYWORDS.map((k, i) => (
+          <span
+            key={k}
+            className="hiw-chip flex items-center gap-1 rounded-full border border-accent-border bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium text-accent-strong"
+            style={{ animationDelay: `${i * 0.35}s` }}
+          >
+            <Check className="h-2.5 w-2.5" />
+            {k}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 3 — click a line on the preview to edit it, then hit download.
+export function EditorVisual() {
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative w-[96px]">
+        <Thumb index={3} />
+        <div className="hiw-target pointer-events-none absolute left-[8%] top-[34%] h-[6%] w-[72%] rounded-[2px] border border-accent bg-accent/10" />
+        <MousePointer2 className="hiw-cursor pointer-events-none absolute left-[62%] top-[38%] h-4 w-4 fill-neutral-950 text-white drop-shadow" />
+      </div>
+      <span className="hiw-press flex items-center gap-1.5 rounded-full bg-neutral-950 px-3 py-1.5 text-[11.5px] font-semibold text-white">
+        <Download className="h-3.5 w-3.5 text-accent-light" /> PDF
+      </span>
+    </div>
+  );
+}
+
+const STEPS: { title: string; body: string; Visual: React.ComponentType }[] = [
+  { title: "Share your details", body: "Upload an old CV, answer a few questions, or reuse a saved career profile.", Visual: SourceVisual },
+  { title: "Tailor it to the job", body: "Add the job post and we work in the keywords recruiters scan for.", Visual: JobVisual },
+  { title: "Download and apply", body: "Click any line to tweak it, then export a PDF.", Visual: EditorVisual },
+];
 
 export function HowItWorks() {
-  const [selectedMethod, setSelectedMethod] = useState<"upload" | "form" | "desc">("upload");
-  const [selectedTemplate, setSelectedTemplate] = useState<number>(0);
-
   return (
-    <section id="how-it-works" className="py-24 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-neutral-100">
-      {/* Section Header - Literally "How it works" */}
-      <div className="text-center max-w-2xl mx-auto mb-16">
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-neutral-950">
-          How it works
-        </h2>
-        <p className="mt-3 text-base sm:text-lg text-neutral-500 font-normal">
-          From your raw experience to a tailored, recruiter-ready resume in just four simple steps.
-        </p>
-      </div>
+    <section id="how-it-works" className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 sm:py-28 lg:px-8">
+      {/* Header */}
+      <Reveal className="mx-auto max-w-2xl text-center">
+        <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">How it works</h2>
+        <p className="mt-4 text-base text-neutral-500 sm:text-lg">From blank page to job-ready resume in three simple steps.</p>
+      </Reveal>
 
-      {/* 2x2 Grid Layout inspired by screenshot */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-        
-        {/* Step 1: Select a method to tell us about yourself */}
-        <div className="group rounded-3xl bg-white border border-neutral-200/90 hover:border-neutral-300 p-6 sm:p-7 flex flex-col justify-between shadow-2xs hover:shadow-sm transition-all">
-          <div>
-            <div className="text-[11px] font-bold tracking-wider uppercase text-neutral-400 mb-1.5 font-mono">
-              Step 01
-            </div>
-            <h3 className="text-xl font-bold text-neutral-950 mb-2">
-              Select a method to tell us about yourself
-            </h3>
-            <p className="text-sm text-neutral-500 leading-relaxed mb-6">
-              Choose your preferred way to input your career history — upload an existing CV, fill out a guided form, or paste a description about yourself.
-            </p>
-          </div>
-
-          {/* Interactive Micro-UI Mockup for Step 1 */}
-          <div className="w-full rounded-2xl bg-neutral-50 border border-neutral-200/70 p-4 flex flex-col gap-2.5">
-            {/* Method Option A: Upload Existing CV */}
-            <div
-              onClick={() => setSelectedMethod("upload")}
-              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                selectedMethod === "upload"
-                  ? "bg-white border-neutral-950 shadow-xs ring-1 ring-neutral-950/10"
-                  : "bg-white/60 border-neutral-200 hover:bg-white"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedMethod === "upload" ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-600"}`}>
-                  <UploadCloud className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-neutral-900">Upload existing CV</div>
-                  <div className="text-[10px] text-neutral-400">PDF, DOCX, or LinkedIn export</div>
-                </div>
-              </div>
-              <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedMethod === "upload" ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300"}`}>
-                {selectedMethod === "upload" && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+      {/* Steps */}
+      <div className="mt-14 grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
+        {STEPS.map(({ title, body, Visual }, i) => (
+          <Reveal key={title} delay={i * 100}>
+          <div
+            className="group h-full rounded-3xl border border-neutral-200 bg-white p-2.5 shadow-[0_12px_32px_-20px_rgba(15,17,21,0.22)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_-24px_rgba(15,17,21,0.3)]"
+          >
+            <div className="relative flex h-[260px] items-center justify-center overflow-hidden rounded-[18px] border border-neutral-100 bg-neutral-50">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.05)_1px,transparent_1px)] [background-size:16px_16px]" />
+              <div className="relative lg:scale-90 xl:scale-100">
+                <Visual />
               </div>
             </div>
-
-            {/* Method Option B: Fill out forms */}
-            <div
-              onClick={() => setSelectedMethod("form")}
-              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                selectedMethod === "form"
-                  ? "bg-white border-neutral-950 shadow-xs ring-1 ring-neutral-950/10"
-                  : "bg-white/60 border-neutral-200 hover:bg-white"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedMethod === "form" ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-600"}`}>
-                  <FileText className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-neutral-900">Fill out step-by-step form</div>
-                  <div className="text-[10px] text-neutral-400">Guided fields for experience & education</div>
-                </div>
-              </div>
-              <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedMethod === "form" ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300"}`}>
-                {selectedMethod === "form" && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-              </div>
-            </div>
-
-            {/* Method Option C: Self Description */}
-            <div
-              onClick={() => setSelectedMethod("desc")}
-              className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                selectedMethod === "desc"
-                  ? "bg-white border-neutral-950 shadow-xs ring-1 ring-neutral-950/10"
-                  : "bg-white/60 border-neutral-200 hover:bg-white"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${selectedMethod === "desc" ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-600"}`}>
-                  <PenTool className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-neutral-900">Paste career summary</div>
-                  <div className="text-[10px] text-neutral-400">Write freely & let AI structure it</div>
-                </div>
-              </div>
-              <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${selectedMethod === "desc" ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300"}`}>
-                {selectedMethod === "desc" && <Check className="w-2.5 h-2.5 stroke-[3]" />}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Step 2: Add a job description (Optional) */}
-        <div className="group rounded-3xl bg-white border border-neutral-200/90 hover:border-neutral-300 p-6 sm:p-7 flex flex-col justify-between shadow-2xs hover:shadow-sm transition-all">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-[11px] font-bold tracking-wider uppercase text-neutral-400 font-mono">
-                Step 02
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-neutral-100 text-neutral-600 border border-neutral-200">
-                Optional
-              </span>
-            </div>
-            <h3 className="text-xl font-bold text-neutral-950 mb-2">
-              Add a target job description
-            </h3>
-            <p className="text-sm text-neutral-500 leading-relaxed mb-6">
-              Paste the job posting to match requirements, inject missing industry keywords, and tailor your bullet points specifically for that position.
-            </p>
-          </div>
-
-          {/* Micro-UI Mockup for Step 2 */}
-          <div className="w-full rounded-2xl bg-neutral-50 border border-neutral-200/70 p-4 flex flex-col justify-between gap-3 min-h-[175px]">
-            {/* Input Box representation */}
-            <div className="p-3 rounded-xl bg-white border border-neutral-200 shadow-2xs">
-              <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1.5">
-                <span className="font-medium flex items-center gap-1 text-neutral-700">
-                  <Search className="w-3 h-3 text-neutral-400" /> Target Job Requirements
-                </span>
-                <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
-                  Live Scanner
-                </span>
-              </div>
-              <p className="text-xs text-neutral-600 line-clamp-2 leading-relaxed italic">
-                &ldquo;Seeking a Senior Engineer experienced in building distributed systems, TypeScript, Next.js, and high-concurrency cloud architecture...&rdquo;
-              </p>
-            </div>
-
-            {/* Keyword chips extracted */}
-            <div>
-              <div className="text-[10px] font-semibold uppercase text-neutral-400 tracking-wider mb-1.5">
-                Keywords Extracted & Matched:
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Next.js 16
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200 flex items-center gap-1">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Distributed Systems
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-700 text-[11px] font-medium border border-neutral-200">
-                  + TypeScript
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Step 3: Select a CV template */}
-        <div className="group rounded-3xl bg-white border border-neutral-200/90 hover:border-neutral-300 p-6 sm:p-7 flex flex-col justify-between shadow-2xs hover:shadow-sm transition-all">
-          <div>
-            <div className="text-[11px] font-bold tracking-wider uppercase text-neutral-400 mb-1.5 font-mono">
-              Step 03
-            </div>
-            <h3 className="text-xl font-bold text-neutral-950 mb-2">
-              Select a CV template
-            </h3>
-            <p className="text-sm text-neutral-500 leading-relaxed mb-6">
-              Pick from recruiter-approved single-column, executive, or modern minimal templates guaranteed to parse flawlessly through every ATS parser.
-            </p>
-          </div>
-
-          {/* Micro-UI Mockup for Step 3: 3 Mini Template Cards */}
-          <div className="w-full rounded-2xl bg-neutral-50 border border-neutral-200/70 p-4">
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { name: "Modern Minimal", style: "tech", label: "Tech" },
-                { name: "Executive Serif", style: "exec", label: "Executive" },
-                { name: "High-Density", style: "ats", label: "Strict ATS" },
-              ].map((tpl, i) => (
-                <div
-                  key={i}
-                  onClick={() => setSelectedTemplate(i)}
-                  className={`p-2.5 rounded-xl border flex flex-col justify-between h-28 cursor-pointer transition-all ${
-                    selectedTemplate === i
-                      ? "bg-white border-neutral-950 shadow-xs ring-2 ring-neutral-950/10"
-                      : "bg-white/70 border-neutral-200 hover:bg-white"
-                  }`}
-                >
-                  <div className="space-y-1.5">
-                    {/* Simulated header */}
-                    <div className="flex items-center justify-between">
-                      <div className={`w-6 h-1.5 rounded-full ${selectedTemplate === i ? "bg-neutral-900" : "bg-neutral-400"}`} />
-                      {selectedTemplate === i && (
-                        <div className="w-3.5 h-3.5 rounded-full bg-neutral-950 text-white flex items-center justify-center text-[8px]">
-                          ✓
-                        </div>
-                      )}
-                    </div>
-                    {/* Simulated lines */}
-                    <div className="w-full h-1 bg-neutral-200 rounded-full" />
-                    <div className="w-4/5 h-1 bg-neutral-150 rounded-full" />
-                    <div className="w-2/3 h-1 bg-neutral-100 rounded-full" />
-                  </div>
-
-                  <div>
-                    <div className="text-[10px] font-bold text-neutral-900 leading-tight truncate">
-                      {tpl.name}
-                    </div>
-                    <div className="text-[8px] text-neutral-400 font-medium">
-                      {tpl.label}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Step 4: Have your CV generated */}
-        <div className="group rounded-3xl bg-white border border-neutral-200/90 hover:border-neutral-300 p-6 sm:p-7 flex flex-col justify-between shadow-2xs hover:shadow-sm transition-all">
-          <div>
-            <div className="text-[11px] font-bold tracking-wider uppercase text-neutral-400 mb-1.5 font-mono">
-              Step 04
-            </div>
-            <h3 className="text-xl font-bold text-neutral-950 mb-2">
-              Have your CV generated & tailored
-            </h3>
-            <p className="text-sm text-neutral-500 leading-relaxed mb-6">
-              Watch our AI engine generate high-scoring achievement bullets, optimize your summary, and package your tailored resume ready for instant download.
-            </p>
-          </div>
-
-          {/* Micro-UI Mockup for Step 4 */}
-          <div className="w-full rounded-2xl bg-neutral-50 border border-neutral-200/70 p-4 flex flex-col justify-between gap-3 min-h-[175px]">
-            {/* Generated status indicator */}
-            <div className="p-3 rounded-xl bg-white border border-neutral-200 shadow-2xs flex items-center justify-between">
+            <div className="px-3.5 pb-4 pt-5">
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-                  <Sparkles className="w-3.5 h-3.5" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-neutral-950">CV Generation Complete</div>
-                  <div className="text-[10px] text-emerald-700 font-medium">98% ATS Pass Score Guaranteed</div>
-                </div>
+                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent-strong">
+                  {i + 1}
+                </span>
+                <h3 className="text-[18px] font-semibold tracking-tight text-neutral-950">{title}</h3>
               </div>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-950 text-white">
-                Ready
-              </span>
-            </div>
-
-            {/* Export Buttons Representation */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="py-2.5 px-3 rounded-xl bg-neutral-950 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer hover:bg-neutral-800 transition-all">
-                <Download className="w-3.5 h-3.5" />
-                <span>Download PDF</span>
-              </div>
-              <div className="py-2.5 px-3 rounded-xl bg-white border border-neutral-300 text-neutral-800 text-xs font-medium flex items-center justify-center gap-1.5 hover:bg-neutral-50 transition-all cursor-pointer">
-                <span>Export Word (.docx)</span>
-              </div>
+              <p className="mt-2.5 text-[14.5px] leading-relaxed text-neutral-500">{body}</p>
             </div>
           </div>
-        </div>
-
+          </Reveal>
+        ))}
       </div>
     </section>
   );

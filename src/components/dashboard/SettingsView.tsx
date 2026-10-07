@@ -1,70 +1,478 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import {
-  Settings,
-  User,
-  Shield,
-  CreditCard,
-  Bell,
-  CheckCircle2,
-  ExternalLink,
-  Sparkles,
-  LogOut,
-  Loader2,
-} from "lucide-react";
+import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck } from "lucide-react";
 import {
   useSubscriptionStatus,
   useStartProCheckout,
   useCancelSubscription,
   useResumeSubscription,
 } from "@/hooks/use-subscription";
-import { useMe, useUpdateProfile, useLogout } from "@/hooks/use-auth";
-import { ApiError } from "@/lib/api";
+import {
+  useMe,
+  useUpdateProfile,
+  useLogout,
+  useLogoutAll,
+  useChangePassword,
+  useDeleteAccount,
+} from "@/hooks/use-auth";
+import { ApiError, ApiUser, ProfileAutoSync } from "@/lib/api";
 import { CancelPlanModal } from "@/components/dashboard/CancelPlanModal";
+import { ICON_TONES, OptionTone } from "@/components/dashboard/create-flow/OptionCard";
+import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
+import { useToast } from "@/components/Toaster";
 
-function formatPeriodEnd(iso: string | null): string {
+const INPUT_CLASS =
+  "w-full px-3.5 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 transition disabled:bg-neutral-50 disabled:text-neutral-500";
+const LABEL_CLASS = "block text-xs font-semibold text-neutral-700 mb-1.5";
+const PRIMARY_BUTTON =
+  "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+const SECONDARY_BUTTON =
+  "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-800 hover:border-neutral-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
+
+const SECTIONS = [
+  { id: "profile", label: "Profile" },
+  { id: "security", label: "Sign-in & security" },
+  { id: "plan", label: "Plan & usage" },
+  { id: "career-profiles", label: "Career profiles" },
+  { id: "danger", label: "Delete account" },
+] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
+
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
+// The open tab lives in the URL hash (#security, #plan…), so links from
+// elsewhere — like Help's "Plan & billing" — land on the right tab, and
+// back/forward move between tabs.
+function useActiveSection(): SectionId {
+  const hash = useSyncExternalStore(
+    subscribeToHash,
+    () => window.location.hash.slice(1),
+    () => ""
+  );
+  return SECTIONS.some((s) => s.id === hash) ? (hash as SectionId) : "profile";
+}
+
+function formatDate(iso: string | null | undefined): string {
   if (!iso) return "";
   return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
-export function SettingsView() {
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [exportFormat, setExportFormat] = useState<"pdf" | "docx">("pdf");
-  const [savedSuccess, setSavedSuccess] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-  const { data: subscription, isLoading: isSubscriptionLoading } = useSubscriptionStatus();
+function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof ApiError ? err.message : fallback;
+}
+
+function Section({
+  id,
+  icon: Icon,
+  tone,
+  title,
+  description,
+  children,
+}: {
+  id: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tone: OptionTone;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section aria-labelledby={`${id}-title`} className="rounded-lg border border-neutral-300 bg-white animate-in fade-in duration-150">
+      <div className="flex items-center gap-3 px-6 sm:px-7 py-5 border-b border-neutral-200">
+        <span className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES[tone]}`}>
+          <Icon className="w-4 h-4" />
+        </span>
+        <div>
+          <h2 id={`${id}-title`} className="text-base font-bold text-neutral-950 tracking-tight">
+            {title}
+          </h2>
+          <p className="text-xs text-neutral-500">{description}</p>
+        </div>
+      </div>
+      <div className="p-6 sm:p-7">{children}</div>
+    </section>
+  );
+}
+
+/** A form's error, inline next to its buttons; successes are announced with a toast. */
+function StatusMessage({ error }: { error: string | null }) {
+  return error ? <p className="text-sm font-medium text-red-600">{error}</p> : null;
+}
+
+/* ---------------- Profile ---------------- */
+
+const PHONE_PATTERN = /^[+\d\s().-]*$/;
+
+/** Accounts from before first/last names existed only have fullName — split it as a starting point. */
+function seedNames(me: ApiUser): { first: string; last: string } {
+  if (me.firstName || me.lastName) return { first: me.firstName ?? "", last: me.lastName ?? "" };
+  const parts = (me.fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] ?? "", last: parts.slice(1).join(" ") };
+}
+
+// Keyed on the user so the form re-seeds from the saved profile whenever it changes.
+function ProfileForm({ me }: { me: ApiUser }) {
+  const updateProfile = useUpdateProfile();
+  const seeded = seedNames(me);
+  const saved = {
+    firstName: seeded.first,
+    lastName: seeded.last,
+    email: me.email,
+    phone: me.phone ?? "",
+    profession: me.occupationTitle ?? "",
+  };
+  const [form, setForm] = useState(saved);
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+
+  const set = (key: keyof typeof form) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }));
+  const changed = (key: keyof typeof form) => form[key].trim() !== saved[key];
+  const isDirty = (Object.keys(form) as (keyof typeof form)[]).some(changed);
+  const phoneInvalid = !PHONE_PATTERN.test(form.phone);
+  const isValid =
+    form.firstName.trim() !== "" && form.lastName.trim() !== "" && form.email.trim() !== "" && !phoneInvalid;
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      // Names are sent together so the server keeps fullName in sync.
+      const namesChanged = changed("firstName") || changed("lastName");
+      await updateProfile.mutateAsync({
+        ...(namesChanged ? { firstName: form.firstName.trim(), lastName: form.lastName.trim() } : {}),
+        ...(changed("email") ? { email: form.email.trim() } : {}),
+        ...(changed("phone") ? { phone: form.phone.trim() } : {}),
+        ...(changed("profession") && form.profession.trim() ? { occupationTitle: form.profession.trim() } : {}),
+      });
+      toast.success("Changes saved");
+    } catch (err) {
+      setError(errorMessage(err, "Could not save your changes. Please try again."));
+    }
+  };
+
+  return (
+    <form onSubmit={handleSave} className="space-y-5">
+      <p className="text-xs text-neutral-500 -mt-1">
+        New resumes start with these details, and the AI won&apos;t ask for them again. You can still change them on
+        any single resume in the editor.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="firstName" className={LABEL_CLASS}>
+            First name
+          </label>
+          <input
+            id="firstName"
+            type="text"
+            autoComplete="given-name"
+            value={form.firstName}
+            onChange={(e) => set("firstName")(e.target.value)}
+            className={INPUT_CLASS}
+          />
+        </div>
+        <div>
+          <label htmlFor="lastName" className={LABEL_CLASS}>
+            Last name
+          </label>
+          <input
+            id="lastName"
+            type="text"
+            autoComplete="family-name"
+            value={form.lastName}
+            onChange={(e) => set("lastName")(e.target.value)}
+            className={INPUT_CLASS}
+          />
+        </div>
+        <div>
+          <label htmlFor="email" className={LABEL_CLASS}>
+            Email
+          </label>
+          <input
+            id="email"
+            type="email"
+            required
+            value={form.email}
+            onChange={(e) => set("email")(e.target.value)}
+            className={INPUT_CLASS}
+          />
+          {changed("email") && (
+            <p className="mt-1.5 text-xs text-neutral-500">You&apos;ll sign in with this email from now on.</p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="phone" className={LABEL_CLASS}>
+            Phone <span className="font-normal text-neutral-400">· optional</span>
+          </label>
+          <input
+            id="phone"
+            type="tel"
+            autoComplete="tel"
+            value={form.phone}
+            onChange={(e) => set("phone")(e.target.value)}
+            placeholder="+251 91 234 5678"
+            className={INPUT_CLASS}
+          />
+          {phoneInvalid && <p className="mt-1.5 text-xs text-red-600">Use digits, spaces and + ( ) - only.</p>}
+        </div>
+        <div className="sm:col-span-2">
+          <label htmlFor="profession" className={LABEL_CLASS}>
+            Profession
+          </label>
+          <ProfessionInput id="profession" value={form.profession} onChange={set("profession")} />
+          <p className="mt-1.5 text-xs text-neutral-500">Pick from the list or type your own.</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
+        <StatusMessage error={error} />
+        <div className="flex gap-2 sm:ml-auto">
+          {isDirty && (
+            <button
+              type="button"
+              onClick={() => {
+                setForm(saved);
+                setError(null);
+              }}
+              className={SECONDARY_BUTTON}
+            >
+              Discard
+            </button>
+          )}
+          <button type="submit" disabled={!isDirty || !isValid || updateProfile.isPending} className={PRIMARY_BUTTON}>
+            {updateProfile.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {updateProfile.isPending ? "Saving..." : "Save changes"}
+          </button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+/* ---------------- Security ---------------- */
+
+function PasswordForm({ me }: { me: ApiUser }) {
+  const changePassword = useChangePassword();
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const toast = useToast();
+
+  const hasPassword = me.hasPassword;
+  const mismatch = confirmPassword.length > 0 && newPassword !== confirmPassword;
+  const tooShort = newPassword.length > 0 && newPassword.length < 8;
+  const canSubmit =
+    (!hasPassword || currentPassword.length > 0) && newPassword.length >= 8 && newPassword === confirmPassword;
+
+  const reset = () => {
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirmPassword("");
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    try {
+      await changePassword.mutateAsync({
+        ...(hasPassword ? { currentPassword } : {}),
+        newPassword,
+      });
+      reset();
+      setIsOpen(false);
+      toast.success(hasPassword ? "Password changed" : "Password set", {
+        description: hasPassword ? "Other devices were signed out." : "You can now sign in with it.",
+      });
+    } catch (err) {
+      setError(errorMessage(err, "Could not update your password. Please try again."));
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-neutral-950">Password</div>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            {hasPassword
+              ? "Changing it signs you out on every other device."
+              : "You sign in with Google. Set a password to also sign in with your email."}
+          </p>
+        </div>
+        {!isOpen && (
+          <button type="button" onClick={() => setIsOpen(true)} className={`${SECONDARY_BUTTON} shrink-0`}>
+            <KeyRound className="w-4 h-4" />
+            {hasPassword ? "Change password" : "Set a password"}
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <form onSubmit={handleSubmit} className="mt-5 p-5 rounded-lg border border-neutral-200 bg-neutral-50 space-y-4">
+          {hasPassword && (
+            <div>
+              <label htmlFor="currentPassword" className={LABEL_CLASS}>
+                Current password
+              </label>
+              <input
+                id="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className={INPUT_CLASS}
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="newPassword" className={LABEL_CLASS}>
+                New password
+              </label>
+              <input
+                id="newPassword"
+                type="password"
+                autoComplete="new-password"
+                autoFocus={!hasPassword}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className={INPUT_CLASS}
+              />
+              <p className={`mt-1.5 text-xs ${tooShort ? "text-red-600" : "text-neutral-500"}`}>At least 8 characters.</p>
+            </div>
+            <div>
+              <label htmlFor="confirmPassword" className={LABEL_CLASS}>
+                Confirm new password
+              </label>
+              <input
+                id="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className={INPUT_CLASS}
+              />
+              {mismatch && <p className="mt-1.5 text-xs text-red-600">Passwords don&apos;t match.</p>}
+            </div>
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
+            <StatusMessage error={error} />
+            <div className="flex gap-2 sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  reset();
+                  setIsOpen(false);
+                }}
+                className={SECONDARY_BUTTON}
+              >
+                Cancel
+              </button>
+              <button type="submit" disabled={!canSubmit || changePassword.isPending} className={PRIMARY_BUTTON}>
+                {changePassword.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {hasPassword ? "Update password" : "Set password"}
+              </button>
+            </div>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function SecuritySection({ me }: { me: ApiUser }) {
+  const logout = useLogout();
+  const logoutAll = useLogoutAll();
+
+  const methods = [
+    { label: "Email & password", active: me.hasPassword },
+    { label: "Google", active: me.hasGoogle },
+  ];
+
+  return (
+    <div className="divide-y divide-neutral-200">
+      <div className="pb-6">
+        <div className="text-sm font-semibold text-neutral-950">Sign-in methods</div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {methods.map((m) => (
+            <span
+              key={m.label}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium ${
+                m.active ? "border-neutral-300 bg-white text-neutral-800" : "border-dashed border-neutral-300 text-neutral-400"
+              }`}
+            >
+              {m.active && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+              {m.label}
+              {!m.active && <span className="text-[10px]">· not set up</span>}
+            </span>
+          ))}
+        </div>
+        {me.createdAt && <p className="mt-3 text-xs text-neutral-500">Member since {formatDate(me.createdAt)}</p>}
+      </div>
+
+      <div className="py-6">
+        <PasswordForm me={me} />
+      </div>
+
+      <div className="pt-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-neutral-950">Sessions</div>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            Lost a device or signed in somewhere public? Sign out everywhere at once.
+          </p>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending || logoutAll.isPending}
+            className={SECONDARY_BUTTON}
+          >
+            {logout.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <LogOut className="w-4 h-4" />}
+            Sign out
+          </button>
+          <button
+            type="button"
+            onClick={() => logoutAll.mutate()}
+            disabled={logout.isPending || logoutAll.isPending}
+            className={SECONDARY_BUTTON}
+          >
+            {logoutAll.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            Sign out everywhere
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Plan ---------------- */
+
+function PlanSection() {
+  const { data: subscription, isLoading } = useSubscriptionStatus();
   const checkout = useStartProCheckout();
   const cancelSubscription = useCancelSubscription();
   const resumeSubscription = useResumeSubscription();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
-  const { data: me } = useMe();
-  const updateProfile = useUpdateProfile();
-  const logoutMutation = useLogout();
 
-  // Seed the editable fields from the real profile once it loads — never
-  // hardcode a placeholder name/email.
-  useEffect(() => {
-    if (me) {
-      setFullName(me.fullName ?? "");
-      setEmail(me.email);
-    }
-  }, [me]);
+  if (isLoading || !subscription) {
+    return <div className="h-24 rounded-lg bg-neutral-100 animate-pulse" />;
+  }
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileError(null);
-    try {
-      await updateProfile.mutateAsync({ fullName: fullName.trim(), email: email.trim() });
-      setSavedSuccess(true);
-      setTimeout(() => setSavedSuccess(false), 2500);
-    } catch (err) {
-      setProfileError(err instanceof ApiError ? err.message : "Could not save your changes. Please try again.");
-    }
-  };
+  const freeLimit = subscription.freeGenerationsUsed + subscription.freeGenerationsRemaining;
+  const usedPct = freeLimit > 0 ? Math.min(100, (subscription.freeGenerationsUsed / freeLimit) * 100) : 100;
+  const isChapa = subscription.subscriptionProvider === "CHAPA";
 
   const handleConfirmCancel = async () => {
     setCancelError(null);
@@ -72,7 +480,7 @@ export function SettingsView() {
       await cancelSubscription.mutateAsync();
       setShowCancelModal(false);
     } catch (err) {
-      setCancelError(err instanceof ApiError ? err.message : "Could not cancel your subscription. Please try again.");
+      setCancelError(errorMessage(err, "Could not cancel your subscription. Please try again."));
     }
   };
 
@@ -82,324 +490,109 @@ export function SettingsView() {
       await resumeSubscription.mutateAsync();
       setShowCancelModal(false);
     } catch (err) {
-      setCancelError(err instanceof ApiError ? err.message : "Could not resume your subscription. Please try again.");
+      setCancelError(errorMessage(err, "Could not resume your subscription. Please try again."));
     }
   };
 
   return (
-    <div className="px-8 py-10 sm:px-14 sm:py-14 lg:px-20 lg:py-16 max-w-5xl mx-auto w-full">
-      {/* Top Header */}
-      <div className="mb-10">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-950">
-          Account Settings
-        </h1>
-        <p className="mt-1.5 text-sm text-neutral-500">
-          Manage your personal details, subscription tier, and export defaults.
-        </p>
-      </div>
-
-      <div className="space-y-8">
-        {/* Profile Card */}
-        <div className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs p-6 sm:p-8">
-          <div className="flex items-center gap-3 pb-5 border-b border-neutral-100 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-neutral-100 text-neutral-800 flex items-center justify-center">
-              <User className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-neutral-950">
-                Personal Information
-              </h2>
-              <p className="text-xs text-neutral-500">
-                Update your name and email address
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-neutral-700 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between pt-4">
-              {profileError ? (
-                <span className="text-xs font-semibold text-rose-600">{profileError}</span>
-              ) : (
-                savedSuccess && (
-                  <span className="text-xs font-semibold text-emerald-600 flex items-center gap-1.5 animate-in fade-in">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Changes saved successfully</span>
-                  </span>
-                )
-              )}
-              <button
-                type="submit"
-                disabled={updateProfile.isPending}
-                className="ml-auto px-6 py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs hover:bg-neutral-800 transition-colors shadow-xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {updateProfile.isPending ? "Saving..." : "Save Profile"}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Subscription Plan Card */}
-        <div className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs p-6 sm:p-8">
-          <div className="flex items-center gap-3 pb-5 border-b border-neutral-100 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-neutral-100 text-neutral-800 flex items-center justify-center">
-              <CreditCard className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-neutral-950">
-                Subscription &amp; Billing
-              </h2>
-              <p className="text-xs text-neutral-500">
-                Manage your active plan and payment methods
-              </p>
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-neutral-50 border border-neutral-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            {isSubscriptionLoading ? (
-              <div className="text-xs text-neutral-500">Loading subscription status...</div>
-            ) : subscription?.isPro && subscription.subscriptionProvider === "CHAPA" ? (
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-neutral-950">FitCV Pro Plan</span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-950 text-white">
-                    Active
-                  </span>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
-                    via Chapa
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-500 mt-1">
-                  80 ETB / month. Active until {formatPeriodEnd(subscription.currentPeriodEnd)} — Chapa
-                  doesn&apos;t auto-renew, so you&apos;ll need to pay again (via Chapa or Polar) after that to
-                  keep Pro access.
-                </p>
-              </div>
-            ) : subscription?.isPro ? (
-              <>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-bold text-neutral-950">FitCV Pro Plan</span>
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-neutral-950 text-white">
-                      Active
-                    </span>
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    $5 per month.{" "}
-                    {subscription.cancelAtPeriodEnd
-                      ? `Cancels on ${formatPeriodEnd(subscription.currentPeriodEnd)} — you'll keep Pro access until then.`
-                      : subscription.currentPeriodEnd
-                        ? `Next renewal: ${formatPeriodEnd(subscription.currentPeriodEnd)}.`
-                        : ""}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link
-                    href="/pricing"
-                    className="px-4 py-2 rounded-xl bg-white border border-neutral-200 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 transition-colors cursor-pointer"
-                  >
-                    Manage Plan
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => setShowCancelModal(true)}
-                    className={`px-4 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer ${
-                      subscription.cancelAtPeriodEnd
-                        ? "border-neutral-200 bg-white text-neutral-800 hover:bg-neutral-100"
-                        : "border-red-200 bg-white text-red-600 hover:bg-red-50"
-                    }`}
-                  >
-                    {subscription.cancelAtPeriodEnd ? "Undo Cancellation" : "Cancel Plan"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-base font-bold text-neutral-950">
-                      {subscription?.isExpired ? "Plan Expired" : "Free Plan"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    {subscription?.isExpired
-                      ? "Your FitCV Pro plan has expired and your free generations are already used up."
-                      : subscription
-                        ? `${subscription.freeGenerationsUsed} of 3 free CV generations used.`
-                        : "3 free CV generations."}{" "}
-                    {subscription?.isExpired
-                      ? "Renew below to get unlimited AI tailoring back."
-                      : "Upgrade to FitCV Pro for unlimited AI tailoring."}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-2 w-full sm:w-auto shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => checkout.mutate("polar")}
-                    disabled={checkout.isPending}
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-neutral-950 text-white text-xs font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {checkout.isPending && checkout.variables === "polar" && (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    )}
-                    <span>
-                      {checkout.isPending && checkout.variables === "polar"
-                        ? "Redirecting..."
-                        : subscription?.isExpired
-                          ? "Renew with Polar — $5/mo"
-                          : "Pay with Polar — $5/mo"}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => checkout.mutate("chapa")}
-                    disabled={checkout.isPending}
-                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl border border-neutral-200 bg-white text-neutral-800 text-xs font-semibold hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed"
-                  >
-                    {checkout.isPending && checkout.variables === "chapa" && (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    )}
-                    <span>
-                      {checkout.isPending && checkout.variables === "chapa"
-                        ? "Redirecting..."
-                        : subscription?.isExpired
-                          ? "Renew with Chapa — 80 ETB/mo"
-                          : "Pay with Chapa (local) — 80 ETB/mo"}
-                    </span>
-                  </button>
-                </div>
-              </>
+    <>
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-lg font-bold text-neutral-950 tracking-tight">
+              {subscription.isPro ? "Pro" : subscription.isExpired ? "Pro (expired)" : "Free"}
+            </span>
+            {subscription.isPro && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent text-white">
+                {subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active"}
+              </span>
+            )}
+            {subscription.isPro && isChapa && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-neutral-300 text-neutral-600">
+                via Chapa
+              </span>
             )}
           </div>
+
+          <p className="mt-1 text-sm text-neutral-500 max-w-xl">
+            {subscription.isPro
+              ? isChapa
+                ? `80 ETB for one month. Active until ${formatDate(subscription.currentPeriodEnd)}. Chapa doesn't auto-renew, so pay again after that to keep Pro.`
+                : subscription.cancelAtPeriodEnd
+                  ? `$5/month. Cancels on ${formatDate(subscription.currentPeriodEnd)}. You keep Pro until then.`
+                  : `$5/month. ${subscription.currentPeriodEnd ? `Renews on ${formatDate(subscription.currentPeriodEnd)}.` : ""}`
+              : subscription.isExpired
+                ? "Your Pro plan has ended. Renew to get unlimited AI tailoring back."
+                : "Pro makes AI generations and tailoring unlimited."}
+          </p>
+
+          {!subscription.isPro && freeLimit > 0 && (
+            <div className="mt-5 max-w-sm">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-neutral-600">Free AI generations</span>
+                <span className="font-semibold text-neutral-900">
+                  {subscription.freeGenerationsUsed} of {freeLimit} used
+                </span>
+              </div>
+              <div className="h-1.5 rounded-full bg-neutral-100 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-accent to-accent-light" style={{ width: `${usedPct}%` }} />
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Export & Formatting Defaults */}
-        <div className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs p-6 sm:p-8">
-          <div className="flex items-center gap-3 pb-5 border-b border-neutral-100 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-neutral-100 text-neutral-800 flex items-center justify-center">
-              <Shield className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-neutral-950">
-                Export &amp; Parser Defaults
-              </h2>
-              <p className="text-xs text-neutral-500">
-                Configure default download formats and ATS standard rules
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            <label className="flex items-center justify-between p-4 rounded-xl border border-neutral-200 cursor-pointer hover:bg-neutral-50/70 transition-colors">
-              <div>
-                <div className="text-xs font-bold text-neutral-900">
-                  Standard ATS Machine-Readable PDF
-                </div>
-                <div className="text-[11px] text-neutral-500">
-                  Recommended. 100% compliant with Greenhouse, Lever, and Workday parsers.
-                </div>
-              </div>
-              <input
-                type="radio"
-                name="exportFormat"
-                checked={exportFormat === "pdf"}
-                onChange={() => setExportFormat("pdf")}
-                className="w-4 h-4 text-neutral-950 focus:ring-neutral-950"
-              />
-            </label>
-
-            <label className="flex items-center justify-between p-4 rounded-xl border border-neutral-200 cursor-pointer hover:bg-neutral-50/70 transition-colors">
-              <div>
-                <div className="text-xs font-bold text-neutral-900">
-                  Editable Microsoft Word (.docx)
-                </div>
-                <div className="text-[11px] text-neutral-500">
-                  For headhunters or recruiters who request editable Word attachments.
-                </div>
-              </div>
-              <input
-                type="radio"
-                name="exportFormat"
-                checked={exportFormat === "docx"}
-                onChange={() => setExportFormat("docx")}
-                className="w-4 h-4 text-neutral-950 focus:ring-neutral-950"
-              />
-            </label>
-          </div>
-        </div>
-
-        {/* Session & Sign Out Card */}
-        <div className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs p-6 sm:p-8">
-          <div className="flex items-center gap-3 pb-5 border-b border-neutral-100 mb-6">
-            <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
-              <LogOut className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-neutral-950">
-                Account Session
-              </h2>
-              <p className="text-xs text-neutral-500">
-                Log out of your Resumate session on this device
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl bg-neutral-50/80 border border-neutral-200/80">
-            <div>
-              <div className="text-xs font-bold text-neutral-900">
-                Logged in as {me?.fullName || me?.email || "..."}
-              </div>
-              <div className="text-[11px] text-neutral-500 mt-0.5">
-                {me?.email ?? ""} • {subscription?.isPro ? "Active Pro workspace" : "Free workspace"}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-              className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 font-semibold text-xs transition-colors shadow-2xs cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {logoutMutation.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <LogOut className="w-3.5 h-3.5" />
-              )}
-              <span>{logoutMutation.isPending ? "Logging out..." : "Log out of Resumate"}</span>
-            </button>
-          </div>
+        <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 md:w-60">
+          {subscription.isPro ? (
+            !isChapa && (
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                className={
+                  subscription.cancelAtPeriodEnd
+                    ? SECONDARY_BUTTON
+                    : "inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                }
+              >
+                {subscription.cancelAtPeriodEnd ? "Keep my plan" : "Cancel plan"}
+              </button>
+            )
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => checkout.mutate("polar")}
+                disabled={checkout.isPending}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-strong transition-colors cursor-pointer disabled:opacity-60"
+              >
+                {checkout.isPending && checkout.variables === "polar" && <Loader2 className="w-4 h-4 animate-spin" />}
+                {checkout.isPending && checkout.variables === "polar"
+                  ? "Redirecting..."
+                  : `${subscription.isExpired ? "Renew" : "Upgrade"} · $5/mo`}
+              </button>
+              <button
+                type="button"
+                onClick={() => checkout.mutate("chapa")}
+                disabled={checkout.isPending}
+                className={SECONDARY_BUTTON}
+              >
+                {checkout.isPending && checkout.variables === "chapa" && <Loader2 className="w-4 h-4 animate-spin" />}
+                {checkout.isPending && checkout.variables === "chapa" ? "Redirecting..." : "Pay with Chapa · 80 ETB"}
+              </button>
+            </>
+          )}
+          <Link href="/pricing" className="text-center text-xs font-semibold text-neutral-500 hover:text-neutral-900 py-1">
+            Compare plans
+          </Link>
+          {checkout.isError && (
+            <p className="text-xs text-red-600">{errorMessage(checkout.error, "Could not start checkout. Please try again.")}</p>
+          )}
         </div>
       </div>
 
       <CancelPlanModal
         isOpen={showCancelModal}
-        isCancelScheduled={subscription?.cancelAtPeriodEnd ?? false}
-        periodEndLabel={formatPeriodEnd(subscription?.currentPeriodEnd ?? null) || "the end of your billing period"}
+        isCancelScheduled={subscription.cancelAtPeriodEnd}
+        periodEndLabel={formatDate(subscription.currentPeriodEnd) || "the end of your billing period"}
         isProcessing={cancelSubscription.isPending || resumeSubscription.isPending}
         error={cancelError}
         onConfirmCancel={handleConfirmCancel}
@@ -409,6 +602,297 @@ export function SettingsView() {
           setCancelError(null);
         }}
       />
+    </>
+  );
+}
+
+/* ---------------- Delete account ---------------- */
+
+function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void }) {
+  const deleteAccount = useDeleteAccount();
+  const [password, setPassword] = useState("");
+  const [confirmEmail, setConfirmEmail] = useState("");
+
+  const canDelete = me.hasPassword
+    ? password.length > 0
+    : confirmEmail.trim().toLowerCase() === me.email.toLowerCase();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    deleteAccount.mutate(me.hasPassword ? { password } : { confirmEmail: confirmEmail.trim() });
+  };
+
+  const error = deleteAccount.error;
+  const isSubscriptionBlock = error instanceof ApiError && error.code === "ACTIVE_SUBSCRIPTION";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <form
+        onSubmit={handleSubmit}
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md bg-white rounded-2xl border border-neutral-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+          title="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="p-7">
+          <span className="w-11 h-11 rounded-xl flex items-center justify-center bg-red-50 border border-red-200 text-red-600 mb-4">
+            <AlertTriangle className="w-5 h-5" />
+          </span>
+          <h3 className="text-lg font-bold text-neutral-950 tracking-tight">Delete your account?</h3>
+          <p className="mt-1.5 text-sm text-neutral-500 leading-relaxed">
+            This permanently deletes your resumes, career profiles and payment history. It can&apos;t be undone.
+          </p>
+
+          <div className="mt-5">
+            {me.hasPassword ? (
+              <>
+                <label htmlFor="deletePassword" className={LABEL_CLASS}>
+                  Enter your password to confirm
+                </label>
+                <input
+                  id="deletePassword"
+                  type="password"
+                  autoComplete="current-password"
+                  autoFocus
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={INPUT_CLASS}
+                />
+              </>
+            ) : (
+              <>
+                <label htmlFor="deleteEmail" className={LABEL_CLASS}>
+                  Type <span className="font-bold text-neutral-900">{me.email}</span> to confirm
+                </label>
+                <input
+                  id="deleteEmail"
+                  type="email"
+                  autoFocus
+                  value={confirmEmail}
+                  onChange={(e) => setConfirmEmail(e.target.value)}
+                  className={INPUT_CLASS}
+                />
+              </>
+            )}
+          </div>
+
+          {error && (
+            <div className="mt-4 p-3 rounded-lg border border-red-200 bg-red-50 text-xs text-red-700">
+              {errorMessage(error, "Could not delete your account. Please try again.")}
+              {isSubscriptionBlock && (
+                <a href="#plan" onClick={onClose} className="block mt-1 font-semibold underline">
+                  Go to Plan & usage
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="px-7 py-4 border-t border-neutral-200 bg-neutral-50/80 flex gap-2.5">
+          <button type="button" onClick={onClose} className={`${SECONDARY_BUTTON} flex-1`}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canDelete || deleteAccount.isPending}
+            className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {deleteAccount.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            {deleteAccount.isPending ? "Deleting..." : "Delete account"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ---------------- Career profiles ---------------- */
+
+const AUTO_SYNC_OPTIONS: { value: ProfileAutoSync; label: string; hint: string }[] = [
+  { value: "ask", label: "Ask me each time", hint: "After a new CV is ready, we show what it would add and you decide." },
+  { value: "always", label: "Update automatically", hint: "We add the new details straight away. You can undo right there, or later from the profile's history." },
+  { value: "never", label: "Don't update my profiles", hint: "New CVs never change your profiles. You can still update a profile by hand." },
+];
+
+function CareerProfilesSection({ me }: { me: ApiUser }) {
+  const updateProfile = useUpdateProfile();
+  const toast = useToast();
+  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const [error, setError] = useState<string | null>(null);
+
+  const choose = async (value: ProfileAutoSync) => {
+    if (value === me.profileAutoSync) return;
+    setError(null);
+    try {
+      await updateProfile.mutateAsync({ profileAutoSync: value });
+      toast.success("Preference saved");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not save your preference.");
+    }
+  };
+
+  return (
+    <div>
+      <fieldset disabled={!isPro || updateProfile.isPending}>
+        <legend className="text-sm font-semibold text-neutral-900">When a new CV matches one of your profiles</legend>
+        <p className="mt-0.5 mb-4 text-xs text-neutral-500">
+          Only facts are added (roles, skills, education…). Nothing is replaced, and anything you edited by hand is left
+          alone. Creating a new profile always asks first.
+        </p>
+        <div className="space-y-2">
+          {AUTO_SYNC_OPTIONS.map((option) => (
+            <label
+              key={option.value}
+              className={`flex items-start gap-3 rounded-lg border p-3.5 cursor-pointer transition-colors ${
+                me.profileAutoSync === option.value ? "border-neutral-950 bg-neutral-50" : "border-neutral-200 hover:border-neutral-300"
+              } ${!isPro ? "opacity-60 cursor-not-allowed" : ""}`}
+            >
+              <input
+                type="radio"
+                name="profileAutoSync"
+                value={option.value}
+                checked={me.profileAutoSync === option.value}
+                onChange={() => choose(option.value)}
+                className="mt-0.5 accent-neutral-900"
+              />
+              <span>
+                <span className="block text-sm font-semibold text-neutral-900">{option.label}</span>
+                <span className="block text-xs text-neutral-500 mt-0.5">{option.hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {!isPro && (
+        <p className="mt-4 text-xs text-neutral-500">
+          Career profiles are part of FitCV Pro.{" "}
+          <Link href="/dashboard/upgrade" className="font-semibold text-accent-strong hover:text-accent">
+            Upgrade
+          </Link>
+        </p>
+      )}
+      <div className="mt-3">
+        <StatusMessage error={error} />
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Page ---------------- */
+
+export function SettingsView() {
+  const { data: me, isLoading } = useMe();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const active = useActiveSection();
+
+  const tabClass = (id: SectionId) =>
+    `whitespace-nowrap px-3 py-2 rounded-lg border text-sm transition-colors ${
+      active === id
+        ? `bg-white border-neutral-300 font-semibold ${id === "danger" ? "text-red-600" : "text-neutral-950"}`
+        : `border-transparent font-medium hover:bg-white hover:border-neutral-200 ${
+            id === "danger" ? "text-red-500 hover:text-red-600" : "text-neutral-600 hover:text-neutral-950"
+          }`
+    }`;
+
+  return (
+    <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-6xl mx-auto w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-8 lg:gap-12">
+        {/* Tabs: a row on small screens, a sticky column on large ones. */}
+        <nav aria-label="Settings sections" className="-mx-1 px-1 overflow-x-auto lg:overflow-visible">
+          <div className="flex lg:flex-col gap-1 lg:sticky lg:top-8">
+            {SECTIONS.map((s) => (
+              <a
+                key={s.id}
+                href={`#${s.id}`}
+                aria-current={active === s.id ? "page" : undefined}
+                className={`block ${tabClass(s.id)}`}
+              >
+                {s.label}
+              </a>
+            ))}
+          </div>
+        </nav>
+
+        <div className="min-w-0">
+          {active === "profile" && (
+            <Section id="profile" icon={User} tone="accent" title="Profile" description="Your details, used as the defaults on every new resume.">
+              {me ? (
+                <ProfileForm key={[me.id, me.firstName, me.lastName, me.email, me.phone, me.occupationTitle].join("|")} me={me} />
+              ) : (
+                <div className="h-20 rounded-lg bg-neutral-100 animate-pulse" />
+              )}
+            </Section>
+          )}
+
+          {active === "security" && (
+            <Section id="security" icon={Shield} tone="sky" title="Sign-in & security" description="Password, sign-in methods and active sessions.">
+              {me ? <SecuritySection me={me} /> : <div className="h-32 rounded-lg bg-neutral-100 animate-pulse" />}
+            </Section>
+          )}
+
+          {active === "plan" && (
+            <Section id="plan" icon={CreditCard} tone="violet" title="Plan & usage" description="Your subscription and free generations.">
+              <PlanSection />
+            </Section>
+          )}
+
+          {active === "career-profiles" && (
+            <Section
+              id="career-profiles"
+              icon={UserCheck}
+              tone="emerald"
+              title="Career profiles"
+              description="How new CVs keep your role profiles up to date."
+            >
+              {me ? <CareerProfilesSection me={me} /> : <div className="h-32 rounded-lg bg-neutral-100 animate-pulse" />}
+            </Section>
+          )}
+
+          {active === "danger" && (
+            <section aria-labelledby="danger-title" className="rounded-lg border border-red-200 bg-white animate-in fade-in duration-150">
+              <div className="flex items-center gap-3 px-6 sm:px-7 py-5 border-b border-red-100">
+                <span className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-red-50 border border-red-200 text-red-600">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+                <div>
+                  <h2 id="danger-title" className="text-base font-bold text-neutral-950 tracking-tight">
+                    Delete account
+                  </h2>
+                  <p className="text-xs text-neutral-500">Permanently remove your account and everything in it.</p>
+                </div>
+              </div>
+              <div className="p-6 sm:p-7">
+                <ul className="space-y-1.5 text-sm text-neutral-600 list-disc pl-5">
+                  <li>All your resumes and career profiles are deleted.</li>
+                  <li>Your payment history is removed.</li>
+                  <li>A renewing Pro subscription must be cancelled first.</li>
+                  <li>This can&apos;t be undone.</li>
+                </ul>
+                <button
+                  type="button"
+                  disabled={isLoading || !me}
+                  onClick={() => setShowDeleteModal(true)}
+                  className="mt-6 inline-flex items-center justify-center px-4 py-2.5 rounded-lg bg-red-600 text-sm font-semibold text-white hover:bg-red-700 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Delete my account
+                </button>
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+
+      {showDeleteModal && me && <DeleteAccountModal me={me} onClose={() => setShowDeleteModal(false)} />}
     </div>
   );
 }

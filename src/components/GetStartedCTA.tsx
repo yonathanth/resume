@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, Sparkles } from "lucide-react";
+import { ArrowRight, Rocket } from "lucide-react";
 
 interface GetStartedCTAProps {
   onStartBuilding?: () => void;
@@ -24,7 +24,7 @@ export function GetStartedCTA({ onStartBuilding }: GetStartedCTAProps) {
           
           {/* Top Pill Tag */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-neutral-900 text-neutral-300 border border-neutral-800 mb-6">
-            <Sparkles className="w-3.5 h-3.5 text-white" />
+            <Rocket className="w-3.5 h-3.5 text-white" />
             <span>Start Building for Free</span>
           </div>
 

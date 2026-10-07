@@ -2,98 +2,87 @@
 
 import React, { useRef, useState } from "react";
 import {
-  Sparkles,
   Upload,
-  Layers,
   FileText,
   ArrowRight,
-  ArrowLeft,
-  X,
-  CheckCircle2,
-  BookmarkPlus,
-  Zap,
-  SlidersHorizontal,
-  ChevronRight,
-  FileCheck,
-  AlertCircle,
+  Target,
+  Loader2,
 } from "lucide-react";
 import {
   CvData,
-  CareerProfile,
   PastProjectOption,
   TemplateId,
-  TEMPLATE_OPTIONS,
-  SAMPLE_CAREER_PROFILES,
-  SAMPLE_PAST_PROJECTS,
-  defaultSampleCv,
+  DEFAULT_TEMPLATE_ID,
 } from "./types";
+import { FlowModal, TemplateStep, JobGaps } from "./FlowUI";
+import { OptionCard, SOFT_TONES } from "./OptionCard";
+import { ResumePicker } from "./ResumePicker";
 import {
   useAnalyzeUpload,
   useAnalyzeExisting,
   useRefineCv,
-  useFinalizeCvProfile,
+  splitClarificationAnswers,
 } from "@/hooks/use-cv-generation";
-import { applyCvContent } from "@/lib/cv-mapper";
-import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { applyCvContent, createBlankCv } from "@/lib/cv-mapper";
+import {
+  ClarifyingQuestionsForm,
+  getQuestionFormState,
+  useQuestionPages,
+} from "./ClarifyingQuestionsForm";
+import { ClarificationQuestion, CVContentDTO, WordingPreview, previewCvWording } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { WordingReviewStep } from "./WordingReviewStep";
 
 interface EnhanceCvModalProps {
   isOpen: boolean;
   onClose: () => void;
   onComplete: (cvData: CvData) => void;
-  careerProfiles?: CareerProfile[];
   pastProjects?: PastProjectOption[];
-  onSaveCareerProfile?: (profile: CareerProfile) => void;
 }
 
 type EnhanceStep =
+  | "choose-template"
   | "select-source"
   | "pick-source-item"
   | "upload-file"
+  | "enhance-questions"
   | "improvement-goals"
+  | "job-ask"
+  | "job-target"
   | "select-template";
-
-const PRESET_GOALS = [
-  "Quantify metrics using Google XYZ formula (Accomplished [X] by doing [Z] measured by [Y])",
-  "Boost ATS keyword density and score to 98%+",
-  "Condense into a high-impact, modern 1-page executive format",
-  "Emphasize cloud architecture, Kubernetes scale, and latency reduction",
-  "Upgrade leadership, mentorship, and team scaling accomplishments",
-];
 
 export function EnhanceCvModal({
   isOpen,
   onClose,
   onComplete,
-  careerProfiles = SAMPLE_CAREER_PROFILES,
-  pastProjects = SAMPLE_PAST_PROJECTS,
-  onSaveCareerProfile,
+  pastProjects = [],
 }: EnhanceCvModalProps) {
   const [step, setStep] = useState<EnhanceStep>("select-source");
+  // The template is chosen right before the first AI call (the AI only writes
+  // the sections it shows). What to run once it's picked, and where Back goes.
+  const [templateNext, setTemplateNext] = useState<
+    { kind: "existing"; sourceId: string } | { kind: "upload"; file: File } | null
+  >(null);
+  const [templateBackStep, setTemplateBackStep] = useState<EnhanceStep>("select-source");
 
   // Source state: 'upload' | 'profile' | 'past-project'
-  const [sourceType, setSourceType] = useState<"upload" | "profile" | "past-project">("upload");
+  const [sourceType, setSourceType] = useState<"upload" | "past-project">("upload");
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [selectedProfileId, setSelectedProfileId] = useState<string>(
-    careerProfiles[0]?.id || "profile-cloud-architect"
-  );
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     pastProjects[0]?.id || "draft-1"
   );
 
   // Improvement goals state
-  const [improvementGoal, setImprovementGoal] = useState<string>(
-    "Quantify metrics using Google XYZ formula and emphasize cloud architecture scalability."
-  );
+  const [improvementGoal, setImprovementGoal] = useState<string>("");
 
   // Optional Job Description (as requested across flows)
   const [optionalJd, setOptionalJd] = useState<string>("");
-  const [showOptionalJd, setShowOptionalJd] = useState<boolean>(false);
 
   // Template state
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>("tech");
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(DEFAULT_TEMPLATE_ID);
 
   // Real backend integration now covers every source — "upload" via OCR,
   // "profile"/"past-project" via pulling their real saved content (see
@@ -103,6 +92,8 @@ export function EnhanceCvModal({
   const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
   const [analyzedSourceText, setAnalyzedSourceText] = useState("");
   const [flowError, setFlowError] = useState<string | null>(null);
+  // The profile / past resume currently being loaded from a click.
+  const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // AI clarification questions surfaced by /cv/analyze (additive to the
@@ -110,6 +101,8 @@ export function EnhanceCvModal({
   // enhancing — both optional, shown only when non-empty.
   const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>([]);
   const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  // Called before the early `if (!isOpen) return null` so hook order never changes.
+  const questionPages = useQuestionPages(clarifyingQuestions, questionAnswers);
   const [jobGaps, setJobGaps] = useState<string[]>([]);
 
   // A CV document created mid-flow should never outlive an abandoned
@@ -119,19 +112,37 @@ export function EnhanceCvModal({
   const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
-  const finalizeMutation = useFinalizeCvProfile();
   const proGate = useProGate();
+  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  // Improved wording that differs from the matching career profile — offered
+  // on the last step when there is any (Pro only).
+  const [wordingPreview, setWordingPreview] = useState<
+    (WordingPreview & { profile: NonNullable<WordingPreview["profile"]> }) | null
+  >(null);
 
   if (!isOpen) return null;
 
   // Real file upload — OCRs/extracts the file server-side, then runs the
   // extracted text through the AI parse (same as CreateCvModal's upload flow).
-  const handleUploadFile = async (file: File) => {
+  // Runs the step that sends things to the AI, now that a template is chosen.
+  const runAfterTemplate = (next: NonNullable<typeof templateNext>, templateId: TemplateId) => {
+    if (next.kind === "existing") handlePrepareExistingSource(next.sourceId, templateId);
+    else handleUploadFile(next.file, templateId);
+  };
+
+  const chooseTemplateThen = (next: NonNullable<typeof templateNext>, backStep: EnhanceStep) => {
+    setFlowError(null);
+    setTemplateNext(next);
+    setTemplateBackStep(backStep);
+    setStep("choose-template");
+  };
+
+  const handleUploadFile = async (file: File, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
     setUploadedFileName(file.name);
     try {
       const { cvDocumentId: docId, sourceText, document } =
-        await analyzeUploadMutation.mutateAsync(file);
+        await analyzeUploadMutation.mutateAsync({ file, templateId });
       if ("mismatch" in document) {
         setFlowError(document.reason);
         return;
@@ -141,6 +152,7 @@ export function EnhanceCvModal({
       setAnalyzedSourceText(sourceText);
       setClarifyingQuestions(document.questions ?? []);
       setQuestionAnswers({});
+      setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
       if (proGate.isProRequired(err)) return;
       setFlowError(
@@ -153,14 +165,15 @@ export function EnhanceCvModal({
   // project (never the fabricated skeleton) before moving to the goals step.
   // Enhancing "from a career profile" keeps the new CV attached to that same
   // profile — it's a new document for the same trajectory, not a detached one.
-  const handlePrepareExistingSource = async () => {
+  const handlePrepareExistingSource = async (sourceId: string, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
+    setLoadingSourceId(sourceId);
     try {
       const { cvDocumentId: docId, sourceText, document } =
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
-            ? { sourceCvId: selectedProjectId }
-            : { sourceProfileId: selectedProfileId, targetProfileId: selectedProfileId }
+            ? { sourceCvId: sourceId, templateId }
+            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId }
         );
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -171,125 +184,51 @@ export function EnhanceCvModal({
       setAnalyzedSourceText(sourceText);
       setClarifyingQuestions(document.questions ?? []);
       setQuestionAnswers({});
-      setStep("improvement-goals");
+      setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
       if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
+    } finally {
+      setLoadingSourceId(null);
     }
   };
 
-  // Renders any AI-surfaced clarification questions additively below the
-  // custom enhancement instructions — only appears when the analyze step
-  // actually flagged something it couldn't confidently infer.
-  const renderClarifyingQuestions = () => {
-    if (clarifyingQuestions.length === 0) return null;
-    return (
-      <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-3 space-y-3 mb-4">
-        <span className="text-[11px] font-bold text-violet-800 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5" />
-          A few things the AI wants to confirm
-        </span>
-        {clarifyingQuestions.map((q) => (
-          <div key={q.id}>
-            <label className="text-xs font-bold text-neutral-950 block mb-1">
-              {q.question}
-              {!q.required && " (Optional)"}
-            </label>
-            {q.type === "textarea" ? (
-              <textarea
-                rows={2}
-                value={questionAnswers[q.id] ?? ""}
-                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                placeholder={q.reason}
-                className="w-full p-2.5 rounded-lg border border-neutral-200 text-xs bg-white text-neutral-900"
-              />
-            ) : q.type === "select" && q.options?.length ? (
-              <select
-                value={questionAnswers[q.id] ?? ""}
-                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                className="w-full px-3 py-2 rounded-xl border border-neutral-200 text-xs bg-white"
-              >
-                <option value="">Select...</option>
-                {q.options.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type={q.type === "date" ? "date" : "text"}
-                value={questionAnswers[q.id] ?? ""}
-                onChange={(e) => setQuestionAnswers((prev) => ({ ...prev, [q.id]: e.target.value }))}
-                placeholder={q.reason}
-                className="w-full px-3 py-2 rounded-xl border border-neutral-200 text-xs bg-white text-neutral-900"
-              />
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  };
+  // The final AI pass, then the quick save that opens the editor.
+  const isImproving = refineMutation.isPending;
+
+  const { canSubmit: canSubmitAnswers } = getQuestionFormState(
+    clarifyingQuestions,
+    questionAnswers
+  );
 
   const getBaseCv = (): CvData => {
-    if (sourceType === "profile") {
-      const p = careerProfiles.find((item) => item.id === selectedProfileId);
-      return p?.cvData || defaultSampleCv;
-    } else if (sourceType === "past-project") {
+    if (sourceType === "past-project") {
       const proj = pastProjects.find((item) => item.id === selectedProjectId);
-      return proj?.cvData || defaultSampleCv;
+      return proj?.cvData || createBlankCv();
     }
-    return {
-      ...defaultSampleCv,
-      title: uploadedFileName
-        ? `Enhanced – ${uploadedFileName.replace(/\.[^/.]+$/, "")}`
-        : "Enhanced Cloud Architect Resume",
-    };
+    return createBlankCv({
+      title: uploadedFileName ? `Enhanced – ${uploadedFileName.replace(/\.[^/.]+$/, "")}` : "Enhanced Resume",
+    });
   };
 
-  const buildEnhancedCv = (): CvData => {
+  // `content` defaults to the latest saved content; pass it explicitly when it
+  // was only just returned (state set in the same tick isn't readable yet).
+  const buildEnhancedCv = (content: CVContentDTO | undefined = latestContent): CvData => {
     const base = getBaseCv();
     let enhanced: CvData = {
       ...base,
       id: `enhanced-${Date.now()}`,
-      title: `${base.targetRole} (Enhanced)`,
+      title: `${base.targetRole || "Resume"} (Enhanced)`,
       templateStyle: selectedTemplate,
-      atsScore: Math.min(99, Math.max(base.atsScore, 97)),
       enhancementFocus: improvementGoal,
       jobDescription: optionalJd || undefined,
     };
 
-    if (cvDocumentId && latestContent) {
-      enhanced = applyCvContent(enhanced, latestContent);
-    } else if (enhanced.experiences.length > 0 && improvementGoal) {
-      // Apply quantified XYZ formula enhancement to bullets
-      const updatedBullets = [...enhanced.experiences[0].bullets];
-      updatedBullets[0] = `Architected mission-critical cloud platform, driving a 44% reduction in p99 latency across 12M+ daily active requests by adopting Go microservices and Kubernetes (XYZ Formula).`;
-      enhanced.experiences[0] = {
-        ...enhanced.experiences[0],
-        bullets: updatedBullets,
-      };
+    if (cvDocumentId && content) {
+      enhanced = applyCvContent(enhanced, content);
     }
 
     return enhanced;
-  };
-
-  const saveNewProfile = (finalCv: CvData, profileId: string) => {
-    if (!onSaveCareerProfile) return;
-    // Local-only fallback path (no real backend document) — domain/
-    // targetCompanies are normally AI-derived from real CV content, so
-    // there's nothing real to put here rather than a fabricated one.
-    const newProfile: CareerProfile = {
-      id: profileId,
-      roleTitle: finalCv.targetRole,
-      domain: "",
-      readinessScore: finalCv.atsScore,
-      targetCompanies: [],
-      skills: finalCv.skills.slice(0, 8),
-      highlight: finalCv.experiences[0]?.bullets[0] || "",
-      cvData: finalCv,
-    };
-    onSaveCareerProfile(newProfile);
   };
 
   // "Apply & Select Template" / "Skip instructions" — re-runs generation
@@ -298,26 +237,30 @@ export function EnhanceCvModal({
   // more candidate narrative to extract facts from) and a high
   // enhancementLevel, since "Enhance" implies an aggressive rewrite rather
   // than the neutral default.
-  const handleContinueToTemplate = async (goalOverride?: string) => {
+  const handleContinueToTemplate = async (jobDescription: string = optionalJd) => {
     setFlowError(null);
-    const goal = goalOverride !== undefined ? goalOverride : improvementGoal;
+    const goal = improvementGoal;
 
     if (!cvDocumentId) {
       setStep("select-template");
       return;
     }
 
-    const answerLines = clarifyingQuestions
-      .filter((q) => questionAnswers[q.id]?.trim())
-      .map((q) => `${q.question} ${questionAnswers[q.id].trim()}`);
+    const { personal, otherLines } = splitClarificationAnswers(clarifyingQuestions, questionAnswers);
+    const answerLines = [...otherLines, ...Object.entries(personal).map(([key, value]) => `${key}: ${value}`)];
     const augmentedText = [analyzedSourceText, ...answerLines].filter(Boolean).join("\n\n");
 
     try {
       const document = await refineMutation.mutateAsync({
         cvDocumentId,
+        templateId: selectedTemplate,
         sourceText: augmentedText,
         focusInstructions: goal.trim() || undefined,
-        jobDescription: optionalJd || undefined,
+        jobDescription: jobDescription || undefined,
+        personal,
+        // Improving always rewrites: with the user's goal and job when given,
+        // and on our own guidelines alone when they skipped both.
+        requiresRewrite: true,
         enhancementLevel: 0.8,
       });
       if ("mismatch" in document) {
@@ -325,168 +268,110 @@ export function EnhanceCvModal({
         return;
       }
       setLatestContent(document.content);
-      setJobGaps(document.jobAnalysis?.gaps ?? []);
-      setStep("select-template");
+      const gaps = document.jobAnalysis?.gaps ?? [];
+      setJobGaps(gaps);
+      const wording = await loadWordingPreview(cvDocumentId);
+      setWordingPreview(wording);
+      // Straight into the editor — unless there's improved wording to offer
+      // back to a profile, or the job description showed gaps.
+      if (wording || gaps.length > 0) setStep("select-template");
+      else handleFinish(document.content);
     } catch (err) {
       if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not enhance your CV. Please try again.");
     }
   };
 
-  const handleFinish = async (action: "create" | "attach" | "none", existingProfileId?: string) => {
-    setFlowError(null);
-
-    if (cvDocumentId) {
-      try {
-        const { profileId } = await finalizeMutation.mutateAsync({
-          cvDocumentId,
-          action,
-          targetRole: getBaseCv().targetRole,
-          existingProfileId,
-        });
-
-        const finalCv = { ...buildEnhancedCv(), id: cvDocumentId };
-        if (action === "create" && profileId) saveNewProfile(finalCv, profileId);
-        markCompleted();
-        onComplete(finalCv);
-      } catch (err) {
-        setFlowError(err instanceof Error ? err.message : "Something went wrong saving your CV");
-      }
-      return;
+  // Only offered when it's worth a step: Pro, and at least one entry the
+  // profile has was reworded. Any failure just skips the offer.
+  const loadWordingPreview = async (docId: string) => {
+    if (!isPro) return null;
+    try {
+      const preview = await previewCvWording({
+        cvDocumentId: docId,
+        sourceCvId: sourceType === "past-project" ? selectedProjectId : undefined,
+      });
+      return preview.profile && preview.proposals.length > 0 ? { ...preview, profile: preview.profile } : null;
+    } catch {
+      return null;
     }
+  };
 
-    const finalCv = buildEnhancedCv();
-    if (action === "create") saveNewProfile(finalCv, `profile-${Date.now()}`);
+  // Opens the finished CV in the editor.
+  const handleFinish = (content: CVContentDTO | undefined = latestContent) => {
+    setFlowError(null);
+    const finalCv = cvDocumentId ? { ...buildEnhancedCv(content), id: cvDocumentId } : buildEnhancedCv();
+    if (cvDocumentId) markCompleted();
     onComplete(finalCv);
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-neutral-200 animate-in zoom-in-95 duration-200 p-6 sm:p-8">
-        {/* Header Bar */}
-        <div className="flex items-center justify-between pb-4 border-b border-neutral-100 mb-5">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-violet-50 border border-violet-100 flex items-center justify-center text-violet-700">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-xs font-bold text-neutral-950 block">
-                Enhance Existing CV
-              </span>
-              <span className="text-[10px] text-neutral-400">
-                AI Bullet Quantification &amp; ATS Boost
-              </span>
-            </div>
+    <FlowModal
+      stepKey={step}
+      wide={step === "choose-template"}
+      onClose={onClose}
+      outside={<ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />}
+    >
+        {/* ================= TEMPLATE (right before the first AI call) ================= */}
+        {step === "choose-template" && (
+          <div>
+            <TemplateStep
+              selectedId={selectedTemplate}
+              onSelect={setSelectedTemplate}
+              onContinue={(id) => templateNext && runAfterTemplate(templateNext, id)}
+              onBack={() => setStep(templateBackStep)}
+              busy={analyzeUploadMutation.isPending || analyzeExistingMutation.isPending}
+              error={flowError}
+            />
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        )}
 
         {/* ================= STEP 1: SELECT SOURCE (3 Options) ================= */}
         {/* Explicitly requested: "first three options upload existing cv, start from career profile or past project" */}
         {step === "select-source" && (
-          <div className="flex-1 overflow-y-auto pr-1">
+          <div>
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold tracking-tight text-neutral-950">
                 Choose CV to Enhance
               </h2>
-              <p className="text-xs text-neutral-500 mt-1 leading-relaxed">
+              <p className="text-sm text-neutral-500 mt-1 leading-relaxed">
                 Select where your baseline resume content is located.
               </p>
             </div>
 
             <div className="space-y-3 mb-6">
-              {/* Option 1: Upload Existing CV */}
-              <button
-                type="button"
+              <OptionCard
+                icon={Upload}
+                tone="sky"
+                title="Upload an existing CV"
+                description="Upload a PDF or Word resume to improve."
                 onClick={() => {
                   setSourceType("upload");
                   setStep("upload-file");
                 }}
-                className="w-full p-4 rounded-2xl border border-neutral-200 hover:border-neutral-900 hover:shadow-xs bg-neutral-50/60 text-left transition-all cursor-pointer group flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-violet-50 text-violet-700 flex items-center justify-center border border-violet-100 shrink-0 group-hover:scale-105 transition-transform">
-                    <Upload className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-neutral-950 block">
-                      Upload Existing CV
-                    </span>
-                    <span className="text-[11px] text-neutral-500">
-                      Upload your PDF or Word resume for instant AI analysis
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-0.5 transition-all" />
-              </button>
-
-              {/* Option 2: Start from Career Profile */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSourceType("profile");
-                  setStep("pick-source-item");
-                }}
-                className="w-full p-4 rounded-2xl border border-neutral-200 hover:border-neutral-900 hover:shadow-xs bg-neutral-50/60 text-left transition-all cursor-pointer group flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-100 shrink-0 group-hover:scale-105 transition-transform">
-                    <Layers className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-neutral-950 block">
-                      Start from Career Profile
-                    </span>
-                    <span className="text-[11px] text-neutral-500">
-                      Enhance one of your master credentials ({careerProfiles.length} profiles)
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-0.5 transition-all" />
-              </button>
-
-              {/* Option 3: Past Project */}
-              <button
-                type="button"
+              />
+              <OptionCard
+                icon={FileText}
+                tone="accent"
+                title="Pick an existing resume"
+                description={`Choose one you've already made (${pastProjects.length} available).`}
                 onClick={() => {
                   setSourceType("past-project");
                   setStep("pick-source-item");
                 }}
-                className="w-full p-4 rounded-2xl border border-neutral-200 hover:border-neutral-900 hover:shadow-xs bg-neutral-50/60 text-left transition-all cursor-pointer group flex items-center justify-between"
-              >
-                <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center border border-blue-100 shrink-0 group-hover:scale-105 transition-transform">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-neutral-950 block">
-                      Past Project / Resume Draft
-                    </span>
-                    <span className="text-[11px] text-neutral-500">
-                      Pick from previously created resumes ({pastProjects.length} drafts)
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight className="w-4 h-4 text-neutral-400 group-hover:text-neutral-900 group-hover:translate-x-0.5 transition-all" />
-              </button>
+              />
             </div>
           </div>
         )}
 
         {/* ================= STEP 2A: UPLOAD FILE DROPZONE ================= */}
         {step === "upload-file" && (
-          <div className="flex-1 overflow-y-auto pr-1">
+          <div>
             <div className="text-center mb-5">
               <h2 className="text-lg font-bold text-neutral-950">
                 Upload Resume Document
               </h2>
-              <p className="text-xs text-neutral-500 mt-0.5">
+              <p className="text-sm text-neutral-500 mt-0.5">
                 Drop your current resume to let AI extract and quantify achievements.
               </p>
             </div>
@@ -499,7 +384,7 @@ export function EnhanceCvModal({
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
-                if (file) handleUploadFile(file);
+                if (file) chooseTemplateThen({ kind: "upload", file }, "upload-file");
               }}
             />
             <div
@@ -507,369 +392,283 @@ export function EnhanceCvModal({
               className="border-2 border-dashed border-neutral-200 rounded-2xl p-6 text-center hover:border-neutral-900 transition-colors bg-neutral-50/50 mb-4 cursor-pointer"
             >
               <Upload className="w-8 h-8 text-neutral-400 mx-auto mb-2" />
-              <p className="text-xs font-bold text-neutral-800">
+              <p className="text-sm font-bold text-neutral-800">
                 {analyzeUploadMutation.isPending
                   ? "Analyzing..."
                   : uploadedFileName
                     ? uploadedFileName
                     : "Click or drag PDF / DOCX resume"}
               </p>
-              <p className="text-[11px] text-neutral-400 mt-1">
+              <p className="text-xs text-neutral-400 mt-1">
                 Max file size 10MB • All ATS formats supported
               </p>
             </div>
             {flowError && (
-              <p className="text-[11px] text-red-600 font-medium text-center mb-4">{flowError}</p>
+              <p className="text-xs text-red-600 font-medium text-center mb-4">{flowError}</p>
             )}
 
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("select-source")}
-                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={analyzeUploadMutation.isPending || !cvDocumentId}
-                onClick={() => setStep("improvement-goals")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>Continue to Goals</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setStep("select-source")}
+              className="w-full py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+            >
+              Back
+            </button>
           </div>
         )}
 
         {/* ================= STEP 2B: PICK PROFILE OR PAST PROJECT ================= */}
         {step === "pick-source-item" && (
-          <div className="flex-1 overflow-y-auto pr-1">
+          <div>
             <div className="text-center mb-5">
-              <h2 className="text-lg font-bold text-neutral-950">
-                {sourceType === "profile" ? "Select Career Profile" : "Select Past Project"}
-              </h2>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Choose the foundation you wish to enhance.
-              </p>
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Choose a resume</h2>
             </div>
 
-            <div className="space-y-2.5 mb-6 max-h-[300px] overflow-y-auto pr-1">
-              {sourceType === "profile"
-                ? careerProfiles.map((p) => {
-                    const isSelected = selectedProfileId === p.id;
-                    return (
-                      <div
-                        key={p.id}
-                        onClick={() => setSelectedProfileId(p.id)}
-                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                          isSelected
-                            ? "bg-neutral-100 border-neutral-950 ring-1 ring-neutral-950"
-                            : "bg-neutral-50/60 border-neutral-200 hover:bg-neutral-100/50"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-neutral-950">
-                              {p.roleTitle}
-                            </span>
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                              {p.readinessScore}% Match
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-neutral-500 mt-0.5 truncate max-w-xs">
-                            {p.domain}
-                          </p>
-                        </div>
-                        <div
-                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                            isSelected ? "border-neutral-950 bg-neutral-950" : "border-neutral-300"
-                          }`}
-                        >
-                          {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
-                        </div>
-                      </div>
-                    );
-                  })
-                : pastProjects.map((proj) => {
-                    const isSelected = selectedProjectId === proj.id;
-                    return (
-                      <div
-                        key={proj.id}
-                        onClick={() => setSelectedProjectId(proj.id)}
-                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-                          isSelected
-                            ? "bg-neutral-100 border-neutral-950 ring-1 ring-neutral-950"
-                            : "bg-neutral-50/60 border-neutral-200 hover:bg-neutral-100/50"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-neutral-950">
-                              {proj.title}
-                            </span>
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">
-                              {proj.atsScore}% ATS
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-neutral-500 mt-0.5">
-                            {proj.role} • {proj.company}
-                          </p>
-                        </div>
-                        <div
-                          className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                            isSelected ? "border-neutral-950 bg-neutral-950" : "border-neutral-300"
-                          }`}
-                        >
-                          {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
-                        </div>
-                      </div>
-                    );
-                  })}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("select-source")}
-                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                type="button"
+            <div className="mb-6">
+              <ResumePicker
+                resumes={pastProjects}
+                loadingId={loadingSourceId}
                 disabled={analyzeExistingMutation.isPending}
-                onClick={handlePrepareExistingSource}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span>{analyzeExistingMutation.isPending ? "Loading..." : "Continue to Goals"}</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-            {flowError && (
-              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
-            )}
-          </div>
-        )}
-
-        {/* ================= STEP 3: WHAT TO IMPROVE DESCRIPTION ================= */}
-        {/* Explicitly requested: "on all cases they will be asked for what they want to be improved description (they can skip this and edit on the form)" */}
-        {step === "improvement-goals" && (
-          <div className="flex-1 overflow-y-auto pr-1">
-            <div className="text-center mb-5">
-              <h2 className="text-lg font-bold text-neutral-950">
-                What would you like to improve?
-              </h2>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Instruct the AI on what to focus on, or skip directly to edit on the form.
-              </p>
-            </div>
-
-            {/* Suggested Preset Goals */}
-            <div className="space-y-1.5 mb-4">
-              <span className="text-[11px] font-semibold text-neutral-500 block">
-                Quick 1-Click Improvement Prompts:
-              </span>
-              <div className="flex flex-col gap-1.5">
-                {PRESET_GOALS.slice(0, 3).map((preset, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setImprovementGoal(preset)}
-                    className={`p-2.5 rounded-xl border text-left text-[11px] transition-all cursor-pointer ${
-                      improvementGoal === preset
-                        ? "bg-neutral-100 border-neutral-950 font-bold text-neutral-950"
-                        : "bg-neutral-50/70 border-neutral-200 text-neutral-700 hover:bg-neutral-100/50 font-medium"
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Custom Description Textarea */}
-            <div className="mb-4">
-              <label className="text-xs font-bold text-neutral-950 block mb-1">
-                Custom Enhancement Instructions
-              </label>
-              <textarea
-                rows={3}
-                value={improvementGoal}
-                onChange={(e) => setImprovementGoal(e.target.value)}
-                placeholder="e.g. Rewrite bullets with strong action verbs, emphasize Kubernetes scale..."
-                className="w-full p-3 rounded-xl border border-neutral-200 text-xs text-neutral-900 bg-neutral-50/60 focus:outline-none focus:ring-2 focus:ring-neutral-950/10 focus:border-neutral-950"
+                onPick={(id) => {
+                  setSelectedProjectId(id);
+                  chooseTemplateThen({ kind: "existing", sourceId: id }, "pick-source-item");
+                }}
               />
             </div>
 
-            {renderClarifyingQuestions()}
-
-            {/* Optional Job Description Accordion (as requested across flows) */}
-            <div className="rounded-xl border border-neutral-200 p-3 bg-neutral-50/60 mb-5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-neutral-700">
-                  Target Job Description (Optional)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowOptionalJd(!showOptionalJd)}
-                  className="text-[11px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
-                >
-                  {showOptionalJd ? "Hide" : optionalJd ? "Edit JD" : "+ Add JD"}
-                </button>
-              </div>
-
-              {showOptionalJd && (
-                <textarea
-                  rows={3}
-                  value={optionalJd}
-                  onChange={(e) => setOptionalJd(e.target.value)}
-                  placeholder="Paste target job requirements if you want the enhancement optimized for a specific role..."
-                  className="w-full mt-2 p-2.5 rounded-lg border border-neutral-300 text-xs bg-white text-neutral-900"
-                />
-              )}
-            </div>
-
-            {/* Action Buttons: Includes "Skip and edit on the form" as explicitly requested */}
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (sourceType === "upload") setStep("upload-file");
-                    else setStep("pick-source-item");
-                  }}
-                  className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
-                >
-                  Back
-                </button>
-                <button
-                  type="button"
-                  disabled={refineMutation.isPending}
-                  onClick={() => handleContinueToTemplate()}
-                  className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span>{refineMutation.isPending ? "Enhancing..." : "Apply & Select Template"}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Explicit Skip Action */}
-              <button
-                type="button"
-                disabled={refineMutation.isPending}
-                onClick={() => {
-                  setImprovementGoal("");
-                  handleContinueToTemplate("");
-                }}
-                className="w-full py-2.5 text-center text-xs font-semibold text-neutral-500 hover:text-neutral-950 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                Skip instructions &mdash; edit directly on the form
-              </button>
-              {flowError && (
-                <p className="text-[11px] text-red-600 font-medium text-center">{flowError}</p>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={() => setStep("select-source")}
+              className="w-full py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+            >
+              Back
+            </button>
+            {flowError && (
+              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+            )}
           </div>
         )}
 
-        {/* ================= STEP 4: SELECT TEMPLATE ================= */}
-        {step === "select-template" && (
-          <div className="flex-1 overflow-y-auto pr-1">
+        {/* ================= STEP 3: DETAILS, WHAT TO IMPROVE, THE JOB ================= */}
+        {/* ---- Missing details the AI asked about (only when it asked) ---- */}
+        {step === "enhance-questions" && (
+          <div>
             <div className="text-center mb-5">
-              <h2 className="text-lg font-bold text-neutral-950">
-                Select Template Archetype
-              </h2>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Choose the visual layout for your enhanced CV.
-              </p>
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Complete Missing Details</h2>
             </div>
 
-            {jobGaps.length > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 mb-4">
-                <span className="text-[11px] font-bold text-amber-800 flex items-center gap-1.5 mb-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  Gaps vs. the job description
-                </span>
-                <ul className="text-[11px] text-amber-700 space-y-0.5 list-disc list-inside">
-                  {jobGaps.map((gap, idx) => (
-                    <li key={idx}>{gap}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="space-y-2.5 mb-6 max-h-[280px] overflow-y-auto pr-1">
-              {TEMPLATE_OPTIONS.map((tmpl) => {
-                const isSelected = selectedTemplate === tmpl.id;
-                return (
-                  <button
-                    key={tmpl.id}
-                    type="button"
-                    onClick={() => setSelectedTemplate(tmpl.id)}
-                    className={`w-full p-3 rounded-2xl border text-left transition-all cursor-pointer flex items-center justify-between ${
-                      isSelected
-                        ? "bg-neutral-100 border-neutral-950 ring-1 ring-neutral-950"
-                        : "bg-neutral-50/60 border-neutral-200 hover:bg-neutral-100/50"
-                    }`}
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-neutral-950">
-                          {tmpl.name}
-                        </span>
-                        <span className="text-[9.5px] font-semibold px-2 py-0.5 rounded-md bg-neutral-200/80 text-neutral-700">
-                          {tmpl.category}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-neutral-500 mt-0.5">
-                        {tmpl.fontFamily} • {tmpl.description}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                        {tmpl.atsScore}% ATS
-                      </span>
-                      <div
-                        className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                          isSelected ? "border-neutral-950 bg-neutral-950" : "border-neutral-300"
-                        }`}
-                      >
-                        {isSelected && <CheckCircle2 className="w-3 h-3 text-white" />}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="mb-6">
+              <ClarifyingQuestionsForm
+                questions={clarifyingQuestions}
+                answers={questionAnswers}
+                onAnswer={(id, value) => setQuestionAnswers((prev) => ({ ...prev, [id]: value }))}
+                pages={questionPages}
+              />
             </div>
 
             <div className="flex items-center gap-3">
               <button
                 type="button"
-                onClick={() => setStep("improvement-goals")}
-                className="w-1/3 py-3 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+                onClick={() => {
+                  if (!questionPages.isFirstPage) questionPages.prev();
+                  else if (sourceType === "upload") setStep("upload-file");
+                  else setStep("pick-source-item");
+                }}
+                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
               >
                 Back
               </button>
               <button
                 type="button"
-                disabled={finalizeMutation.isPending}
-                onClick={() => handleFinish("none")}
-                className="w-2/3 py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-xs hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
+                disabled={questionPages.isLastPage ? !canSubmitAnswers : !questionPages.pageComplete}
+                onClick={questionPages.isLastPage ? () => setStep("improvement-goals") : questionPages.next}
+                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <span>{finalizeMutation.isPending ? "Saving..." : "Open in Studio"}</span>
+                <span>{questionPages.isLastPage ? "Continue" : "Next"}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ---- What to improve (optional — skipped means our own guidelines) ---- */}
+        {step === "improvement-goals" && (
+          <div>
+            <div className="text-center mb-5">
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">What should we improve?</h2>
+            </div>
+
+            <textarea
+              rows={5}
+              autoFocus
+              value={improvementGoal}
+              onChange={(e) => setImprovementGoal(e.target.value)}
+              placeholder="e.g. Stronger bullet points, add numbers to my achievements, make it fit one page"
+              className="w-full p-3 mb-6 rounded-xl bg-white border border-neutral-300 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 resize-none"
+            />
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setImprovementGoal("");
+                  setStep("job-ask");
+                }}
+                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                disabled={!improvementGoal.trim()}
+                onClick={() => setStep("job-ask")}
+                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>Continue</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStep(clarifyingQuestions.length ? "enhance-questions" : sourceType === "upload" ? "upload-file" : "pick-source-item")}
+              className="mt-3 w-full cursor-pointer py-1 text-xs font-semibold text-neutral-400 transition-colors hover:text-neutral-700"
+            >
+              Back
+            </button>
+          </div>
+        )}
+
+        {/* ---- Tailor to a job? (a single question, as in New Resume) ---- */}
+        {step === "job-ask" && (
+          <div className="py-4 text-center">
+            <span className={`mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border ${SOFT_TONES.peach}`}>
+              <Target className="h-7 w-7" />
+            </span>
+            <h2 className="mt-5 text-xl font-bold tracking-tight text-neutral-950">Tailor this CV to a job?</h2>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-neutral-500">
+              CVs tailored to the job description match far more of what recruiters and screening software look for.
+            </p>
+
+            <div className="mx-auto mt-8 flex max-w-xs flex-col gap-2">
+              <button
+                type="button"
+                disabled={isImproving}
+                onClick={() => {
+                  setFlowError(null);
+                  setStep("job-target");
+                }}
+                className="w-full cursor-pointer rounded-lg bg-neutral-950 py-3 text-sm font-semibold text-white transition-colors hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Paste a job description
+              </button>
+              <button
+                type="button"
+                disabled={isImproving}
+                onClick={() => {
+                  setOptionalJd("");
+                  handleContinueToTemplate("");
+                }}
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-neutral-200 py-3 text-sm font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 disabled:cursor-not-allowed"
+              >
+                {isImproving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isImproving ? "Improving your CV..." : "Skip"}
+              </button>
+              <button
+                type="button"
+                disabled={isImproving}
+                onClick={() => setStep("improvement-goals")}
+                className="mt-1 cursor-pointer py-1 text-xs font-semibold text-neutral-400 transition-colors hover:text-neutral-700 disabled:cursor-not-allowed"
+              >
+                Back
+              </button>
+            </div>
+            {flowError && <p className="mt-3 text-xs font-medium text-red-600">{flowError}</p>}
+          </div>
+        )}
+
+        {/* ---- Paste the job ---- */}
+        {step === "job-target" && (
+          <div>
+            <div className="text-center mb-5">
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Paste the job description</h2>
+            </div>
+
+            <textarea
+              rows={8}
+              autoFocus
+              value={optionalJd}
+              onChange={(e) => setOptionalJd(e.target.value)}
+              placeholder="Paste the job posting, or a job title like Senior Accountant"
+              className="w-full p-3 mb-6 rounded-xl bg-white border border-neutral-300 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 resize-none"
+            />
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                disabled={isImproving}
+                onClick={() => setStep("job-ask")}
+                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={!optionalJd.trim() || isImproving}
+                onClick={() => handleContinueToTemplate()}
+                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <span>{isImproving ? "Improving..." : "Improve my CV"}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+            {flowError && <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>}
+          </div>
+        )}
+
+        {/* ================= STEP 4: IMPROVED WORDING → PROFILE ================= */}
+        {step === "select-template" && wordingPreview && cvDocumentId && (
+          <WordingReviewStep
+            key={cvDocumentId}
+            cvDocumentId={cvDocumentId}
+            preview={wordingPreview}
+            onFinish={() => handleFinish()}
+            onProRequired={proGate.isProRequired}
+          >
+            <JobGaps gaps={jobGaps} />
+          </WordingReviewStep>
+        )}
+
+        {/* ================= STEP 4: READY ================= */}
+        {step === "select-template" && !wordingPreview && (
+          <div>
+            <div className="text-center mb-5">
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Your improved CV is ready</h2>
+            </div>
+
+            <JobGaps gaps={jobGaps} />
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setStep("job-ask")}
+                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={() => handleFinish()}
+                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <span>Open in editor</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
             {flowError && (
-              <p className="text-[11px] text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
             )}
           </div>
         )}
-      </div>
-
-      <ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />
-    </div>
+    </FlowModal>
   );
 }

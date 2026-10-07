@@ -1,220 +1,135 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Eye, EyeOff } from "lucide-react";
 import { useRegister, useLogin, useGoogleAuth } from "@/hooks/use-auth";
 import { useGoogleIdentity } from "@/hooks/use-google-identity";
+import { useCvTemplates } from "@/hooks/use-cv-templates";
+import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
 import { ApiError } from "@/lib/api";
 
 interface AuthLayoutProps {
   mode: "signup" | "login";
 }
 
-interface ResumeCardProps {
-  name: string;
-  role: string;
-  location: string;
-  initials: string;
-  badge: string;
-  badgeColor: string;
-  accentBg: string;
-  skills: string[];
-  experienceCompany: string;
-  experienceRole: string;
-  impactMetric: string;
-  education: string;
-}
+// ---------------------------------------------------------------------------
+// Right panel: a steeply slanted wall of real templates (the colourful ones
+// first) mixed with a few brand-coloured tiles, each column drifting slowly
+// and endlessly. A column holds its set twice and slides by exactly one set,
+// so the loop has no seam; every set is taller than the slanted panel, so no
+// gap ever opens at the ends.
+// ---------------------------------------------------------------------------
 
-const templatesData: ResumeCardProps[] = [
-  {
-    name: "Kidus Haile",
-    role: "Senior Cloud Architect",
-    location: "Seattle, WA",
-    initials: "KH",
-    badge: "99% ATS",
-    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    accentBg: "bg-neutral-950",
-    skills: ["AWS", "K8s", "Go", "Terraform"],
-    experienceCompany: "Apex Cloud",
-    experienceRole: "Staff Cloud Engineer",
-    impactMetric: "Reduced p99 latency by 58% across 12M daily requests",
-    education: "B.S. Computer Engineering, Univ. of Washington",
-  },
-  {
-    name: "Selamawit Bekele",
-    role: "Staff Product Designer",
-    location: "San Francisco, CA",
-    initials: "SB",
-    badge: "Design Lead",
-    badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    accentBg: "bg-indigo-600",
-    skills: ["Figma", "Design Systems", "User Research", "Prototyping"],
-    experienceCompany: "Linear & Stripe",
-    experienceRole: "Lead UX Architect",
-    impactMetric: "Spearheaded design system adopted by 40+ product squads",
-    education: "M.Des HCI, Stanford",
-  },
-  {
-    name: "Abebe Tessema",
-    role: "Quantitative Analyst",
-    location: "New York, NY",
-    initials: "AT",
-    badge: "Wall St Pass",
-    badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
-    accentBg: "bg-emerald-700",
-    skills: ["Python", "C++", "Fixed Income", "Risk Models"],
-    experienceCompany: "Goldman Sachs",
-    experienceRole: "Quant Researcher",
-    impactMetric: "Architected pricing engine with +14.2% Sharpe ratio",
-    education: "M.S. Financial Math, Columbia",
-  },
-  {
-    name: "Yohannes Assefa",
-    role: "VP of Engineering",
-    location: "Austin, TX",
-    initials: "YA",
-    badge: "Executive Ivy",
-    badgeColor: "bg-amber-50 text-amber-800 border-amber-200",
-    accentBg: "bg-stone-800",
-    skills: ["Org Scaling", "Budgeting", "Enterprise SaaS", "Roadmaps"],
-    experienceCompany: "Vanguard Tech",
-    experienceRole: "Head of Infra",
-    impactMetric: "Scaled engineering from 28 to 140+ engineers",
-    education: "M.S. Software Mgmt, CMU",
-  },
-  {
-    name: "Bethelhem Desta",
-    role: "Lead AI Scientist",
-    location: "Boston, MA",
-    initials: "BD",
-    badge: "100% Pass",
-    badgeColor: "bg-teal-50 text-teal-800 border-teal-200",
-    accentBg: "bg-teal-700",
-    skills: ["PyTorch", "Transformers", "LLMs", "Training"],
-    experienceCompany: "Open Foundation AI",
-    experienceRole: "Senior Researcher",
-    impactMetric: "Authored 4 NeurIPS papers; cut inference costs 45%",
-    education: "Ph.D. Computer Science, MIT",
-  },
-  {
-    name: "Marcus Vance",
-    role: "Head of Growth",
-    location: "San Francisco, CA",
-    initials: "MV",
-    badge: "FAANG Ready",
-    badgeColor: "bg-rose-50 text-rose-700 border-rose-200",
-    accentBg: "bg-rose-600",
-    skills: ["GTM Strategy", "SQL", "CAC/LTV", "Product Growth"],
-    experienceCompany: "Scale AI",
-    experienceRole: "Growth Lead",
-    impactMetric: "Drove 3.8x ARR expansion from $4M to $15.2M",
-    education: "B.A. Economics, UC Berkeley",
-  },
-  {
-    name: "Sophia Chen",
-    role: "Platform Lead",
-    location: "New York, NY",
-    initials: "SC",
-    badge: "Modern Sans",
-    badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
-    accentBg: "bg-purple-600",
-    skills: ["React", "TypeScript", "Next.js", "PostgreSQL"],
-    experienceCompany: "Vercel Partner",
-    experienceRole: "Platform Architect",
-    impactMetric: "Engineered edge mutations for 600K requests/min",
-    education: "B.S. CS, Cornell",
-  },
-  {
-    name: "Elena Rostova",
-    role: "Brand Director",
-    location: "London, UK",
-    initials: "ER",
-    badge: "Recruiter Vetted",
-    badgeColor: "bg-sky-50 text-sky-700 border-sky-200",
-    accentBg: "bg-sky-600",
-    skills: ["Brand Architecture", "Creative Direction", "Global Campaigns"],
-    experienceCompany: "Monzo & Spotify",
-    experienceRole: "Brand Strategy Lead",
-    impactMetric: "Directed international rebranding yielding +82% awareness",
-    education: "B.A. Graphic Design, CSM",
-  },
+const COLOURFUL_FIRST = ["accent", "bubble", "sidebar", "halo", "slate", "curve", "formal", "focus", "prose", "stack"];
+
+type WallItem = { kind: "cv"; slot: number } | { kind: "tile"; tile: number };
+
+const TILES = [
+  { className: "bg-accent text-white", eyebrow: "Resumate", text: "Land the interview." },
+  { className: "bg-accent-soft text-neutral-950", eyebrow: "AI tailoring", text: "Made for every job you apply to." },
+  { className: "bg-neutral-800 text-white", eyebrow: "ATS-friendly", text: "Passes the scan.", accent: true },
+  { className: "bg-[#ffe3d1] text-neutral-950", eyebrow: "Templates", text: "Simple to academic." },
 ];
 
-function ResumeTemplateCard({ card }: { card: ResumeCardProps }) {
+// Four columns of six items — five templates and one tile, the tile at a
+// different height in each. At 240px wide a set is ~2,100px tall, comfortably
+// more than the ~1,400px of a column that shows through the slanted panel.
+const COLUMNS: { items: WallItem[]; direction: "up" | "down"; seconds: number }[] = [0, 1, 2, 3].map((col) => {
+  const items: WallItem[] = [0, 1, 2, 3, 4].map((i) => ({ kind: "cv", slot: col * 5 + i }));
+  items.splice((col * 2 + 1) % 6, 0, { kind: "tile", tile: col });
+  return { items, direction: col % 2 ? "down" : "up", seconds: 90 + col * 12 };
+});
+
+function Tile({ tile }: { tile: number }) {
+  const t = TILES[tile % TILES.length];
   return (
-    <div className="w-[220px] sm:w-[240px] rounded-xl bg-white border border-neutral-200/90 shadow-[0_8px_20px_-6px_rgba(0,0,0,0.06)] p-3 flex flex-col justify-between select-none transition-all hover:shadow-md">
-      <div>
-        {/* Header with Monogram & Badge */}
-        <div className="flex items-center justify-between gap-1.5 mb-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <div
-              className={`w-5 h-5 rounded-md ${card.accentBg} text-white flex items-center justify-center text-[8px] font-bold shrink-0`}
-            >
-              {card.initials}
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10.5px] font-bold text-neutral-950 truncate leading-tight">
-                {card.name}
-              </div>
-              <div className="text-[8px] text-neutral-500 truncate">
-                {card.role}
-              </div>
-            </div>
-          </div>
-          <span
-            className={`px-1.5 py-0.5 rounded text-[7.5px] font-semibold border ${card.badgeColor} shrink-0 leading-none`}
-          >
-            {card.badge}
-          </span>
-        </div>
-
-        {/* Contact Micro-line */}
-        <div className="text-[7px] text-neutral-400 mb-2 pb-1.5 border-b border-neutral-100 flex items-center gap-1.5">
-          <span>{card.location}</span>
-          <span>•</span>
-          <span>linkedin.com/in/{card.initials.toLowerCase()}</span>
-        </div>
-
-        {/* Experience Section */}
-        <div className="mb-2">
-          <div className="text-[7.5px] font-bold tracking-wider text-neutral-400 uppercase mb-0.5">
-            Experience
-          </div>
-          <div className="text-[8.5px] font-semibold text-neutral-900 leading-tight">
-            {card.experienceRole} •{" "}
-            <span className="text-neutral-500 font-normal">
-              {card.experienceCompany}
-            </span>
-          </div>
-          <p className="text-[7.5px] text-neutral-600 leading-tight mt-0.5 line-clamp-2">
-            • {card.impactMetric}
-          </p>
-        </div>
-
-        {/* Education Section */}
-        <div className="mb-1.5">
-          <div className="text-[7.5px] font-bold tracking-wider text-neutral-400 uppercase">
-            Education
-          </div>
-          <div className="text-[7.5px] text-neutral-700 truncate">
-            {card.education}
-          </div>
-        </div>
-      </div>
-
-      {/* Skills Pills */}
-      <div className="pt-1.5 border-t border-neutral-100 flex flex-wrap gap-1">
-        {card.skills.slice(0, 3).map((skill, idx) => (
-          <span
-            key={idx}
-            className="px-1 py-0.5 rounded bg-neutral-100 text-[7px] font-medium text-neutral-700 leading-none"
-          >
-            {skill}
-          </span>
-        ))}
-      </div>
+    <div className={`flex aspect-[210/297] w-full flex-col justify-between rounded-lg p-5 ${t.className}`}>
+      <span className={`text-[12px] font-semibold uppercase tracking-[0.14em] ${t.accent ? "text-accent-light" : "opacity-60"}`}>{t.eyebrow}</span>
+      <span className="text-[30px] font-bold leading-[1.1] tracking-tight">{t.text}</span>
     </div>
+  );
+}
+
+function TemplateWall() {
+  const { data: templates } = useCvTemplates();
+  const all = (templates ?? []).map((t) => t.id);
+  const ids = [...COLOURFUL_FIRST.filter((id) => all.includes(id)), ...all.filter((id) => !COLOURFUL_FIRST.includes(id))];
+
+  return (
+    // A large square, centred on the panel and rotated, with the columns hung
+    // from its top edge — so each column starts just above what's visible.
+    <div className="absolute left-1/2 top-1/2 flex h-[1600px] w-[1600px] -translate-x-1/2 -translate-y-1/2 -rotate-[30deg] items-start justify-center gap-4">
+      {COLUMNS.map((column, col) => (
+        <div
+          key={col}
+          className="auth-wall-col flex w-[240px] shrink-0 flex-col gap-4 pb-4"
+          style={{
+            marginTop: col % 2 ? -160 : 0,
+            animation: `${column.direction === "up" ? "marquee-up" : "marquee-down"} ${column.seconds}s linear infinite`,
+          }}
+        >
+          {[...column.items, ...column.items].map((item, i) =>
+            item.kind === "tile" ? (
+              <Tile key={i} tile={item.tile} />
+            ) : ids.length ? (
+              <TemplateThumbnail
+                key={i}
+                templateId={ids[item.slot % ids.length]}
+                persona={item.slot}
+                title="Resume template example"
+                className="aspect-[210/297] w-full rounded-lg"
+              />
+            ) : (
+              <div key={i} className="aspect-[210/297] w-full animate-pulse rounded-lg bg-neutral-800" />
+            ),
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The wall is desktop-only; don't mount its iframes on small screens at all.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const update = () => setIsDesktop(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+  return isDesktop;
+}
+
+// ---------------------------------------------------------------------------
+// Form
+// ---------------------------------------------------------------------------
+
+const inputClass =
+  "w-full rounded-xl border border-white/[0.06] bg-[#262626] px-3.5 py-3 text-[14.5px] text-white placeholder:text-neutral-500 transition-all focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20";
+
+function GoogleIcon() {
+  return (
+    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden>
+      <path
+        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+        fill="#4285F4"
+      />
+      <path
+        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        fill="#34A853"
+      />
+      <path
+        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+        fill="#FBBC05"
+      />
+      <path
+        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+        fill="#EA4335"
+      />
+    </svg>
   );
 }
 
@@ -222,8 +137,8 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  const isDesktop = useIsDesktop();
 
   const isSignup = mode === "signup";
 
@@ -232,8 +147,7 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
   const googleAuthMutation = useGoogleAuth();
   const { promptGoogleSignIn } = useGoogleIdentity();
 
-  const isPending =
-    registerMutation.isPending || loginMutation.isPending || googleAuthMutation.isPending;
+  const isPending = registerMutation.isPending || loginMutation.isPending || googleAuthMutation.isPending;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,253 +178,103 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
     }
   };
 
-  // 8 items per column to guarantee seamless, infinite marquee without gaps
-  const col1 = [...templatesData.slice(0, 4), ...templatesData.slice(0, 4)];
-  const col2 = [...templatesData.slice(4, 8), ...templatesData.slice(4, 8)];
-  const col3 = [
-    templatesData[2],
-    templatesData[0],
-    templatesData[6],
-    templatesData[4],
-    templatesData[2],
-    templatesData[0],
-    templatesData[6],
-    templatesData[4],
-  ];
-
   return (
-    <div className="fixed inset-0 w-screen h-screen max-h-screen bg-white text-neutral-900 flex font-sans overflow-hidden select-none">
-      {/* LEFT COLUMN: Clean White Auth Form strictly locked to single viewport screen */}
-      <div className="w-full lg:w-1/2 h-full flex flex-col justify-between px-6 sm:px-10 lg:px-12 xl:px-16 py-4 sm:py-5 relative z-20 bg-white overflow-hidden">
-        {/* Top Logo */}
-        <div className="flex justify-center sm:justify-start shrink-0">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-neutral-950 font-bold tracking-tight group"
-          >
-            <div className="w-7 h-7 rounded-lg bg-neutral-950 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform duration-200">
-              <FileText className="w-3.5 h-3.5 stroke-[2.2]" />
-            </div>
-            <span className="text-[15px] font-bold tracking-tight">Resumate</span>
+    <div className="fixed inset-0 flex h-screen w-screen overflow-hidden bg-[#0a0a0a] font-sans text-white selection:bg-white selection:text-neutral-950">
+      {/* Left: the form */}
+      <div className="relative z-20 flex h-full w-full flex-col overflow-y-auto px-6 py-6 sm:px-10 lg:w-1/2 lg:px-14 xl:px-20">
+        {/* Dot grid + a faint warm glow, as on the pricing page */}
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]" />
+        <div className="pointer-events-none absolute left-1/2 top-1/3 h-[320px] w-[480px] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(closest-side,rgba(255,122,46,0.10),transparent)] blur-3xl" />
+
+        <div className="relative mx-auto my-auto w-full max-w-[380px] py-10">
+          <Link href="/" aria-label="Resumate home" className="group mx-auto mb-6 flex h-11 w-11 items-center justify-center rounded-[13px] bg-white text-neutral-950 transition-transform duration-200 hover:scale-105">
+            <FileText className="h-5 w-5 stroke-[2.2]" />
           </Link>
-        </div>
+          <h1 className="text-center text-[28px] font-bold leading-tight tracking-tight text-white sm:text-[32px]">
+            {isSignup ? "Create your account" : "Welcome back"}
+          </h1>
 
-        {/* Center Form Container - Ultra Compact to guarantee zero overflow */}
-        <div className="w-full max-w-[360px] mx-auto my-auto flex flex-col justify-center">
-          {/* Header */}
-          <div className="text-center sm:text-left mb-4">
-            <h1 className="text-2xl sm:text-[25px] font-bold tracking-tight text-neutral-950 leading-tight">
-              {isSignup ? "Create your free account" : "Welcome back"}
-            </h1>
-            <p className="mt-1 text-xs text-neutral-500 font-normal leading-relaxed">
-              {isSignup
-                ? "Create your free account to tailor resumes and land interviews. No credit card required."
-                : "Log in to your account to continue building and tailoring resumes."}
-            </p>
-          </div>
-
-          {/* Social Auth: Google Button */}
           <button
             type="button"
             onClick={handleGoogleClick}
             disabled={isPending}
-            className="w-full py-2.5 px-4 rounded-xl border border-neutral-300 bg-white hover:bg-neutral-50 active:scale-[0.99] font-medium text-xs sm:text-[13px] text-neutral-800 flex items-center justify-center gap-2.5 shadow-2xs transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="mt-9 flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-white/[0.06] bg-[#262626] px-4 py-3 text-[14.5px] font-semibold text-white transition-colors hover:border-white/10 hover:bg-[#2e2e2e] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                fill="#EA4335"
-              />
-            </svg>
+            <GoogleIcon />
             <span>Continue with Google</span>
           </button>
 
-          {/* Thin Divider with "or" */}
-          <div className="relative my-3">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-neutral-200" />
-            </div>
-            <div className="relative flex justify-center text-[10px]">
-              <span className="px-2 bg-white text-neutral-400 font-medium uppercase tracking-wider">
-                or
-              </span>
-            </div>
+          <div className="my-6 flex items-center gap-3 text-[12px] font-medium text-neutral-500">
+            <span className="h-px flex-1 bg-neutral-800" />
+            or
+            <span className="h-px flex-1 bg-neutral-800" />
           </div>
 
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-2">
-            <div>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter email address"
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50/70 focus:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 text-xs sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 transition-all"
-              />
-            </div>
-
+          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email address"
+              className={inputClass}
+            />
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
                 required
+                autoComplete={isSignup ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={
-                  isSignup ? "Create a secure password" : "Enter password"
-                }
-                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50/70 focus:bg-white focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 text-xs sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 transition-all pr-9"
+                placeholder={isSignup ? "Create a password" : "Password"}
+                className={`${inputClass} pr-11`}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 transition-colors focus:outline-none cursor-pointer p-0.5"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-3 top-1/2 -translate-y-1/2 cursor-pointer p-1 text-neutral-500 transition-colors hover:text-neutral-200 focus:outline-none"
               >
-                {showPassword ? (
-                  <EyeOff className="w-3.5 h-3.5" />
-                ) : (
-                  <Eye className="w-3.5 h-3.5" />
-                )}
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
 
-            {/* Remember Me & Forgot Password on Login */}
-            {!isSignup && (
-              <div className="flex items-center justify-between text-[11px] pt-0.5">
-                <label className="flex items-center gap-1.5 text-neutral-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded border-neutral-300 text-neutral-950 focus:ring-neutral-950 cursor-pointer w-3.5 h-3.5"
-                  />
-                  <span>Remember me</span>
-                </label>
-                <Link
-                  href="#forgot"
-                  className="text-neutral-500 hover:text-neutral-900 transition-colors font-medium"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-            )}
+            {formError && <p className="text-[13.5px] font-medium text-red-400">{formError}</p>}
 
-            {/* Form Error */}
-            {formError && (
-              <p className="text-[11px] text-red-600 font-medium pt-0.5">{formError}</p>
-            )}
-
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={isPending}
-              className="w-full py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs sm:text-[13px] hover:bg-neutral-800 active:scale-[0.99] transition-all shadow-xs cursor-pointer mt-1 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="mt-2 w-full cursor-pointer rounded-xl border border-white/[0.08] bg-[#333333] py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-[#3b3b3b] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isPending ? "Please wait..." : "Continue"}
+              {isPending ? "Please wait…" : isSignup ? "Create account" : "Log in"}
             </button>
           </form>
 
-          {/* Legal Terms Disclaimer */}
-          <p className="mt-2.5 text-[10px] text-neutral-400 text-center sm:text-left leading-normal">
-            By continuing, you agree to Resumate&apos;s{" "}
-            <Link href="/#terms" className="underline hover:text-neutral-700">
-              Terms of Service
-            </Link>{" "}
-            and{" "}
-            <Link href="/#privacy" className="underline hover:text-neutral-700">
-              Privacy Policy
+          <p className="mt-6 text-center text-[14px] text-neutral-500">
+            {isSignup ? "Already have an account? " : "New to Resumate? "}
+            <Link href={isSignup ? "/login" : "/signup"} className="font-semibold text-accent-light transition-colors hover:text-accent-mid">
+              {isSignup ? "Log in" : "Create an account"}
             </Link>
-            .
           </p>
-
-          {/* Switch Mode: Sign in <-> Sign up */}
-          <div className="mt-3 text-center text-xs text-neutral-600">
-            {isSignup ? (
-              <span>
-                Already have an account?{" "}
-                <Link
-                  href="/login"
-                  className="font-semibold text-neutral-950 hover:underline"
-                >
-                  Log in
-                </Link>
-              </span>
-            ) : (
-              <span>
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/signup"
-                  className="font-semibold text-neutral-950 hover:underline"
-                >
-                  Sign up
-                </Link>
-              </span>
-            )}
-          </div>
         </div>
 
-        {/* Bottom Social Proof */}
-        <div className="pt-2.5 border-t border-neutral-100 text-center sm:text-left shrink-0">
-          <div className="text-[9.5px] font-medium text-neutral-400 mb-1.5 uppercase tracking-wider">
-            Trusted by candidates &amp; hiring leaders at
-          </div>
-          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 sm:gap-5 text-neutral-400 opacity-80">
-            <span className="text-[11px] font-semibold tracking-tight">Google</span>
-            <span className="text-[11px] font-semibold tracking-tight">Stripe</span>
-            <span className="text-[11px] font-semibold tracking-tight">Airbnb</span>
-            <span className="text-[11px] font-semibold tracking-tight">McKinsey</span>
-            <span className="text-[11px] font-semibold tracking-tight">Meta</span>
-            <span className="text-[11px] font-semibold tracking-tight">Spotify</span>
-          </div>
-        </div>
+        <p className="relative text-center text-[12.5px] leading-relaxed text-neutral-500">
+          By continuing, you agree to our{" "}
+          <Link href="/terms" className="text-neutral-300 underline decoration-neutral-700 underline-offset-2 hover:text-white">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="text-neutral-300 underline decoration-neutral-700 underline-offset-2 hover:text-white">
+            Privacy Policy
+          </Link>
+          .
+        </p>
       </div>
 
-      {/* RIGHT COLUMN: Absolutely Locked Moving Templates Showcase (Cannot overflow viewport) */}
-      <div className="hidden lg:block lg:w-1/2 h-full relative overflow-hidden bg-[#f4f4f6] border-l border-neutral-200/90">
-        {/* Subtle Ambient Radial Glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none opacity-60 z-10" />
-
-        {/* Absolutely Centered Tilted Canvas (-12 degrees) filling entire right panel */}
-        <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none overflow-hidden">
-          <div className="flex gap-4 -rotate-12 scale-[1.04] w-[130%] justify-center items-center">
-            {/* Column 1: Upward Continuous Loop */}
-            <div className="flex flex-col gap-3.5 animate-marquee-up shrink-0">
-              {col1.map((card, idx) => (
-                <ResumeTemplateCard key={`col1-${idx}`} card={card} />
-              ))}
-            </div>
-
-            {/* Column 2: Downward Continuous Loop */}
-            <div className="flex flex-col gap-3.5 animate-marquee-down shrink-0 -mt-16">
-              {col2.map((card, idx) => (
-                <ResumeTemplateCard key={`col2-${idx}`} card={card} />
-              ))}
-            </div>
-
-            {/* Column 3: Upward Slow Continuous Loop */}
-            <div className="flex flex-col gap-3.5 animate-marquee-up-slow shrink-0">
-              {col3.map((card, idx) => (
-                <ResumeTemplateCard key={`col3-${idx}`} card={card} />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Soft Vignette Overlay */}
-        <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-[#f4f4f6]/70 via-transparent to-[#f4f4f6]/70 z-20" />
-        <div className="absolute inset-y-0 left-0 w-8 pointer-events-none bg-gradient-to-r from-neutral-300/30 to-transparent z-20" />
+      {/* Right: the slanted, drifting wall */}
+      <div className="relative hidden h-full overflow-hidden border-l border-neutral-900 bg-[#111113] lg:block lg:w-1/2" aria-hidden>
+        <div className="pointer-events-none absolute inset-0">{isDesktop && <TemplateWall />}</div>
       </div>
     </div>
   );

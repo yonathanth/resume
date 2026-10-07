@@ -13,6 +13,18 @@
   --accent-emerald: #10b981;
   --accent-emerald-subtle: #ecfdf5;
   --accent-emerald-border: #a7f3d0;
+  /* Brand accent — shades of one vivid red-orange, used sparingly, from deep to pale:
+     strong  — hover states and orange text on white (the base is too light to read as text)
+     accent  — the base: solid buttons, badges, active tabs, progress bars
+     mid     — top of the glossy icon-tile gradient
+     light   — small highlights: icons on dark buttons, glows
+     border / soft — outlines and pale backgrounds */
+  --accent-strong: #e2470b;
+  --accent: #ff5e1f;
+  --accent-mid: #ff7a2e;
+  --accent-light: #ff9b60;
+  --accent-border: #ffc7a8;
+  --accent-soft: #fff2eb;
 }
 
 @theme inline {
@@ -28,6 +40,12 @@
   --color-emerald-accent: var(--accent-emerald);
   --color-emerald-subtle: var(--accent-emerald-subtle);
   --color-emerald-border: var(--accent-emerald-border);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-mid: var(--accent-mid);
+  --color-accent-light: var(--accent-light);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-border: var(--accent-border);
   --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-geist-mono), monospace;
 }
@@ -93,3 +111,231 @@ body {
   will-change: transform;
 }
 
+
+/* Toasts (components/Toaster.tsx) rise in from the bottom. */
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-enter {
+  animation: toast-enter 180ms ease-out;
+}
+
+/* Thin indeterminate bar for work in progress (e.g. the editor preview re-rendering). */
+@keyframes progress-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+
+.progress-slide {
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+
+/* An editor field picked from the preview flashes in the accent colour. */
+@keyframes field-flash {
+  0%, 30% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 8px; }
+  100% { box-shadow: 0 0 0 3px transparent; border-radius: 8px; }
+}
+
+.field-flash {
+  animation: field-flash 1.8s ease-out;
+}
+
+/* Landing hero (components/Hero.tsx) — quiet motion only. */
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(14px); filter: blur(6px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.hero-rise {
+  animation: hero-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes hero-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.hero-float {
+  animation: hero-float 6s ease-in-out infinite;
+}
+
+@keyframes hero-glow {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+.hero-glow {
+  animation: hero-glow 7s ease-in-out infinite;
+}
+
+/* A slow light sweep through the accent word. */
+@keyframes hero-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: -100% 50%; }
+}
+
+.hero-shimmer {
+  background-size: 200% 100%;
+  animation: hero-shimmer 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise, .hero-float, .hero-glow, .hero-shimmer { animation: none; }
+}
+
+/* How it works (components/HowItWorks.tsx) — the preview window's quiet motion. */
+/* Editor: the cursor glides to a line on the preview and the line lights up. */
+@keyframes hiw-cursor {
+  0% { transform: translate(40px, 60px); opacity: 0; }
+  15% { opacity: 1; }
+  40%, 85% { transform: translate(0, 0); opacity: 1; }
+  100% { transform: translate(0, 0); opacity: 0; }
+}
+
+.hiw-cursor {
+  animation: hiw-cursor 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes hiw-target {
+  0%, 38% { opacity: 0; }
+  45%, 88% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.hiw-target {
+  animation: hiw-target 3.2s ease infinite;
+}
+
+/* 1 · Your details: a cursor hops across three cards; the ring and lift follow.
+   Each card runs the same loop shifted by a third (negative delays). */
+@keyframes hiw-tpl-ring {
+  0% { opacity: 0; }
+  6%, 30% { opacity: 1; }
+  34%, 100% { opacity: 0; }
+}
+
+.hiw-tpl-ring {
+  animation: hiw-tpl-ring 4.8s ease infinite;
+}
+
+@keyframes hiw-tpl-lift {
+  0% { transform: translateY(0); }
+  6%, 30% { transform: translateY(-6px); }
+  34%, 100% { transform: translateY(0); }
+}
+
+.hiw-tpl-lift {
+  position: relative;
+  animation: hiw-tpl-lift 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes hiw-tpl-cursor {
+  0%, 28% { transform: translateX(0); }
+  33%, 61% { transform: translateX(var(--hop, 84px)); }
+  66%, 94% { transform: translateX(calc(var(--hop, 84px) * 2)); }
+  100% { transform: translateX(0); }
+}
+
+.hiw-tpl-cursor {
+  animation: hiw-tpl-cursor 4.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+/* 1 · Info sources: upload arrow bobs, "typing" dots pulse. */
+@keyframes hiw-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.hiw-bob {
+  animation: hiw-bob 1.4s ease-in-out infinite;
+}
+
+@keyframes hiw-dot {
+  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+.hiw-dot {
+  animation: hiw-dot 1.1s ease-in-out infinite;
+}
+
+/* 2 · Job post: a scan line sweeps, keywords pop out one by one. */
+@keyframes hiw-scan {
+  0% { transform: translateY(-24px); }
+  45%, 100% { transform: translateY(64px); }
+}
+
+.hiw-scan {
+  animation: hiw-scan 3.6s ease-in-out infinite;
+}
+
+@keyframes hiw-chip {
+  0%, 12% { opacity: 0; transform: scale(0.7); }
+  22%, 85% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1); }
+}
+
+.hiw-chip {
+  animation: hiw-chip 3.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite both;
+}
+
+/* 3 · Editor: the download button gets pressed once the edit lands. */
+@keyframes hiw-press {
+  0%, 86% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  90% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  96%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+
+.hiw-press {
+  animation: hiw-press 3.2s ease infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hiw-cursor, .hiw-target,
+  .hiw-tpl-cursor, .hiw-tpl-lift, .hiw-bob, .hiw-dot, .hiw-scan, .hiw-chip, .hiw-press { animation: none; }
+  .hiw-tpl-ring { animation: none; opacity: 0; }
+}
+
+/* Templates wall (components/TemplatesSection.tsx): columns drop gently into
+   place, one after another, the first time the section is on screen. */
+.tpl-col {
+  opacity: 0;
+  transform: translateY(-24px);
+  transition:
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.7s ease;
+}
+
+.tpl-col-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tpl-col { opacity: 1; transform: none; transition: none; }
+}
+
+/* Scroll reveal (components/Reveal.tsx): a short fade-up, once. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
+
+/* Auth pages' drifting template wall (components/AuthLayout.tsx). */
+@media (prefers-reduced-motion: reduce) {
+  .auth-wall-col { animation: none !important; }
+}

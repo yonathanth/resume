@@ -27,3 +27,28 @@ export function getInitials(fullName?: string | null, email?: string | null): st
 export function getDisplayName(fullName?: string | null, email?: string | null): string {
   return fullName?.trim() || email?.trim() || "Account";
 }
+
+// Avatar background for an account: looks random, but is stable for a given
+// user (hashed from their id), so it never changes between visits. The
+// palette deliberately leaves out pinks, purples and baby blues — colours
+// commonly read as belonging to one group of people — and orange/amber, which
+// would blur into the site's accent colour. Full class strings so Tailwind
+// keeps them.
+const AVATAR_COLORS = [
+  "bg-emerald-600",
+  "bg-teal-600",
+  "bg-cyan-700",
+  "bg-lime-700",
+  "bg-green-700",
+  "bg-stone-600",
+  "bg-slate-600",
+] as const;
+
+export function getAvatarColor(seed?: string | null): string {
+  if (!seed) return "bg-neutral-500";
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash * 31 + seed.charCodeAt(i)) | 0;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}

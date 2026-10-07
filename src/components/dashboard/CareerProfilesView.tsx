@@ -1,507 +1,314 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useProfileSkills, useProfileSummary } from "@/hooks/use-profiles";
-import {
-  UserCheck,
-  Plus,
-  Edit3,
-  CheckCircle2,
-  ExternalLink,
-  Briefcase,
-  GraduationCap,
-  Sparkles,
-  Layers,
-  ChevronRight,
-  ArrowRight,
-  X,
-  FileText,
-  Target,
-} from "lucide-react";
-import {
-  CareerProfile,
-  SAMPLE_CAREER_PROFILES,
-  defaultSampleCv,
-} from "./create-flow/types";
-import { createProfile, ApiError } from "@/lib/api";
+import { ArrowRight, Crown, FilePlus, Loader2, Plus, UserCheck, X } from "lucide-react";
+import { ApiCareerProfile, ApiError } from "@/lib/api";
+import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { ICON_TONES, OptionTone } from "./create-flow/OptionCard";
+import { ProfessionInput } from "./ProfessionInput";
+import { ProUpgradeModal } from "./ProUpgradeModal";
+import { ChipListEditor, LABEL_CLASS } from "./career-profiles/ProfileSectionEditor";
+import { tempId } from "./career-profiles/profile-sections";
 
 interface CareerProfilesViewProps {
-  profiles?: CareerProfile[];
-  onCreateCvFromProfile?: (profile: CareerProfile) => void;
-  onSaveTrajectory?: (profile: CareerProfile) => void;
+  onCreateCvFromProfile?: (profileId: string) => void;
 }
 
-export function CareerProfilesView({
-  profiles = SAMPLE_CAREER_PROFILES,
-  onCreateCvFromProfile,
-  onSaveTrajectory,
-}: CareerProfilesViewProps) {
+// Each profile gets a soft tile colour so the grid is easy to scan.
+const PROFILE_TONES: OptionTone[] = ["accent", "sky", "violet", "emerald"];
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function profileFacts(profile: ApiCareerProfile): string[] {
+  const { counts } = profile;
+  return [
+    counts.experience ? plural(counts.experience, "role") : null,
+    counts.skills ? plural(counts.skills, "skill") : null,
+    counts.education ? `${counts.education} education` : null,
+    counts.projects ? plural(counts.projects, "project") : null,
+  ].filter((f): f is string => Boolean(f));
+}
+
+export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesViewProps) {
   const router = useRouter();
-  const { data: profileSkills } = useProfileSkills();
-  const [trajectoryList, setTrajectoryList] = useState<CareerProfile[]>(profiles);
-  const [selectedTrajectoryId, setSelectedTrajectoryId] = useState<string>(
-    profiles[0]?.id || "profile-cloud-architect"
-  );
-  const [previewProfile, setPreviewProfile] = useState<CareerProfile | null>(null);
-  const { data: previewSummary, isLoading: isSummaryLoading } = useProfileSummary(
-    previewProfile?.id ?? null
-  );
-  const [isNewTrajectoryModalOpen, setIsNewTrajectoryModalOpen] = useState(false);
+  const { data: profiles = [], isLoading } = useProfiles();
+  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const createProfile = useCreateProfile();
 
-  // New Trajectory form states
+  const [isNewOpen, setIsNewOpen] = useState(false);
+  const [paywallOpen, setPaywallOpen] = useState(false);
   const [newRole, setNewRole] = useState("");
-  const [newDomain, setNewDomain] = useState("");
-  const [newCompanies, setNewCompanies] = useState("");
-  const [newHighlight, setNewHighlight] = useState("");
-  const [newSkills, setNewSkills] = useState("");
-  const [isCreatingTrajectory, setIsCreatingTrajectory] = useState(false);
-  const [createTrajectoryError, setCreateTrajectoryError] = useState<string | null>(null);
+  const [copyFrom, setCopyFrom] = useState("");
+  const [newSkills, setNewSkills] = useState<string[]>([]);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [existing, setExisting] = useState<{ id: string; title: string } | null>(null);
 
-  // Sync with prop if it updates
-  React.useEffect(() => {
-    if (profiles && profiles.length > 0) {
-      setTrajectoryList(profiles);
+  const openNew = () => {
+    if (!isPro) {
+      setPaywallOpen(true);
+      return;
     }
-  }, [profiles]);
+    setNewRole("");
+    setCopyFrom("");
+    setNewSkills([]);
+    setCreateError(null);
+    setExisting(null);
+    setIsNewOpen(true);
+  };
 
-  const handleCreateTrajectory = async (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRole.trim()) return;
-
-    setCreateTrajectoryError(null);
-    setIsCreatingTrajectory(true);
-
-    const companyArray = newCompanies
-      ? newCompanies.split(",").map((c) => c.trim()).filter(Boolean)
-      : [];
-    const skillsArray = newSkills
-      ? newSkills.split(",").map((s) => s.trim()).filter(Boolean)
-      : [];
-
+    setCreateError(null);
+    setExisting(null);
     try {
-      const profile = await createProfile(newRole.trim());
-      const created: CareerProfile = {
-        id: profile.id,
-        roleTitle: newRole.trim(),
-        domain: newDomain.trim(),
-        readinessScore: 0,
-        targetCompanies: companyArray,
-        skills: skillsArray,
-        highlight: newHighlight.trim(),
-        cvData: {
-          ...defaultSampleCv,
-          id: "cv-new",
-          title: `${newRole.trim()} – Master Trajectory`,
-          targetRole: newRole.trim(),
-          skills: skillsArray,
-          atsScore: 0,
-          personalInfo: { ...defaultSampleCv.personalInfo, fullName: "", email: "", phone: "" },
-        },
-      };
-
-      setTrajectoryList((prev) => [created, ...prev]);
-      onSaveTrajectory?.(created);
-
-      // Reset and close
-      setNewRole("");
-      setNewDomain("");
-      setNewCompanies("");
-      setNewHighlight("");
-      setNewSkills("");
-      setIsNewTrajectoryModalOpen(false);
+      const profile = await createProfile.mutateAsync({
+        title: newRole.trim(),
+        ...(copyFrom ? { copyFromProfileId: copyFrom } : {}),
+        ...(newSkills.length && !copyFrom ? { content: { skills: newSkills.map((name) => ({ id: tempId(), name })) } } : {}),
+      });
+      setIsNewOpen(false);
+      router.push(`/dashboard/career-profiles/${profile.id}`);
     } catch (err) {
-      setCreateTrajectoryError(err instanceof ApiError ? err.message : "Could not save this trajectory. Please try again.");
-    } finally {
-      setIsCreatingTrajectory(false);
+      if (err instanceof ApiError && err.code === "PRO_REQUIRED") {
+        setIsNewOpen(false);
+        setPaywallOpen(true);
+        return;
+      }
+      if (err instanceof ApiError && err.code === "PROFILE_ROLE_EXISTS" && typeof err.details.existingProfileId === "string") {
+        setExisting({ id: err.details.existingProfileId, title: String(err.details.existingProfileTitle ?? "this role") });
+        return;
+      }
+      setCreateError(err instanceof ApiError ? err.message : "Could not create this profile. Please try again.");
     }
   };
 
   return (
-    <div className="px-8 py-10 sm:px-14 sm:py-14 lg:px-20 lg:py-16 max-w-7xl mx-auto w-full">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-2.5 mb-1.5">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-950">
-              Career Profiles
-            </h1>
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-neutral-100 text-neutral-800 border border-neutral-200">
-              {trajectoryList.length} Active Trajectories
-            </span>
-          </div>
-          <p className="text-sm text-neutral-500">
-            Manage your verified career trajectories, credentials, and launch tailored resumes.
+    <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
+        <div className="max-w-2xl">
+          <h1 className="text-xl font-bold text-neutral-950 tracking-tight">Career profiles</h1>
+          <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
+            One profile per role you go for. Each holds your experience, skills and education for that role, so every
+            new CV starts from everything you&apos;ve already told us.
           </p>
         </div>
-
-        {/* Create New Trajectory Button */}
         <button
           type="button"
-          onClick={() => setIsNewTrajectoryModalOpen(true)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-neutral-950 text-white font-semibold text-xs hover:bg-neutral-800 transition-colors shadow-xs self-start sm:self-auto cursor-pointer"
+          onClick={openNew}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 transition-colors self-start sm:self-auto cursor-pointer"
         >
-          <Plus className="w-4 h-4" />
-          <span>New Trajectory</span>
+          {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
+          New profile
         </button>
       </div>
 
-      {/* Trajectories Section */}
-      <div className="mb-10">
-        <h3 className="text-base font-bold text-neutral-950 mb-4 flex items-center gap-2">
-          <span>Active Role Trajectories</span>
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600">
-            {trajectoryList.length}
-          </span>
-        </h3>
+      {!isPro && profiles.length > 0 && (
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">Your profiles are read-only on the free plan. Upgrade to edit them and build CVs from them.</p>
+          <button type="button" onClick={() => setPaywallOpen(true)} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-neutral-950 text-white text-xs font-semibold cursor-pointer">
+            <Crown className="w-3.5 h-3.5" /> Upgrade
+          </button>
+        </div>
+      )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {trajectoryList.map((traj) => {
-            const isSelected = selectedTrajectoryId === traj.id;
+      {isLoading ? (
+        <div className="flex justify-center py-24 text-neutral-400">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      ) : profiles.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 px-6 py-16 text-center">
+          <span className={`w-11 h-11 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.violet}`}>
+            <UserCheck className="w-5 h-5" />
+          </span>
+          <h2 className="text-base font-bold text-neutral-950">No profiles yet</h2>
+          <p className="mt-1 text-sm text-neutral-500 max-w-md mx-auto leading-relaxed">
+            {isPro
+              ? "Create one for a role you're targeting, or save the next CV you make to a profile."
+              : "Career profiles are part of FitCV Pro. Keep everything for a role in one place and build tailored CVs from it."}
+          </p>
+          <button
+            type="button"
+            onClick={openNew}
+            className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 cursor-pointer"
+          >
+            {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
+            {isPro ? "Create a profile" : "Upgrade to Pro"}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {profiles.map((profile, idx) => {
+            const tone = PROFILE_TONES[idx % PROFILE_TONES.length];
+            const facts = profileFacts(profile);
             return (
               <div
-                key={traj.id}
-                onClick={() => {
-                  setSelectedTrajectoryId(traj.id);
-                  setPreviewProfile(traj);
-                }}
-                className={`rounded-3xl p-6 border transition-all cursor-pointer flex flex-col justify-between group ${
-                  isSelected
-                    ? "bg-white border-neutral-950 shadow-md ring-1 ring-neutral-950"
-                    : "bg-white border-neutral-200/90 hover:border-neutral-400/80 shadow-2xs"
-                }`}
+                key={profile.id}
+                className="group relative flex flex-col rounded-lg border border-neutral-300 bg-gradient-to-b from-white to-neutral-50 p-5 hover:border-accent-border transition-colors"
               >
-                <div>
-                  <div className="flex items-center justify-between gap-2 mb-2.5">
-                    <span className="text-xs font-semibold text-neutral-500">
-                      {traj.domain}
-                    </span>
-                    <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      {traj.readinessScore}% Match
-                    </span>
-                  </div>
-
-                  <h4 className="text-base font-bold text-neutral-950 mb-1.5 group-hover:text-neutral-700 transition-colors">
-                    {traj.roleTitle}
-                  </h4>
-
-                  <p className="text-xs text-neutral-600 leading-relaxed mb-4 line-clamp-2">
-                    {traj.highlight}
-                  </p>
-
-                  {/* Target Companies Chips */}
-                  <div className="flex flex-wrap gap-1 mb-4">
-                    {traj.targetCompanies.slice(0, 3).map((comp, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 rounded-md bg-neutral-100 text-[10px] font-medium text-neutral-700"
-                      >
-                        {comp}
-                      </span>
-                    ))}
+                <Link
+                  href={`/dashboard/career-profiles/${profile.id}`}
+                  className="absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  aria-label={`Open ${profile.title}`}
+                />
+                <div className="flex items-start gap-3.5">
+                  <span className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES[tone]}`}>
+                    <UserCheck className="w-[18px] h-[18px]" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-base font-bold text-neutral-950 tracking-tight truncate">{profile.title}</h3>
+                    <p className="text-xs text-neutral-500 truncate">
+                      {profile.headline && profile.headline !== profile.title ? profile.headline : profile.occupationCategory || "Career profile"}
+                    </p>
                   </div>
                 </div>
 
-                <div className="pt-3.5 border-t border-neutral-100 flex items-center justify-between text-xs">
-                  <span className="text-neutral-500 font-medium text-[11px]">
-                    {traj.skills.length} Core Skills
-                  </span>
+                <p className="mt-4 text-xs text-neutral-600 min-h-[2.5rem]">
+                  {facts.length ? facts.join(" · ") : "Empty so far. Open it to add your experience and skills."}
+                </p>
 
+                <div className="mt-5 pt-4 border-t border-neutral-200 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-medium text-neutral-500">
+                    {plural(profile.documentCount, "CV")} · updated {new Date(profile.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </span>
                   <button
                     type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setPreviewProfile(traj);
-                    }}
-                    className="text-neutral-950 font-bold flex items-center gap-1 text-[11px] hover:text-neutral-600 cursor-pointer"
+                    onClick={() => (isPro ? onCreateCvFromProfile?.(profile.id) : setPaywallOpen(true))}
+                    className="relative z-10 inline-flex items-center gap-1.5 text-xs font-semibold text-accent-strong hover:text-accent cursor-pointer"
                   >
-                    <span>View Profile</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <FilePlus className="w-3.5 h-3.5" />
+                    Create CV
+                    <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                   </button>
                 </div>
               </div>
             );
           })}
-        </div>
-      </div>
 
-      {/* Skills Inventory Grid */}
-      <div className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs p-6 sm:p-8">
-        <div className="mb-6 pb-4 border-b border-neutral-100">
-          <h3 className="text-base font-bold text-neutral-950">
-            Master Skills Inventory
-          </h3>
-          <p className="text-xs text-neutral-500">
-            Skills aggregated from every resume across your career profiles
-          </p>
-        </div>
-
-        {profileSkills && profileSkills.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
-            {profileSkills.map((skill, i) => (
-              <span
-                key={i}
-                className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-800"
-              >
-                {skill}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-xs text-neutral-400">
-            No skills yet — generate a CV under one of your career profiles to populate this.
-          </p>
-        )}
-      </div>
-
-      {/* ================= PROFILE PREVIEW MODAL ================= */}
-      {previewProfile && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-lg bg-white rounded-[32px] border border-neutral-200/90 shadow-2xl p-7 sm:p-9 relative my-8 animate-in fade-in zoom-in-95 duration-200">
-            {/* Close Button */}
+          {isPro && (
             <button
               type="button"
-              onClick={() => setPreviewProfile(null)}
-              className="absolute top-6 right-6 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+              onClick={openNew}
+              className="group flex flex-col items-center justify-center gap-3 min-h-[200px] rounded-lg border border-dashed border-neutral-300 bg-white/60 text-center hover:border-accent-border hover:bg-white transition-colors cursor-pointer"
             >
-              <X className="w-4 h-4" />
+              <span className={`w-10 h-10 rounded-xl flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.neutral} group-hover:text-accent transition-colors`}>
+                <Plus className="w-5 h-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold text-neutral-950">New profile</span>
+                <span className="block mt-0.5 text-xs text-neutral-500">Another role you&apos;re going for</span>
+              </span>
             </button>
-
-            {/* Profile Avatar / Badge */}
-            <div className="flex items-center gap-3.5 mb-6">
-              <div className="w-12 h-12 rounded-2xl bg-neutral-950 text-white flex items-center justify-center font-bold text-base shadow-xs shrink-0">
-                <UserCheck className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-lg font-bold text-neutral-950">
-                    {previewProfile.roleTitle}
-                  </h3>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    {isSummaryLoading ? "Analyzing..." : `${previewSummary?.readinessScore ?? 0}% Match`}
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-500">
-                  {isSummaryLoading ? "Analyzing your resumes..." : previewSummary?.domain || "No domain identified yet"}
-                </p>
-              </div>
-            </div>
-
-            {/* Trajectory Details Body */}
-            <div className="space-y-4 mb-8">
-              {/* Highlight Card */}
-              <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/80">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-1">
-                  Key Career Highlight
-                </div>
-                <p className="text-xs text-neutral-800 leading-relaxed italic">
-                  {isSummaryLoading
-                    ? "Analyzing your resumes for a standout achievement..."
-                    : previewSummary?.highlight
-                      ? `“${previewSummary.highlight}”`
-                      : "No highlight identified yet — generate a CV under this profile first."}
-                </p>
-              </div>
-
-              {/* Target Companies */}
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2">
-                  Target Companies
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {isSummaryLoading ? (
-                    <span className="text-xs text-neutral-400">Analyzing...</span>
-                  ) : previewSummary?.targetCompanies.length ? (
-                    previewSummary.targetCompanies.map((c, i) => (
-                      <span
-                        key={i}
-                        className="px-2.5 py-1 rounded-xl bg-white border border-neutral-200 text-xs font-medium text-neutral-800 shadow-2xs"
-                      >
-                        {c}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-neutral-400">None identified yet</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Core Skills */}
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 mb-2">
-                  Verified Skills ({previewSummary?.skills.length ?? 0})
-                </div>
-                <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto pr-1">
-                  {isSummaryLoading ? (
-                    <span className="text-xs text-neutral-400">Analyzing your resumes for skills...</span>
-                  ) : previewSummary?.skills.length ? (
-                    previewSummary.skills.map((s, i) => (
-                      <span
-                        key={i}
-                        className="px-2.5 py-1 rounded-lg bg-neutral-100 text-xs font-medium text-neutral-700"
-                      >
-                        {s}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="text-xs text-neutral-400">None identified yet</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ACTION BUTTON: CREATE A RESUME FROM THIS PROFILE */}
-            <div className="space-y-2.5">
-              <button
-                type="button"
-                onClick={() => {
-                  const prof = previewProfile;
-                  setPreviewProfile(null);
-                  onCreateCvFromProfile?.(prof);
-                }}
-                className="w-full py-3.5 rounded-2xl bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-amber-400" />
-                <span>Create a Resume from this Profile</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => router.push(`/dashboard/career-profiles/${previewProfile.id}`)}
-                className="w-full py-2.5 rounded-2xl border border-neutral-200 text-xs font-bold text-neutral-800 hover:bg-neutral-50 transition-colors cursor-pointer flex items-center justify-center gap-2"
-              >
-                <span>View Resumes for this Profile</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setPreviewProfile(null)}
-                className="w-full py-2.5 rounded-2xl border border-neutral-200 text-xs font-semibold text-neutral-600 hover:bg-neutral-50 transition-colors cursor-pointer"
-              >
-                Close Preview
-              </button>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ================= NEW TRAJECTORY CREATION MODAL ================= */}
-      {isNewTrajectoryModalOpen && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="w-full max-w-md bg-white rounded-[32px] border border-neutral-200/90 shadow-2xl p-7 sm:p-9 relative my-8 animate-in fade-in zoom-in-95 duration-200">
+      {/* ================= NEW PROFILE MODAL ================= */}
+      {isNewOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6"
+          onClick={() => setIsNewOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-profile-title"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-lg max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col bg-white rounded-2xl border border-neutral-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+          >
             <button
               type="button"
-              onClick={() => setIsNewTrajectoryModalOpen(false)}
-              className="absolute top-6 right-6 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+              onClick={() => setIsNewOpen(false)}
+              className="absolute top-4 right-4 z-10 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+              title="Close"
             >
               <X className="w-4 h-4" />
             </button>
 
-            <div className="text-center mb-6">
-              <div className="w-10 h-10 rounded-2xl bg-neutral-950 text-white flex items-center justify-center mx-auto mb-3 shadow-xs">
-                <Plus className="w-5 h-5" />
-              </div>
-              <h3 className="text-xl font-bold tracking-tight text-neutral-950">
-                New Career Trajectory
-              </h3>
-              <p className="text-xs text-neutral-500 mt-1">
-                Define a tailored career focus with target roles and skills.
-              </p>
-            </div>
+            <form onSubmit={handleCreate} className="flex flex-col min-h-0 flex-1">
+              <div className="flex-1 min-h-0 overflow-y-auto p-7 sm:p-8">
+                <div className="text-center mb-7">
+                  <span className={`w-11 h-11 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.accent}`}>
+                    <Plus className="w-5 h-5" />
+                  </span>
+                  <h3 id="new-profile-title" className="text-xl font-bold tracking-tight text-neutral-950">
+                    New career profile
+                  </h3>
+                  <p className="text-sm text-neutral-500 mt-1">One profile per role. You&apos;ll fill in the details next.</p>
+                </div>
 
-            <form onSubmit={handleCreateTrajectory} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-neutral-800 mb-1">
-                  Target Role Title *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newRole}
-                  onChange={(e) => setNewRole(e.target.value)}
-                  placeholder="e.g. Staff AI Research Scientist"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950"
-                />
-              </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className={LABEL_CLASS}>
+                      Role <span className="text-accent">*</span>
+                    </label>
+                    <ProfessionInput value={newRole} onChange={setNewRole} autoFocus placeholder="e.g. Backend Developer" />
+                    <p className="mt-1.5 text-xs text-neutral-500">The role itself, not a company. Seniority (Senior, Lead…) is fine.</p>
+                  </div>
 
-              <div>
-                <label className="block text-xs font-bold text-neutral-800 mb-1">
-                  Domain / Department
-                </label>
-                <input
-                  type="text"
-                  value={newDomain}
-                  onChange={(e) => setNewDomain(e.target.value)}
-                  placeholder="e.g. AI Systems & Foundation Models"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950"
-                />
-              </div>
+                  {profiles.length > 0 && (
+                    <div>
+                      <label className={LABEL_CLASS}>Start from</label>
+                      <select
+                        value={copyFrom}
+                        onChange={(e) => setCopyFrom(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm text-neutral-900 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10"
+                      >
+                        <option value="">An empty profile</option>
+                        {profiles.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            A copy of {p.title}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1.5 text-xs text-neutral-500">Handy for a related role: copy your history, then adjust it.</p>
+                    </div>
+                  )}
 
-              <div>
-                <label className="block text-xs font-bold text-neutral-800 mb-1">
-                  Target Companies (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={newCompanies}
-                  onChange={(e) => setNewCompanies(e.target.value)}
-                  placeholder="e.g. Anthropic, OpenAI, DeepMind"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950"
-                />
-              </div>
+                  {!copyFrom && (
+                    <div>
+                      <label className={LABEL_CLASS}>Skills (optional)</label>
+                      <ChipListEditor values={newSkills} onChange={setNewSkills} placeholder="e.g. Node.js, PostgreSQL" />
+                    </div>
+                  )}
+                </div>
 
-              <div>
-                <label className="block text-xs font-bold text-neutral-800 mb-1">
-                  Key Career Highlight / Metric
-                </label>
-                <textarea
-                  rows={2}
-                  value={newHighlight}
-                  onChange={(e) => setNewHighlight(e.target.value)}
-                  placeholder="e.g. Led distributed training cluster scaling across 2,048 H100 GPUs with 99.4% uptime"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950 resize-none"
-                />
+                {existing && (
+                  <div className="mt-5 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    You already have a profile for this role: <span className="font-semibold">{existing.title}</span>.{" "}
+                    <Link href={`/dashboard/career-profiles/${existing.id}`} className="font-semibold underline">
+                      Open it
+                    </Link>
+                  </div>
+                )}
+                {createError && <p className="mt-4 text-xs text-red-600 font-medium text-center">{createError}</p>}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-neutral-800 mb-1">
-                  Core Skills (comma separated)
-                </label>
-                <input
-                  type="text"
-                  value={newSkills}
-                  onChange={(e) => setNewSkills(e.target.value)}
-                  placeholder="e.g. PyTorch, CUDA, Ray, Distributed Training"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-200 text-xs text-neutral-900 focus:outline-none focus:border-neutral-950"
-                />
-              </div>
-
-              {createTrajectoryError && (
-                <p className="text-[11px] text-red-600 font-medium text-center">{createTrajectoryError}</p>
-              )}
-
-              <div className="pt-2 flex items-center gap-3">
+              <div className="shrink-0 px-7 sm:px-8 py-4 border-t border-neutral-200 bg-neutral-50/80 flex gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setIsNewTrajectoryModalOpen(false)}
-                  className="w-1/3 py-3 rounded-xl border border-neutral-200 text-xs font-semibold text-neutral-600 hover:bg-neutral-50 cursor-pointer"
+                  onClick={() => setIsNewOpen(false)}
+                  className="flex-1 px-4 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-700 hover:border-neutral-400 transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreatingTrajectory}
-                  className="w-2/3 py-3 rounded-xl bg-neutral-950 text-white text-xs font-bold hover:bg-neutral-800 transition-colors shadow-md cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={createProfile.isPending || !newRole.trim()}
+                  className="flex-[1.4] px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {isCreatingTrajectory ? "Saving..." : "Save Trajectory"}
+                  {createProfile.isPending ? "Creating..." : "Create profile"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Career profiles are part of FitCV Pro." />
     </div>
   );
 }

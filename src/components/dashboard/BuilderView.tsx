@@ -2,44 +2,51 @@
 
 import React, { useState } from "react";
 import {
-  Plus,
-  Briefcase,
-  Sparkles,
-  LayoutTemplate,
-  Search,
-  SlidersHorizontal,
-  LayoutGrid,
-  List,
-  MoreVertical,
-  CheckCircle2,
-  ExternalLink,
+  FilePlus,
+  Target,
+  PenLine,
   ArrowRight,
-  Download,
-  Copy,
-  Trash2,
-  X,
   FileText,
-  Clock,
   ChevronRight,
-  Zap,
 } from "lucide-react";
 import { CreateCvModal } from "./create-flow/CreateCvModal";
 import { TailorCvModal } from "./create-flow/TailorCvModal";
 import { EnhanceCvModal } from "./create-flow/EnhanceCvModal";
 import { CvEditorWorkspace } from "./create-flow/CvEditorWorkspace";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ResumeCard } from "./ResumeCard";
 import {
   CvData,
-  CareerProfile,
   PastProjectOption,
-  SAMPLE_CAREER_PROFILES,
   defaultSampleCv,
   ResumeDraft,
   INITIAL_DRAFTS,
   TemplateId,
+  templateLabel,
+  DEFAULT_TEMPLATE_ID,
 } from "./create-flow/types";
+import { ICON_TONES } from "./create-flow/OptionCard";
 
 export type { ResumeDraft };
+
+// The soft lift the dashboard's action cards share.
+const CARD_SHADOW = "shadow-[0_1px_2px_rgba(15,17,21,0.04),0_8px_20px_-14px_rgba(15,17,21,0.18)]";
+const CARD_HOVER = "hover:-translate-y-0.5 hover:shadow-[0_1px_2px_rgba(15,17,21,0.04),0_14px_28px_-16px_rgba(15,17,21,0.25)] transition-all duration-200";
+
+// Each action card gets a soft wash in its icon's colour, fading to white,
+// with a border and arrow in the same hue.
+const ACTION_CARD_COLORS = {
+  create: "bg-[linear-gradient(135deg,#fff1e8_0%,#fff8f3_45%,#ffffff_100%)] border-[#f3cfbb] hover:border-[#eab08f]",
+  // As strong as the create card's wash, so all three read as real options.
+  tailor: {
+    card: "bg-[linear-gradient(135deg,#d9edf5_0%,#eef7fa_50%,#ffffff_100%)] border-[#a9d2e1] hover:border-[#6fb2ca]",
+    arrow: "bg-sky-600 text-white shadow-[0_4px_10px_-4px_rgba(2,132,199,0.6)] group-hover:bg-sky-700",
+  },
+  improve: {
+    card: "bg-[linear-gradient(135deg,#e9e1fc_0%,#f4f0fe_50%,#ffffff_100%)] border-[#c7b7f0] hover:border-[#a68ce6]",
+    arrow: "bg-violet-600 text-white shadow-[0_4px_10px_-4px_rgba(124,58,237,0.6)] group-hover:bg-violet-700",
+  },
+} as const;
 
 interface BuilderViewProps {
   onOpenStudio?: (draftId?: string) => void;
@@ -47,8 +54,6 @@ interface BuilderViewProps {
   onNavigateToPastProjects?: () => void;
   drafts?: ResumeDraft[];
   setDrafts?: React.Dispatch<React.SetStateAction<ResumeDraft[]>>;
-  savedProfiles?: CareerProfile[];
-  setSavedProfiles?: React.Dispatch<React.SetStateAction<CareerProfile[]>>;
   activeEditingCv?: CvData | null;
   setActiveEditingCv?: (cv: CvData | null) => void;
   onOpenDraftInEditor?: (draft: ResumeDraft) => void;
@@ -58,7 +63,7 @@ interface BuilderViewProps {
   onCloseCreateModalExternal?: () => void;
   isStartWithTemplateModalOpenExternal?: boolean;
   onCloseStartWithTemplateModalExternal?: () => void;
-  preselectedCareerProfile?: CareerProfile | null;
+  preselectedProfileId?: string | null;
   preselectedTemplate?: TemplateId;
 }
 
@@ -68,8 +73,6 @@ export function BuilderView({
   onNavigateToPastProjects,
   drafts: externalDrafts,
   setDrafts: externalSetDrafts,
-  savedProfiles: externalProfiles,
-  setSavedProfiles: externalSetProfiles,
   activeEditingCv: externalActiveEditingCv,
   setActiveEditingCv: externalSetActiveEditingCv,
   onOpenDraftInEditor: externalOpenDraftInEditor,
@@ -79,22 +82,17 @@ export function BuilderView({
   onCloseCreateModalExternal,
   isStartWithTemplateModalOpenExternal = false,
   onCloseStartWithTemplateModalExternal,
-  preselectedCareerProfile,
+  preselectedProfileId,
   preselectedTemplate,
 }: BuilderViewProps) {
   // Local states as fallbacks
   const [localDrafts, setLocalDrafts] = useState<ResumeDraft[]>(INITIAL_DRAFTS);
-  const [localSavedProfiles, setLocalSavedProfiles] = useState<CareerProfile[]>(
-    SAMPLE_CAREER_PROFILES
-  );
   const [localActiveEditingCv, setLocalActiveEditingCv] = useState<CvData | null>(
     null
   );
 
   const drafts = externalDrafts ?? localDrafts;
   const setDrafts = externalSetDrafts ?? setLocalDrafts;
-  const savedProfiles = externalProfiles ?? localSavedProfiles;
-  const setSavedProfiles = externalSetProfiles ?? setLocalSavedProfiles;
   const activeEditingCv =
     externalActiveEditingCv !== undefined
       ? externalActiveEditingCv
@@ -104,7 +102,6 @@ export function BuilderView({
 
   // Internal Modals
   const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [startWithTemplateOpen, setStartWithTemplateOpen] = useState(false);
   const [tailorModalOpen, setTailorModalOpen] = useState(false);
   const [enhanceModalOpen, setEnhanceModalOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<{
@@ -119,24 +116,15 @@ export function BuilderView({
     setPendingAction({ type, draft });
   };
 
-  const handleSaveCareerProfile = (newProfile: CareerProfile) => {
-    setSavedProfiles((prev) => [newProfile, ...prev]);
-  };
-
   const pastProjectsList: PastProjectOption[] = drafts.map((d) => ({
     id: d.id,
     title: d.title,
     role: d.targetRole,
     company: d.targetCompany,
     atsScore: d.atsScore,
-    templateStyle: (d.templateName.includes("Tech")
-      ? "tech"
-      : d.templateName.includes("Ivy")
-      ? "executive"
-      : d.templateName.includes("Wall")
-      ? "finance"
-      : "swiss") as any,
+    templateStyle: (d.templateId as TemplateId | undefined) ?? DEFAULT_TEMPLATE_ID,
     lastEdited: d.lastEdited,
+    updatedAt: d.updatedAt,
     cvData: {
       ...defaultSampleCv,
       id: d.id,
@@ -177,7 +165,8 @@ export function BuilderView({
       ...draft,
       id: `draft-${Date.now()}`,
       title: `${draft.title} (Copy)`,
-      lastEdited: "Just now",
+      lastEdited: "just now",
+      updatedAt: new Date().toISOString(),
     };
     setDrafts((prev) => [duplicated, ...prev]);
     localOpenDraftInEditor(duplicated);
@@ -203,13 +192,10 @@ export function BuilderView({
             targetRole: savedCv.targetRole,
             targetCompany: "General Application",
             atsScore: savedCv.atsScore,
-            lastEdited: "Just now",
-            templateName:
-              savedCv.templateStyle === "tech"
-                ? "Silicon Valley Tech Lead"
-                : savedCv.templateStyle === "executive"
-                ? "Executive Ivy"
-                : "Modern Minimalist",
+            lastEdited: "just now",
+            updatedAt: new Date().toISOString(),
+            templateName: templateLabel(savedCv.templateStyle),
+            templateId: savedCv.templateStyle,
             accentColor: "bg-neutral-950",
             matchedKeywords: savedCv.skills.slice(0, 5),
           };
@@ -229,128 +215,91 @@ export function BuilderView({
   }
 
   return (
-    <div className="px-8 py-10 sm:px-14 sm:py-14 lg:px-20 lg:py-16 max-w-7xl mx-auto w-full">
-      {/* Header */}
-      <div className="mb-10">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-950">
-          The Builder
-        </h1>
-        <p className="mt-1.5 text-sm text-neutral-500">
-          Create, tailor, or enhance your resumes with AI guidance.
-        </p>
-      </div>
+    <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
 
-      {/* 4 CORE DASHBOARD ACTION CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
-        {/* CARD 1: CREATE NEW CV */}
+      {/* ACTIONS: creating a resume leads; tailoring and improving sit beside it. */}
+      {/* Create stays a little wider (~55/45) without crowding out the other two. */}
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 mb-14">
         <div
-          onClick={() => setCreateModalOpen(true)}
-          className="rounded-3xl p-5 bg-white border border-neutral-200/90 shadow-2xs hover:shadow-md hover:border-neutral-900 transition-all cursor-pointer group flex flex-col justify-between"
+          className={`flex rounded-lg border ${ACTION_CARD_COLORS.create} ${CARD_SHADOW} ${CARD_HOVER}`}
         >
-          <div>
-            <div className="w-10 h-10 rounded-2xl bg-neutral-950 text-white flex items-center justify-center mb-4 shadow-xs group-hover:scale-105 transition-transform">
-              <Plus className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <div className="text-sm font-bold text-neutral-950 tracking-tight">
-              Create New CV
-            </div>
-            <p className="text-xs text-neutral-500 mt-0.5 font-normal">
-              From scratch, old resume, or career profile
-            </p>
-          </div>
-          <div className="pt-4 flex items-center text-xs font-bold text-neutral-950 group-hover:translate-x-0.5 transition-transform">
-            <span>Get Started</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
-          </div>
+          <button
+            type="button"
+            onClick={() => setCreateModalOpen(true)}
+            className="group flex-1 flex items-center gap-5 p-6 sm:p-7 text-left rounded-lg cursor-pointer"
+          >
+            <span className={`w-14 h-14 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.accent}`}>
+              <FilePlus className="w-6 h-6" strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-lg font-semibold tracking-tight text-neutral-950">Create a new resume</span>
+              <span className="block mt-0.5 text-sm text-neutral-500">Build one in minutes. We&apos;ll ask only what we need.</span>
+            </span>
+            <span className="hidden sm:inline-flex shrink-0 items-center gap-1.5 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold group-hover:bg-accent-strong transition-colors">
+              Start
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </span>
+          </button>
         </div>
 
-        {/* CARD 2: TAILOR TO JOB DESCRIPTION */}
-        <div
-          onClick={() => setTailorModalOpen(true)}
-          className="rounded-3xl p-5 bg-white border border-neutral-200/90 shadow-2xs hover:shadow-md hover:border-neutral-900 transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div>
-            <div className="w-10 h-10 rounded-2xl bg-neutral-100 text-neutral-900 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-              <Briefcase className="w-5 h-5" />
-            </div>
-            <div className="text-sm font-bold text-neutral-950 tracking-tight">
-              Tailor to Job Description
-            </div>
-            <p className="text-xs text-neutral-500 mt-0.5 font-normal">
-              0–10 AI match slider &amp; pre-flight checks
-            </p>
-          </div>
-          <div className="pt-4 flex items-center text-xs font-bold text-neutral-950 group-hover:translate-x-0.5 transition-transform">
-            <span>Tailor CV</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
-          </div>
-        </div>
-
-        {/* CARD 3: ENHANCE EXISTING CV */}
-        <div
-          onClick={() => setEnhanceModalOpen(true)}
-          className="rounded-3xl p-5 bg-white border border-neutral-200/90 shadow-2xs hover:shadow-md hover:border-neutral-900 transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div>
-            <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div className="text-sm font-bold text-neutral-950 tracking-tight">
-              Enhance Existing CV
-            </div>
-            <p className="text-xs text-neutral-500 mt-0.5 font-normal">
-              Quantify metrics &amp; boost ATS score
-            </p>
-          </div>
-          <div className="pt-4 flex items-center text-xs font-bold text-neutral-950 group-hover:translate-x-0.5 transition-transform">
-            <span>Optimize</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
-          </div>
-        </div>
-
-        {/* CARD 4: START FROM TEMPLATE */}
-        <div
-          onClick={() => setStartWithTemplateOpen(true)}
-          className="rounded-3xl p-5 bg-white border border-neutral-200/90 shadow-2xs hover:shadow-md hover:border-neutral-900 transition-all cursor-pointer group flex flex-col justify-between"
-        >
-          <div>
-            <div className="w-10 h-10 rounded-2xl bg-neutral-100 text-neutral-900 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform">
-              <LayoutTemplate className="w-5 h-5" />
-            </div>
-            <div className="text-sm font-bold text-neutral-950 tracking-tight">
-              Start from Template
-            </div>
-            <p className="text-xs text-neutral-500 mt-0.5 font-normal">
-              Browse 24+ proven layouts
-            </p>
-          </div>
-          <div className="pt-4 flex items-center text-xs font-bold text-neutral-950 group-hover:translate-x-0.5 transition-transform">
-            <span>Explore</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
-          </div>
+        <div className="flex flex-col gap-4">
+          {(
+            [
+              { title: "Tailor to a job", description: "Match your CV to a job posting", Icon: Target, tone: ICON_TONES.sky, colors: ACTION_CARD_COLORS.tailor, onClick: () => setTailorModalOpen(true) },
+              { title: "Improve a CV", description: "Strengthen one you already have", Icon: PenLine, tone: ICON_TONES.violet, colors: ACTION_CARD_COLORS.improve, onClick: () => setEnhanceModalOpen(true) },
+            ] as const
+          ).map(({ title, description, Icon, tone, colors, onClick }) => (
+            <button
+              key={title}
+              type="button"
+              onClick={onClick}
+              className={`group flex-1 flex items-center gap-4 p-5 rounded-lg border text-left cursor-pointer ${colors.card} ${CARD_SHADOW} ${CARD_HOVER}`}
+            >
+              <span className={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-b border ${tone}`}>
+                <Icon className="w-[22px] h-[22px]" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-semibold tracking-tight text-neutral-950">{title}</span>
+                <span className="block mt-0.5 text-[13px] text-neutral-600">{description}</span>
+              </span>
+              <span className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center transition-colors ${colors.arrow}`}>
+                <ChevronRight className="w-4 h-4 group-hover:translate-x-px transition-transform" />
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
       {/* RECENT RESUMES SECTION HEADER WITH 'SEE ALL' BUTTON */}
-      <div className="flex items-center justify-between gap-4 mb-6">
-        <div className="flex items-center gap-2.5">
-          <h2 className="text-lg font-bold text-neutral-950 tracking-tight">
-            Recent Resumes
+      <div className="flex items-center justify-between gap-4 mb-5">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-neutral-600">
+            Recent resumes
           </h2>
-          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-neutral-100 text-neutral-600 border border-neutral-200">
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500">
             {drafts.length}
           </span>
         </div>
 
-        {/* See All link redirecting to Past Projects */}
-        <button
-          type="button"
-          onClick={onNavigateToPastProjects}
-          className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-700 hover:text-neutral-950 transition-colors cursor-pointer group"
-        >
-          <span>See all</span>
-          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => onNavigateToTemplates?.()}
+            className="text-xs font-medium text-neutral-500 hover:text-accent-strong transition-colors cursor-pointer"
+          >
+            Browse templates
+          </button>
+          <span className="h-3 w-px bg-neutral-300" aria-hidden />
+          {/* See All link redirecting to Past Projects */}
+          <button
+            type="button"
+            onClick={onNavigateToPastProjects}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 hover:text-accent-strong transition-colors cursor-pointer group"
+          >
+            <span>See all</span>
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </button>
+        </div>
       </div>
 
       {/* RESUMES WORKSPACE GRID */}
@@ -359,106 +308,20 @@ export function BuilderView({
           <FileText className="w-8 h-8 text-neutral-400 mx-auto mb-3" />
           <h3 className="text-sm font-bold text-neutral-950">No resumes found</h3>
           <p className="text-xs text-neutral-500 mt-1">
-            Click &ldquo;Create New CV&rdquo; above to start your first resume.
+            Create a new resume above to get started.
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
           {drafts.slice(0, 6).map((draft) => (
-            <div
+            <ResumeCard
               key={draft.id}
-              className="rounded-3xl bg-white border border-neutral-200/90 shadow-2xs hover:shadow-lg hover:border-neutral-300 transition-all p-6 flex flex-col justify-between group relative overflow-hidden"
-            >
-              {/* Card Top: Title & ATS Score Badge */}
-              <div>
-                <div className="flex items-start justify-between gap-3 mb-2.5">
-                  <div className="min-w-0">
-                    <h3
-                      onClick={() => openDraftInEditor(draft)}
-                      className="text-sm font-bold text-neutral-950 tracking-tight truncate hover:underline cursor-pointer"
-                    >
-                      {draft.title}
-                    </h3>
-                    <p className="text-xs text-neutral-500 truncate mt-0.5">
-                      Target: {draft.targetCompany} • {draft.targetRole}
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                    {draft.atsScore}% ATS
-                  </span>
-                </div>
-
-                {/* Simulated Document Thumbnail Strip */}
-                <div
-                  onClick={() => openDraftInEditor(draft)}
-                  className="my-4 p-3.5 rounded-2xl bg-neutral-50 border border-neutral-100 flex flex-col gap-1.5 cursor-pointer hover:bg-neutral-100/70 transition-colors"
-                >
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <div className={`w-2.5 h-2.5 rounded-sm ${draft.accentColor}`} />
-                    <div className="w-20 h-1.5 bg-neutral-300 rounded-full" />
-                  </div>
-                  <div className="w-full h-1 bg-neutral-200 rounded-full" />
-                  <div className="w-4/5 h-1 bg-neutral-200 rounded-full" />
-                  <div className="w-2/3 h-1 bg-neutral-200 rounded-full" />
-                </div>
-
-                {/* Matched Keywords Tags */}
-                <div className="flex flex-wrap gap-1 mb-4">
-                  {draft.matchedKeywords.slice(0, 3).map((kw, i) => (
-                    <span
-                      key={i}
-                      className="px-2 py-0.5 rounded-md bg-neutral-100 text-[10px] font-medium text-neutral-700"
-                    >
-                      {kw}
-                    </span>
-                  ))}
-                  {draft.matchedKeywords.length > 3 && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] text-neutral-400">
-                      +{draft.matchedKeywords.length - 3} more
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Card Footer: Metadata & Actions */}
-              <div className="pt-3.5 border-t border-neutral-100 flex items-center justify-between text-xs">
-                <span className="text-[11px] text-neutral-400">
-                  {draft.lastEdited}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  {/* Copy Button (Copies and opens the copied one) */}
-                  <button
-                    type="button"
-                    onClick={() => requestAction("duplicate", draft)}
-                    className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
-                    title="Duplicate & Edit"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Delete Action */}
-                  <button
-                    type="button"
-                    onClick={() => requestAction("delete", draft)}
-                    className="p-1.5 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                    title="Delete draft"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  {/* Primary Edit / Open Studio Button */}
-                  <button
-                    type="button"
-                    onClick={() => openDraftInEditor(draft)}
-                    className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-neutral-950 text-white font-bold text-[11px] hover:bg-neutral-800 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    <span>Edit</span>
-                    <ArrowRight className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            </div>
+              draft={draft}
+              onOpen={() => openDraftInEditor(draft)}
+              onDuplicate={() => requestAction("duplicate", draft)}
+              onDelete={() => requestAction("delete", draft)}
+              quiet
+            />
           ))}
         </div>
       )}
@@ -475,30 +338,22 @@ export function BuilderView({
           onCloseCreateModalExternal?.();
           setActiveEditingCv(cvData);
         }}
-        savedProfiles={savedProfiles}
-        initialCareerProfile={preselectedCareerProfile}
-        initialStep={preselectedCareerProfile ? "select-template" : undefined}
-        onSaveCareerProfile={handleSaveCareerProfile}
+        initialProfileId={preselectedProfileId}
       />
 
       {/* ================= MODAL 2: START FROM TEMPLATE ================= */}
       <CreateCvModal
-        isOpen={startWithTemplateOpen || isStartWithTemplateModalOpenExternal}
-        startWithTemplate={true}
+        isOpen={isStartWithTemplateModalOpenExternal}
         initialTemplate={
           isStartWithTemplateModalOpenExternal ? preselectedTemplate : undefined
         }
         onClose={() => {
-          setStartWithTemplateOpen(false);
           onCloseStartWithTemplateModalExternal?.();
         }}
         onComplete={(cvData) => {
-          setStartWithTemplateOpen(false);
           onCloseStartWithTemplateModalExternal?.();
           setActiveEditingCv(cvData);
         }}
-        savedProfiles={savedProfiles}
-        onSaveCareerProfile={handleSaveCareerProfile}
       />
 
       {/* ================= MODAL 3: TAILOR TO JOB DESCRIPTION ================= */}
@@ -509,9 +364,7 @@ export function BuilderView({
           setTailorModalOpen(false);
           setActiveEditingCv(cvData);
         }}
-        careerProfiles={savedProfiles}
         pastProjects={pastProjectsList}
-        onSaveCareerProfile={handleSaveCareerProfile}
       />
 
       {/* ================= MODAL 4: ENHANCE EXISTING CV ================= */}
@@ -522,9 +375,7 @@ export function BuilderView({
           setEnhanceModalOpen(false);
           setActiveEditingCv(cvData);
         }}
-        careerProfiles={savedProfiles}
         pastProjects={pastProjectsList}
-        onSaveCareerProfile={handleSaveCareerProfile}
       />
 
       <ConfirmDialog

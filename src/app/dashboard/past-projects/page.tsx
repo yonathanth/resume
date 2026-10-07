@@ -6,6 +6,7 @@ import { useDashboard } from "@/components/dashboard/DashboardContext";
 export default function PastProjectsPage() {
   const {
     drafts,
+    isLoadingDrafts,
     handleOpenDraftInEditor,
     handleDuplicateDraft,
     handleDeleteDraft,
@@ -16,6 +17,7 @@ export default function PastProjectsPage() {
   return (
     <PastProjectsView
       drafts={drafts}
+      isLoading={isLoadingDrafts}
       onOpenDraft={handleOpenDraftInEditor}
       onDuplicateDraft={handleDuplicateDraft}
       onDeleteDraft={handleDeleteDraft}

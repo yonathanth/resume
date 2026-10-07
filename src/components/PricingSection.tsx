@@ -2,166 +2,120 @@
 
 import React from "react";
 import Link from "next/link";
-import { Check, ArrowRight, ExternalLink } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
+import { CtaButton } from "@/components/CtaButton";
+import { Reveal } from "@/components/Reveal";
 
-interface PricingSectionProps {
-  onSelectPlan?: (plan: string) => void;
+// Mirrors what the app actually sells: free accounts get 3 AI generations
+// (FREE_GENERATION_LIMIT in resume-back entitlement.service), Pro is unlimited —
+// $5/month through Polar, or 80 ETB/month through Chapa.
+
+const FREE_FEATURES = [
+  "3 AI resume generations",
+  "Every recruiter-tested template",
+  "Import your old CV (PDF or DOCX)",
+  "Click-to-edit resume editor",
+  "PDF download",
+];
+
+const PRO_FEATURES = [
+  "Everything in Free",
+  "Unlimited AI resume generations",
+  "Unlimited tailoring to job posts",
+  "Unlimited resume improvements",
+  "Cancel anytime",
+];
+
+function FeatureList({ items, strong }: { items: string[]; strong?: boolean }) {
+  return (
+    <ul className="space-y-3">
+      {items.map((item) => (
+        <li key={item} className="flex items-center gap-3 text-[14.5px] text-neutral-700">
+          <span
+            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+              strong ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-500"
+            }`}
+          >
+            <Check className="h-3 w-3 stroke-[3]" />
+          </span>
+          {item}
+        </li>
+      ))}
+    </ul>
+  );
 }
 
-export function PricingSection({ onSelectPlan }: PricingSectionProps) {
+export function PricingSection() {
   return (
-    <section id="pricing" className="py-24 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto border-t border-neutral-100">
-      {/* Pricing Grid matching the site's container and padding culture */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch max-w-3xl mx-auto">
-        
-        {/* Tier 1: Pro (Popular) - Crisp Elevated White */}
-        <div className="rounded-3xl bg-white border-2 border-neutral-950 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.08)] hover:shadow-xl transition-all p-7 sm:p-8 flex flex-col justify-between relative">
-          <div>
-            {/* Row 1: Title & Popular Badge (Fixed Height: h-8) */}
-            <div className="h-8 flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2.5">
-                <h3 className="text-2xl font-bold text-neutral-950 tracking-tight">Pro</h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-neutral-950 text-white shadow-2xs">
-                  Popular
-                </span>
-              </div>
-            </div>
-            
-            {/* Row 2: Subtitle (Fixed Height: h-8) */}
-            <p className="h-8 text-xs text-neutral-500 mb-5 font-normal flex items-center">
-              For active job seekers & career switchers
-            </p>
+    <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 sm:py-28 lg:px-8">
+      {/* Header */}
+      <Reveal className="mx-auto max-w-2xl text-center">
+        <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.08]">
+          Simple <span className="text-accent">pricing.</span>
+        </h2>
+      </Reveal>
 
-            {/* Row 3: Price & Billing Cadence (Fixed Height: h-16) */}
-            <div className="h-16 flex items-baseline gap-2 mb-6">
-              <span className="text-4xl sm:text-5xl font-extrabold text-neutral-950 tracking-tight">
-                $5
-              </span>
-              <div className="text-[11px] text-neutral-500 leading-tight font-medium">
-                <div>per month</div>
-                <div>billed monthly</div>
-              </div>
-            </div>
-
-            {/* Row 4: CTA Button (Same level across all 3 cards) */}
-            <button
-              onClick={() => onSelectPlan?.("Pro")}
-              className="w-full py-3.5 rounded-full bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 active:scale-98 transition-all shadow-sm cursor-pointer"
-            >
-              Get Pro
-            </button>
-
-            {/* Row 5: Note under button (Fixed Height: h-6) */}
-            <div className="h-6 text-[11px] text-neutral-400 text-center mt-2 mb-6 flex items-center justify-center">
-              For 1 job seeker
-            </div>
-
-            {/* Row 6: Features List */}
-            <div className="pt-6 border-t border-neutral-100">
-              <div className="text-xs font-semibold text-neutral-900 mb-3.5">
-                Core Pro Capabilities
-              </div>
-              <ul className="space-y-3">
-                {[
-                  "Unlimited tailored resumes & cover letters",
-                  "Real-time Job Description keyword matching",
-                  "AI bullet quantification (XYZ formula)",
-                  "ATS scanner & parse compatibility score",
-                  "Instant PDF & editable Word (.docx) export",
-                  "Access to all recruiter-tested templates",
-                  "LinkedIn profile & PDF resume import",
-                ].map((feat, idx) => (
-                  <li key={idx} className="flex items-center gap-2.5 text-xs text-neutral-700 font-medium">
-                    <Check className="w-4 h-4 text-neutral-950 shrink-0 stroke-[2.5]" />
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      {/* Plans */}
+      <div className="mx-auto mt-14 grid max-w-4xl grid-cols-1 gap-6 md:grid-cols-2">
+        {/* Free */}
+        <Reveal>
+        <div className="flex h-full flex-col rounded-3xl border border-neutral-200 bg-white p-8 shadow-[0_12px_32px_-22px_rgba(15,17,21,0.25)]">
+          <h3 className="text-[17px] font-semibold text-neutral-950">Free</h3>
+          <p className="mt-1 text-[14px] text-neutral-500">Try it on your next application.</p>
+          <div className="mt-6 flex items-baseline gap-1.5">
+            <span className="text-5xl font-bold tracking-tight text-neutral-950">$0</span>
+            <span className="text-[14px] text-neutral-400">forever</span>
+          </div>
+          <p className="mt-1.5 text-[13px] text-neutral-400">No card needed</p>
+          <div className="mt-5">
+            <CtaButton href="/signup" variant="secondary" className="w-full">
+              Start for free
+            </CtaButton>
+          </div>
+          <div className="mt-8 border-t border-neutral-100 pt-7">
+            <FeatureList items={FREE_FEATURES} />
           </div>
         </div>
 
-        {/* Tier 2: Enterprise - Sleek Cool Light Gray Shade */}
-        <div className="rounded-3xl bg-[#f3f4f6] border border-neutral-200/90 shadow-2xs hover:shadow-md transition-all p-7 sm:p-8 flex flex-col justify-between">
-          <div>
-            {/* Row 1: Title (Fixed Height: h-8) */}
-            <div className="h-8 flex items-center mb-1">
-              <h3 className="text-2xl font-bold text-neutral-950 tracking-tight">Enterprise</h3>
+        </Reveal>
+
+        {/* Pro */}
+        <Reveal delay={120}>
+        <div className="relative h-full">
+          <div className="relative flex h-full flex-col rounded-3xl border border-neutral-300 bg-white p-8 shadow-[0_18px_44px_-26px_rgba(15,17,21,0.35)]">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[17px] font-semibold text-neutral-950">Pro</h3>
+              <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[12px] font-semibold text-accent-strong">Most popular</span>
             </div>
-            
-            {/* Row 2: Subtitle (Fixed Height: h-8) */}
-            <p className="h-8 text-xs text-neutral-500 mb-5 font-normal flex items-center">
-              For universities, staffing firms & enterprises
-            </p>
-
-            {/* Row 3: Price & Billing Cadence (Fixed Height: h-16) */}
-            <div className="h-16 flex items-baseline gap-2 mb-6">
-              <span className="text-4xl sm:text-5xl font-extrabold text-neutral-950 tracking-tight">
-                Custom
-              </span>
-              <div className="text-[11px] text-neutral-500 leading-tight font-medium">
-                <div>tailored volume</div>
-                <div>billed annually</div>
-              </div>
+            <p className="mt-1 text-[14px] text-neutral-500">For an active job search.</p>
+            <div className="mt-6 flex items-baseline gap-1.5">
+              <span className="text-5xl font-bold tracking-tight text-neutral-950">$5</span>
+              <span className="text-[14px] text-neutral-400">/ month</span>
             </div>
-
-            {/* Row 4: CTA Button (Same level across all 3 cards) */}
-            <button
-              onClick={() => onSelectPlan?.("Enterprise")}
-              className="w-full py-3.5 rounded-full border border-neutral-300 bg-white text-neutral-900 font-semibold text-sm hover:bg-neutral-50 hover:border-neutral-400 active:scale-98 transition-all shadow-2xs cursor-pointer"
-            >
-              Contact us
-            </button>
-
-            {/* Row 5: Note under button (Fixed Height: h-6) */}
-            <div className="h-6 text-[11px] text-neutral-400 text-center mt-2 mb-6 flex items-center justify-center">
-              Unlimited candidates & staff
+            <p className="mt-1.5 text-[13px] text-neutral-400">or 80 ETB / month in Ethiopia via Chapa</p>
+            <div className="mt-5">
+              <CtaButton href="/signup" className="w-full">
+                Get Pro
+              </CtaButton>
             </div>
-
-            {/* Row 6: Features List */}
-            <div className="pt-6 border-t border-neutral-200/80">
-              <div className="text-xs font-semibold text-neutral-900 mb-3.5">
-                Everything in Pro plus
-              </div>
-              <ul className="space-y-3">
-                {[
-                  "Custom ATS parser rules & benchmarks",
-                  "Dedicated career success manager",
-                  "SAML & SCIM single sign-on (SSO)",
-                  "Custom branding & domain export",
-                  "Full REST API access & webhooks",
-                  "Enterprise SLA & security compliance",
-                  "Tailored onboarding & staff training",
-                ].map((feat, idx) => (
-                  <li key={idx} className="flex items-center gap-2.5 text-xs text-neutral-700 font-medium">
-                    <Check className="w-4 h-4 text-neutral-950 shrink-0 stroke-[2.5]" />
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="mt-8 border-t border-neutral-100 pt-7">
+              <FeatureList items={PRO_FEATURES} strong />
             </div>
           </div>
         </div>
-
+        </Reveal>
       </div>
 
-      {/* Centered Get started CTA Button directly under pricing */}
-      <div className="mt-14 sm:mt-16 text-center flex flex-col items-center justify-center gap-3">
-        <Link
-          href="/signup"
-          className="px-9 py-4 rounded-full bg-neutral-950 text-white font-semibold text-base hover:bg-neutral-800 active:scale-98 transition-all duration-150 shadow-md hover:shadow-lg flex items-center gap-2.5 group cursor-pointer"
-        >
-          <span>Get started</span>
-          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-        </Link>
+      {/* Footnote */}
+      <Reveal className="mt-12 flex flex-col items-center text-center">
         <Link
           href="/pricing"
-          className="inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-neutral-500 hover:text-neutral-950 transition-colors pt-2 group"
+          className="group inline-flex items-center gap-1.5 text-[14px] font-medium text-neutral-600 transition-colors hover:text-neutral-950"
         >
-          <span>Explore full dark pricing &amp; the Executive+ add-on</span>
-          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          See full pricing &amp; FAQ
+          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
         </Link>
-      </div>
+      </Reveal>
     </section>
   );
 }
