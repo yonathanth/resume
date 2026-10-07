@@ -7,8 +7,6 @@ export default function BuilderPage() {
   const {
     drafts,
     setDrafts,
-    savedProfiles,
-    setSavedProfiles,
     activeEditingCv,
     setActiveEditingCv,
     handleOpenDraftInEditor,
@@ -18,7 +16,7 @@ export default function BuilderPage() {
     setIsCreateModalOpen,
     isStartWithTemplateOpen,
     setIsStartWithTemplateOpen,
-    preselectedCareerProfile,
+    preselectedProfileId,
     preselectedTemplate,
     goToPastProjects,
     goToTemplates,
@@ -28,8 +26,6 @@ export default function BuilderPage() {
     <BuilderView
       drafts={drafts}
       setDrafts={setDrafts}
-      savedProfiles={savedProfiles}
-      setSavedProfiles={setSavedProfiles}
       activeEditingCv={activeEditingCv}
       setActiveEditingCv={setActiveEditingCv}
       onOpenDraftInEditor={handleOpenDraftInEditor}
@@ -39,7 +35,7 @@ export default function BuilderPage() {
       onCloseCreateModalExternal={() => setIsCreateModalOpen(false)}
       isStartWithTemplateModalOpenExternal={isStartWithTemplateOpen}
       onCloseStartWithTemplateModalExternal={() => setIsStartWithTemplateOpen(false)}
-      preselectedCareerProfile={preselectedCareerProfile}
+      preselectedProfileId={preselectedProfileId}
       preselectedTemplate={preselectedTemplate}
       onNavigateToPastProjects={goToPastProjects}
       onNavigateToTemplates={goToTemplates}

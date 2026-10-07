@@ -7,12 +7,16 @@ import {
   login,
   googleAuth,
   logout,
+  logoutAll,
+  changePassword,
+  deleteAccount,
   getMe,
   updateMe,
   setAccessToken,
   clearAccessToken,
   getAccessToken,
   AuthResponse,
+  UpdateMeInput,
 } from "@/lib/api";
 import { useHasMounted } from "./use-has-mounted";
 
@@ -66,7 +70,7 @@ export function useMe() {
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { fullName?: string; email?: string }) => updateMe(input),
+    mutationFn: (input: UpdateMeInput) => updateMe(input),
     onSuccess: (user) => {
       queryClient.setQueryData(ME_QUERY_KEY, user);
     },
@@ -85,6 +89,46 @@ export function useLogout() {
       clearAccessToken();
       queryClient.clear();
       router.push("/login");
+    },
+  });
+}
+
+export function useChangePassword() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { currentPassword?: string; newPassword: string }) => changePassword(input),
+    onSuccess: (user) => {
+      queryClient.setQueryData(ME_QUERY_KEY, user);
+    },
+  });
+}
+
+// Signs out everywhere. Like useLogout, this device is cleared even if the
+// request fails.
+export function useLogoutAll() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => logoutAll(),
+    onSettled: () => {
+      clearAccessToken();
+      queryClient.clear();
+      router.push("/login");
+    },
+  });
+}
+
+// Only clears local state once the server confirms the account is gone — a
+// failed delete (wrong password, active subscription) keeps the user signed in.
+export function useDeleteAccount() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { password?: string; confirmEmail?: string }) => deleteAccount(input),
+    onSuccess: () => {
+      clearAccessToken();
+      queryClient.clear();
+      router.push("/");
     },
   });
 }

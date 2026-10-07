@@ -1,103 +1,174 @@
+// The editor's working model of a CV. It maps 1:1 onto the backend's
+// CVContent (see lib/cv-mapper.ts) so nothing is lost when a CV is loaded
+// into the editor and saved back. List items carry a local `id` only so React
+// can track them; ids are never sent to the backend.
+
+export interface CvBullet {
+  id: string;
+  /** Optional bold lead-in ("Frontend Architecture"); empty = plain bullet. */
+  label: string;
+  text: string;
+}
+
 export interface WorkExperience {
   id: string;
   role: string;
   company: string;
   location: string;
+  url: string;
   startDate: string;
   endDate: string;
   isCurrent: boolean;
-  bullets: string[];
+  bullets: CvBullet[];
 }
 
 export interface Education {
   id: string;
   degree: string;
+  field: string;
   school: string;
   location: string;
-  gradYear: string;
-  honors?: string;
+  gpa: string;
+  startDate: string;
+  /** Free text — "2026-06" or "Expected 2026". */
+  endDate: string;
+  honors: string;
+  /** Thesis title, final grade, notable coursework. */
+  bullets: CvBullet[];
 }
 
-export type TemplateId =
-  | "tech"
-  | "executive"
-  | "swiss"
-  | "finance"
-  | "ai"
-  | "creative";
+export interface CvLink {
+  id: string;
+  label: string;
+  url: string;
+}
 
-export interface TemplateOption {
-  id: TemplateId;
+export interface CvProject {
+  id: string;
   name: string;
-  category: string;
-  fontFamily: string;
+  subtitle: string;
   description: string;
-  atsScore: number;
-  badge: string;
+  tech: string[];
+  url: string;
+  bullets: CvBullet[];
 }
 
-export const TEMPLATE_OPTIONS: TemplateOption[] = [
-  {
-    id: "tech",
-    name: "Tech Modern",
-    category: "Software & Cloud",
-    fontFamily: "Geist / Inter Sans",
-    description:
-      "Compact high-density hierarchy optimized for technical recruiters, cloud architectures, and GitHub metrics.",
-    atsScore: 98,
-    badge: "Most Popular",
-  },
-  {
-    id: "executive",
-    name: "Executive Serif",
-    category: "Leadership & Strategy",
-    fontFamily: "Merriweather / Times Serif",
-    description:
-      "Classic authoritative serif typography with centered credentials for Directors, VPs, and C-suite leaders.",
-    atsScore: 97,
-    badge: "Ivy League",
-  },
-  {
-    id: "swiss",
-    name: "Minimal Swiss",
-    category: "Product & Design",
-    fontFamily: "Helvetica / Modern Sans",
-    description:
-      "Ultra-clean balanced whitespace with strict typographic grid for Product Managers, Designers, and Founders.",
-    atsScore: 96,
-    badge: "Clean Modern",
-  },
-  {
-    id: "finance",
-    name: "Wall Street Standard",
-    category: "Finance & Quant",
-    fontFamily: "Georgia / Classic Serif",
-    description:
-      "Conservative investment banking and PE format with strict tabular dates and quantitative bullet hierarchy.",
-    atsScore: 99,
-    badge: "M&A Ready",
-  },
-  {
-    id: "ai",
-    name: "Research & AI",
-    category: "R&D & Machine Learning",
-    fontFamily: "Inter / Code Sans",
-    description:
-      "Structured layout highlighting arXiv publications, algorithmic benchmarks, and open-source contributions.",
-    atsScore: 98,
-    badge: "DeepTech",
-  },
-  {
-    id: "creative",
-    name: "Editorial Brand",
-    category: "Brand & Creative",
-    fontFamily: "Playfair / Editorial Sans",
-    description:
-      "Distinct editorial headline hierarchy and campaign impact callouts for Marketing & Creative Directors.",
-    atsScore: 95,
-    badge: "Impact",
-  },
-];
+export interface CvCertification {
+  id: string;
+  name: string;
+  issuer: string;
+  date: string;
+  expires: string;
+  url: string;
+}
+
+/** Research positions, teaching, and extracurricular activities. */
+export interface CvPosition {
+  id: string;
+  title: string;
+  organization: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  bullets: CvBullet[];
+}
+
+/** A Europass-style fact: { label: "Nationality", value: "German" }. */
+export interface CvPersonalDetail {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface CvLanguage {
+  id: string;
+  language: string;
+  proficiency: string;
+}
+
+export interface CvAward {
+  id: string;
+  title: string;
+  issuer: string;
+  date: string;
+  description: string;
+}
+
+export interface CvPublication {
+  id: string;
+  title: string;
+  authors: string;
+  venue: string;
+  date: string;
+  url: string;
+}
+
+export interface CvVolunteering {
+  id: string;
+  organization: string;
+  role: string;
+  location: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+  bullets: CvBullet[];
+}
+
+export interface CvCourse {
+  id: string;
+  name: string;
+  institution: string;
+  date: string;
+}
+
+export interface CvMembership {
+  id: string;
+  organization: string;
+  role: string;
+  startDate: string;
+  endDate: string;
+  isCurrent: boolean;
+}
+
+export interface CvPresentation {
+  id: string;
+  title: string;
+  event: string;
+  date: string;
+  url: string;
+}
+
+export interface CvReference {
+  id: string;
+  name: string;
+  title: string;
+  organization: string;
+  relationship: string;
+  email: string;
+  phone: string;
+}
+
+export interface SkillGroup {
+  id: string;
+  /** Empty category = an unlabeled list of skills. */
+  category: string;
+  items: string[];
+}
+
+/** A template id from the backend registry (GET /api/v1/templates). */
+export type TemplateId = string;
+
+export const DEFAULT_TEMPLATE_ID: TemplateId = "classic";
+
+// Ids saved before templates were real; the backend renders them as the default.
+const LEGACY_TEMPLATE_IDS = new Set(["default", "professional", "tech", "executive", "swiss", "finance", "ai", "creative"]);
+
+/** Display name for a stored template id, without needing the template list loaded. */
+export function templateLabel(id: TemplateId | undefined): string {
+  if (!id || LEGACY_TEMPLATE_IDS.has(id)) return "Classic";
+  return id.charAt(0).toUpperCase() + id.slice(1);
+}
 
 export interface CvData {
   id: string;
@@ -110,29 +181,38 @@ export interface CvData {
     email: string;
     phone: string;
     location: string;
-    linkedin: string;
-    website?: string;
     headline: string;
+    links: CvLink[];
+    /** data:image/...;base64, or "" for none. */
+    photo: string;
   };
   summary: string;
   experiences: WorkExperience[];
   education: Education[];
+  /** Grouped skills — what the editor edits and templates render. */
+  skillGroups: SkillGroup[];
+  /** Every skill as a flat list, always derived from skillGroups. */
   skills: string[];
-  certifications?: string[];
+  projects: CvProject[];
+  certifications: CvCertification[];
+  languages: CvLanguage[];
+  awards: CvAward[];
+  publications: CvPublication[];
+  volunteering: CvVolunteering[];
+  courses: CvCourse[];
+  memberships: CvMembership[];
+  presentations: CvPresentation[];
+  interests: string[];
+  references: CvReference[];
+  personalDetails: CvPersonalDetail[];
+  research: CvPosition[];
+  teaching: CvPosition[];
+  activities: CvPosition[];
+  /** Data-processing consent clause (common on EU CVs). */
+  consent: string;
   jobDescription?: string;
   tailorAlignmentScore?: number; // 0 to 10
   enhancementFocus?: string;
-}
-
-export interface CareerProfile {
-  id: string;
-  roleTitle: string;
-  domain: string;
-  readinessScore: number;
-  targetCompanies: string[];
-  skills: string[];
-  highlight: string;
-  cvData: CvData;
 }
 
 export interface PastProjectOption {
@@ -143,6 +223,8 @@ export interface PastProjectOption {
   atsScore: number;
   templateStyle: TemplateId;
   lastEdited: string;
+  /** ISO time of the last save — keeps its preview thumbnail fresh. */
+  updatedAt?: string;
   cvData: CvData;
 }
 
@@ -166,78 +248,39 @@ export const defaultSampleCv: CvData = {
   id: "cv-new",
   title: "Untitled Resume",
   targetRole: "",
-  templateStyle: "tech",
+  templateStyle: DEFAULT_TEMPLATE_ID,
   atsScore: 0,
   personalInfo: {
     fullName: "",
     email: "",
     phone: "",
     location: "",
-    linkedin: "",
-    website: "",
     headline: "",
+    links: [],
+    photo: "",
   },
   summary: "",
   experiences: [],
   education: [],
+  skillGroups: [],
   skills: [],
+  projects: [],
   certifications: [],
+  languages: [],
+  awards: [],
+  publications: [],
+  volunteering: [],
+  courses: [],
+  memberships: [],
+  presentations: [],
+  interests: [],
+  references: [],
+  personalDetails: [],
+  research: [],
+  teaching: [],
+  activities: [],
+  consent: "",
 };
-
-export const SAMPLE_CAREER_PROFILES: CareerProfile[] = [
-  {
-    id: "profile-cloud-architect",
-    roleTitle: "Senior Cloud Architect",
-    domain: "Infrastructure & Distributed Systems",
-    readinessScore: 98,
-    targetCompanies: ["Stripe", "AWS", "Cloudflare", "Datadog"],
-    skills: ["AWS", "Kubernetes", "Terraform", "Go", "Distributed Systems", "Docker", "PostgreSQL"],
-    highlight: "12M+ daily requests, p99 latency optimization, Terraform & K8s multi-region clusters",
-    cvData: {
-      ...defaultSampleCv,
-      id: "cv-prof-1",
-      title: "Senior Cloud Architect – Master Profile",
-      targetRole: "Senior Cloud Architect",
-      templateStyle: "tech",
-      atsScore: 98,
-    },
-  },
-  {
-    id: "profile-fullstack-lead",
-    roleTitle: "Staff Full Stack Engineer",
-    domain: "Web Architecture & Micro-Frontends",
-    readinessScore: 96,
-    targetCompanies: ["Vercel", "Linear", "Supabase", "Retool"],
-    skills: ["Next.js 16", "React 19", "TypeScript", "Node.js", "Edge Caching", "Tailwind CSS", "GraphQL"],
-    highlight: "Next.js 16 & React 19 micro-frontends, edge caching, real-time sync engines",
-    cvData: {
-      ...defaultSampleCv,
-      id: "cv-prof-2",
-      title: "Staff Full Stack Engineer – Master Profile",
-      targetRole: "Staff Full Stack Engineer",
-      templateStyle: "swiss",
-      atsScore: 96,
-      skills: ["Next.js 16", "React 19", "TypeScript", "Node.js", "Edge Caching", "PostgreSQL", "Redis"],
-    },
-  },
-  {
-    id: "profile-engineering-lead",
-    roleTitle: "VP of Engineering / Lead",
-    domain: "Leadership, Org Scaling & Strategy",
-    readinessScore: 93,
-    targetCompanies: ["Scale AI", "Shopify", "Notion", "Figma"],
-    skills: ["Org Scaling", "Budgeting", "Enterprise SaaS", "Strategic Roadmaps", "Hiring & Mentorship"],
-    highlight: "Scaled engineering team from 6 to 34 engineers, zero-downtime delivery cadence",
-    cvData: {
-      ...defaultSampleCv,
-      id: "cv-prof-3",
-      title: "VP of Engineering – Master Profile",
-      targetRole: "VP of Engineering",
-      templateStyle: "executive",
-      atsScore: 94,
-    },
-  },
-];
 
 export const SAMPLE_PAST_PROJECTS: PastProjectOption[] = [
   {
@@ -246,14 +289,14 @@ export const SAMPLE_PAST_PROJECTS: PastProjectOption[] = [
     role: "Senior Cloud Architect",
     company: "Stripe",
     atsScore: 98,
-    templateStyle: "tech",
+    templateStyle: DEFAULT_TEMPLATE_ID,
     lastEdited: "Today, 3:45 PM",
     cvData: {
       ...defaultSampleCv,
       id: "draft-1",
       title: "Senior Cloud Architect (Stripe)",
       targetRole: "Senior Cloud Architect",
-      templateStyle: "tech",
+      templateStyle: DEFAULT_TEMPLATE_ID,
       atsScore: 98,
     },
   },
@@ -263,14 +306,14 @@ export const SAMPLE_PAST_PROJECTS: PastProjectOption[] = [
     role: "Staff Product Designer",
     company: "Linear",
     atsScore: 95,
-    templateStyle: "swiss",
+    templateStyle: DEFAULT_TEMPLATE_ID,
     lastEdited: "Yesterday",
     cvData: {
       ...defaultSampleCv,
       id: "draft-2",
       title: "Staff Product Designer (Linear)",
       targetRole: "Staff Product Designer",
-      templateStyle: "swiss",
+      templateStyle: DEFAULT_TEMPLATE_ID,
       atsScore: 95,
       skills: ["Figma", "Design Systems", "Prototyping", "User Research", "Interaction Design"],
     },
@@ -281,14 +324,14 @@ export const SAMPLE_PAST_PROJECTS: PastProjectOption[] = [
     role: "Quantitative Analyst",
     company: "Goldman Sachs",
     atsScore: 97,
-    templateStyle: "finance",
+    templateStyle: DEFAULT_TEMPLATE_ID,
     lastEdited: "Sep 08, 2026",
     cvData: {
       ...defaultSampleCv,
       id: "draft-3",
       title: "Quantitative Analyst (Goldman Sachs)",
       targetRole: "Quantitative Analyst",
-      templateStyle: "finance",
+      templateStyle: DEFAULT_TEMPLATE_ID,
       atsScore: 97,
       skills: ["Python", "C++", "Fixed Income", "Risk Models", "Stochastic Calculus"],
     },
@@ -341,6 +384,10 @@ Requirements:
 
 export interface ResumeDraft {
   id: string;
+  /** Template the CV is saved with (drives its thumbnail). */
+  templateId?: string;
+  /** ISO timestamp of the last save — busts the cached thumbnail after edits. */
+  updatedAt?: string;
   title: string;
   targetRole: string;
   targetCompany: string;

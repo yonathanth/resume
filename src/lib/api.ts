@@ -18,7 +18,23 @@ export interface ApiUser {
   id: string;
   email: string;
   fullName: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  phone: string | null;
+  /** A catalog title or the user's own wording. */
+  occupationTitle: string | null;
+  /** Set only when occupationTitle matches the catalog. */
+  occupationId: string | null;
+  onboardingCompleted: boolean;
+  /** What happens to a matching career profile when a new CV is made. */
+  profileAutoSync: ProfileAutoSync;
+  /** False for a Google-only account (it can set a first password). */
+  hasPassword: boolean;
+  hasGoogle: boolean;
+  createdAt: string;
 }
+
+export type ProfileAutoSync = "ask" | "always" | "never";
 
 export interface AuthResponse {
   user: ApiUser;
@@ -28,11 +44,14 @@ export interface AuthResponse {
 export class ApiError extends Error {
   code: string;
   status: number;
+  /** Extra fields the error envelope carried beyond code/message (e.g. existingProfileId). */
+  details: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, details: Record<string, unknown> = {}) {
     super(message);
     this.code = code;
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -62,6 +81,12 @@ function requestRefresh(): Promise<string | null> {
       });
   }
   return refreshPromise;
+}
+
+// Exchanges the httpOnly refresh cookie for a fresh access token (stored on
+// success). Resolves null when there's no valid session.
+export function refreshAccessToken(): Promise<string | null> {
+  return requestRefresh();
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
@@ -99,8 +124,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
   const body = await res.json().catch(() => null);
 
   if (!res.ok || body?.error) {
-    const error = body?.error ?? { code: "UNKNOWN_ERROR", message: "Something went wrong" };
-    throw new ApiError(res.status, error.code, error.message);
+    const { code = "UNKNOWN_ERROR", message = "Something went wrong", ...details } = body?.error ?? {};
+    throw new ApiError(res.status, code, message, details);
   }
 
   return body.data as T;
@@ -133,11 +158,57 @@ export function getMe() {
   return apiFetch<ApiUser>("/api/v1/auth/me");
 }
 
-export function updateMe(input: { fullName?: string; email?: string }) {
+export interface UpdateMeInput {
+  fullName?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  /** "" clears it. */
+  phone?: string;
+  occupationTitle?: string;
+  completeOnboarding?: true;
+  profileAutoSync?: ProfileAutoSync;
+}
+
+export function updateMe(input: UpdateMeInput) {
   return apiFetch<ApiUser>("/api/v1/auth/me", {
     method: "PATCH",
     body: JSON.stringify(input),
   });
+}
+
+export interface OccupationSuggestion {
+  id: string;
+  title: string;
+  category: string;
+}
+
+// Typeahead over the curated occupation catalog (onboarding, Account settings).
+export function searchOccupations(q: string, limit = 8) {
+  return apiFetch<OccupationSuggestion[]>(`/api/v1/occupations?q=${encodeURIComponent(q)}&limit=${limit}`);
+}
+
+// Changes the password, or sets a first one on a Google-only account (omit
+// currentPassword). Signs out every other device; this one stays signed in.
+export function changePassword(input: { currentPassword?: string; newPassword: string }) {
+  return apiFetch<ApiUser>("/api/v1/auth/password", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// Permanently deletes the account. Re-confirm with the password, or — for a
+// Google-only account — by typing the account email back.
+export function deleteAccount(input: { password?: string; confirmEmail?: string }) {
+  return apiFetch<{ success: boolean }>("/api/v1/auth/me", {
+    method: "DELETE",
+    body: JSON.stringify(input),
+  });
+}
+
+// Ends every session on every device, including this one.
+export function logoutAll() {
+  return apiFetch<{ success: boolean }>("/api/v1/auth/logout-all", { method: "POST" });
 }
 
 // Best-effort — clears the httpOnly refresh cookie server-side. The access
@@ -146,13 +217,103 @@ export function logout() {
   return apiFetch<{ success: boolean }>("/api/v1/auth/logout", { method: "POST" });
 }
 
+// ---- Career profiles (see the backend's schemas/profile-content.schema.ts)
+
+export type ProfileItemSource = "manual" | "cv" | "upload" | "freestyle" | "clarification" | "enhance";
+
+export interface ProfileItemMeta {
+  source: ProfileItemSource;
+  sourceCvId?: string;
+  /** True once edited by hand — automatic merges never touch it. */
+  locked: boolean;
+  aliases?: string[];
+  addedAt: string;
+  updatedAt?: string;
+}
+
+/** Every list item in profile content. The server owns `id` and `meta`; new items are sent without them. */
+export type ProfileItem<T> = T & { id?: string; meta?: ProfileItemMeta };
+
+export type ProfileBullet = { id?: string; label?: string; text: string };
+type ArrayItem<T> = T extends readonly (infer U)[] ? U : never;
+type CvItem<K extends keyof CVContentDTO> = ArrayItem<NonNullable<CVContentDTO[K]>>;
+type WithBullets<T> = Omit<T, "bullets"> & { bullets: ProfileBullet[] };
+
+export interface ProfileContentDTO {
+  headline?: string;
+  summary?: string;
+  location?: string;
+  interests: string[];
+  links: ProfileItem<{ label: string; url: string }>[];
+  experience: ProfileItem<WithBullets<CvItem<"experience">> & { company: string; role: string }>[];
+  education: ProfileItem<WithBullets<CvItem<"education">> & { institution: string }>[];
+  projects: ProfileItem<WithBullets<CvItem<"projects">> & { name: string }>[];
+  certifications: ProfileItem<CvItem<"certifications"> & { name: string }>[];
+  languages: ProfileItem<CvItem<"languages"> & { language: string }>[];
+  awards: ProfileItem<CvItem<"awards"> & { title: string }>[];
+  publications: ProfileItem<CvItem<"publications"> & { title: string }>[];
+  volunteering: ProfileItem<WithBullets<CvItem<"volunteering">> & { organization: string }>[];
+  courses: ProfileItem<CvItem<"courses"> & { name: string }>[];
+  memberships: ProfileItem<CvItem<"memberships"> & { organization: string }>[];
+  presentations: ProfileItem<CvItem<"presentations"> & { title: string }>[];
+  references: ProfileItem<CvItem<"references"> & { name: string }>[];
+  personalDetails: ProfileItem<{ label: string; value: string }>[];
+  research: ProfileItem<WithBullets<CVPositionDTO> & { title: string }>[];
+  teaching: ProfileItem<WithBullets<CVPositionDTO> & { title: string }>[];
+  activities: ProfileItem<WithBullets<CVPositionDTO> & { title: string }>[];
+  skills: ProfileItem<{ name: string }>[];
+  skillGroups: ProfileItem<{ category: string; items: string[] }>[];
+  dismissedKeys?: string[];
+}
+
+export type ProfileSection = Exclude<keyof ProfileContentDTO, "headline" | "summary" | "location" | "interests" | "dismissedKeys">;
+
+export interface ProfileChangeSummary {
+  added: Partial<Record<string, number>>;
+  updated: Partial<Record<string, number>>;
+  removed: Partial<Record<string, number>>;
+}
+
 export interface ApiCareerProfile {
   id: string;
   title: string;
-  isPrimary: boolean;
-  // Cached AI summary fields (see getProfileSummary) — present once a
-  // summary has been computed for this profile at least once.
-  summarySkills?: string[] | null;
+  roleKey: string;
+  seniority: string | null;
+  occupationId: string | null;
+  occupationTitle: string | null;
+  occupationCategory: string | null;
+  origin: "manual" | "cv";
+  version: number;
+  headline: string | null;
+  counts: Partial<Record<ProfileSection, number>>;
+  documentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiProfileChange {
+  id: string;
+  kind: "create" | "manual_edit" | "merge_cv" | "wording" | "revert";
+  cvDocumentId: string | null;
+  fromVersion: number;
+  toVersion: number;
+  summary: (Partial<ProfileChangeSummary> & Record<string, unknown>) | null;
+  createdAt: string;
+}
+
+export interface ApiCareerProfileDetail extends ApiCareerProfile {
+  content: ProfileContentDTO;
+  documents: {
+    id: string;
+    title: string | null;
+    templateId: string;
+    status: string;
+    profileVersion: number | null;
+    tailored: boolean;
+    createdAt: string;
+    updatedAt: string;
+  }[];
+  changes: ApiProfileChange[];
 }
 
 export interface ClarificationQuestion {
@@ -169,6 +330,14 @@ export interface JobAnalysis {
   gaps?: string[];
 }
 
+// Mirrors the backend's cv-content.schema.ts. A bullet is `{ label?, text }`;
+// content saved before bullets were structured may still hold plain strings,
+// so readers accept both (see cv-mapper.ts's toBullet).
+export interface CVBulletDTO {
+  label?: string;
+  text?: string;
+}
+
 export interface CVContentDTO {
   personal?: {
     full_name?: string;
@@ -176,31 +345,86 @@ export interface CVContentDTO {
     email?: string;
     phone?: string;
     location?: string;
-    links?: { label: string; url: string }[];
+    links?: { label?: string; url?: string }[];
+    /** data:image/...;base64 — uploaded in the editor, never AI-generated. */
+    photo?: string;
   };
   summary?: string;
   experience?: {
     company?: string;
     role?: string;
     location?: string;
+    url?: string;
     start_date?: string;
     end_date?: string;
-    bullets?: string[];
+    bullets?: (CVBulletDTO | string)[];
   }[];
   education?: {
     institution?: string;
     degree?: string;
+    field?: string;
+    location?: string;
+    gpa?: string;
     start_date?: string;
     end_date?: string;
     honors?: string;
+    bullets?: (CVBulletDTO | string)[];
   }[];
   skills?: string[];
-  certifications?: { name: string }[];
+  skillGroups?: { category?: string; items?: string[] }[];
+  certifications?: { name?: string; issuer?: string; date?: string; expires?: string; url?: string }[];
+  projects?: {
+    name?: string;
+    subtitle?: string;
+    description?: string;
+    tech?: string[];
+    url?: string;
+    bullets?: (CVBulletDTO | string)[];
+  }[];
+  languages?: { language?: string; proficiency?: string }[];
+  awards?: { title?: string; issuer?: string; date?: string; description?: string }[];
+  publications?: { title?: string; authors?: string; venue?: string; date?: string; url?: string }[];
+  volunteering?: {
+    organization?: string;
+    role?: string;
+    location?: string;
+    start_date?: string;
+    end_date?: string;
+    bullets?: (CVBulletDTO | string)[];
+  }[];
+  courses?: { name?: string; institution?: string; date?: string }[];
+  memberships?: { organization?: string; role?: string; start_date?: string; end_date?: string }[];
+  presentations?: { title?: string; event?: string; date?: string; url?: string }[];
+  interests?: string[];
+  references?: {
+    name?: string;
+    title?: string;
+    organization?: string;
+    relationship?: string;
+    email?: string;
+    phone?: string;
+  }[];
+  personalDetails?: { label?: string; value?: string }[];
+  research?: CVPositionDTO[];
+  teaching?: CVPositionDTO[];
+  activities?: CVPositionDTO[];
+  consent?: string;
+}
+
+/** Research, teaching and activities share the experience-like shape. */
+export interface CVPositionDTO {
+  title?: string;
+  organization?: string;
+  location?: string;
+  start_date?: string;
+  end_date?: string;
+  bullets?: (CVBulletDTO | string)[];
 }
 
 export interface ApiCvDocument {
   id: string;
   profileId: string | null;
+  profileVersion?: number | null;
   // The document's own display name, distinct from content.personal.title
   // (the candidate's job title/headline inside the CV itself).
   title: string | null;
@@ -229,54 +453,140 @@ export interface GenerateCvMismatch {
 
 export interface ApiCvImport {
   id: string;
-  profileId: string;
   rawText: string | null;
+  // Best-effort regex guesses from the extracted text (see the backend's
+  // importExtraction.service.ts).
+  extractedData: { personal?: { full_name?: string; email?: string; phone?: string } } | null;
   status: "pending" | "complete" | "failed";
   error: string | null;
 }
 
 // Uploads a resume file (pdf/docx/png/jpg/jpeg) for OCR/text extraction —
-// backed by pdf-parse, mammoth and tesseract.js on the server. Omit
-// profileId for a standalone upload not attached to any career profile.
-export function uploadCvImport(file: File, profileId?: string) {
+// backed by pdf-parse, mammoth and tesseract.js on the server.
+export function uploadCvImport(file: File) {
   const formData = new FormData();
   formData.append("file", file);
-  const path = profileId
-    ? `/api/v1/profiles/${encodeURIComponent(profileId)}/import`
-    : "/api/v1/imports";
-  return apiFetch<ApiCvImport>(path, {
+  return apiFetch<ApiCvImport>("/api/v1/imports", {
     method: "POST",
     body: formData,
   });
 }
 
+const profilePath = (id: string) => `/api/v1/profiles/${encodeURIComponent(id)}`;
+
 export function listProfiles() {
   return apiFetch<ApiCareerProfile[]>("/api/v1/profiles");
 }
 
-// Deduped skills across every CV under the user's real career profiles.
-export function getProfileSkills() {
-  return apiFetch<{ skills: string[] }>("/api/v1/profiles/skills");
+export function getProfile(id: string) {
+  return apiFetch<ApiCareerProfileDetail>(profilePath(id));
 }
 
-export interface ApiProfileSummary {
-  domain: string;
-  highlight: string;
-  skills: string[];
-  targetCompanies: string[];
-  readinessScore: number;
-}
-
-// AI-generated trajectory summary derived from this profile's existing CVs.
-export function getProfileSummary(profileId: string) {
-  return apiFetch<ApiProfileSummary>(`/api/v1/profiles/${encodeURIComponent(profileId)}/summary`);
-}
-
-export function createProfile(title: string) {
-  return apiFetch<ApiCareerProfile>("/api/v1/profiles", {
+/** Pro only. 409 PROFILE_ROLE_EXISTS (details.existingProfileId) when the role already has a profile. */
+export function createProfile(input: {
+  title: string;
+  occupationId?: string;
+  content?: Partial<ProfileContentDTO>;
+  copyFromProfileId?: string;
+}) {
+  return apiFetch<ApiCareerProfileDetail>("/api/v1/profiles", {
     method: "POST",
-    body: JSON.stringify({ title }),
+    body: JSON.stringify(input),
   });
+}
+
+/** Pro only. `version` is the one the client loaded — 409 PROFILE_VERSION_CONFLICT if it changed since. */
+export function updateProfile(
+  id: string,
+  input: { version: number; title?: string; occupationId?: string | null; content?: ProfileContentDTO }
+) {
+  return apiFetch<ApiCareerProfileDetail>(profilePath(id), {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteProfile(id: string) {
+  return apiFetch<{ success: boolean }>(profilePath(id), { method: "DELETE" });
+}
+
+export function revertProfileChange(id: string, changeId: string, version: number) {
+  return apiFetch<ApiCareerProfileDetail>(`${profilePath(id)}/changes/${encodeURIComponent(changeId)}/revert`, {
+    method: "POST",
+    body: JSON.stringify({ version }),
+  });
+}
+
+/** The profile in CV shape (account contact details filled in) — the source for a new CV. */
+export function getProfileCvContent(id: string) {
+  return apiFetch<{ content: CVContentDTO; profileVersion: number }>(`${profilePath(id)}/cv-content`);
+}
+
+export interface WordingProposal {
+  /** "summary", or "<section>:<profile item id>" — what gets sent back to approve it. */
+  key: string;
+  section: ProfileSection | "summary";
+  label: string;
+  before: string[];
+  after: string[];
+  /** The user edited this entry by hand before. */
+  locked: boolean;
+}
+
+export interface WordingPreview {
+  profile: { id: string; title: string; version: number } | null;
+  reason: "tailored" | "no_profile" | "updates_off" | null;
+  proposals: WordingProposal[];
+}
+
+/** Enhance: improved wording that differs from the profile, entry by entry. Read-only. Pro only. */
+export function previewCvWording(input: { cvDocumentId: string; sourceCvId?: string }) {
+  return apiFetch<WordingPreview>("/api/v1/profiles/wording/preview", { method: "POST", body: JSON.stringify(input) });
+}
+
+/** Saves the approved proposals (by key) to the profile and links the CV. */
+export function applyCvWording(profileId: string, input: { cvDocumentId: string; version: number; keys: string[] }) {
+  return apiFetch<{ profile: ApiCareerProfileDetail; applied: number; changeId: string | null }>(
+    `${profilePath(profileId)}/wording`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export interface ProfileSuggestion {
+  roleTitle: string | null;
+  /** The profile this CV is the same role as, and what merging would change. */
+  match: { profileId: string; title: string; via: "role" | "occupation" | "ai"; preview: ProfileChangeSummary } | null;
+  /** Related roles — offered as "add to this instead", never merged automatically. */
+  related: { profileId: string; title: string }[];
+  newProfilePreview: ProfileChangeSummary;
+  linkedProfileId: string | null;
+  autoSync: ProfileAutoSync;
+}
+
+/** Which profile a new CV belongs to, and what saving it would change. Read-only. Pro only. */
+export function suggestProfileForCv(input: { cvDocumentId: string; factsOnly?: boolean }) {
+  return apiFetch<ProfileSuggestion>("/api/v1/profiles/suggest-for-cv", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+/**
+ * Creates a profile from a CV (omit profileId) or merges the CV into one, and
+ * links the CV. Pro only. `changeId` (when something changed) can be passed
+ * to revertProfileChange to undo.
+ */
+export function syncCvIntoProfile(input: {
+  cvDocumentId: string;
+  profileId?: string;
+  title?: string;
+  occupationId?: string;
+  factsOnly?: boolean;
+}) {
+  return apiFetch<{ profile: ApiCareerProfileDetail; summary: ProfileChangeSummary; created: boolean; changeId: string | null }>(
+    "/api/v1/profiles/from-cv",
+    { method: "POST", body: JSON.stringify(input) }
+  );
 }
 
 // Omit profileId to create a standalone CV not attached to any career profile.
@@ -312,6 +622,7 @@ export function analyzeCv(input: {
   sourceText: string;
   jobDescription?: string;
   name?: string;
+  email?: string;
   enhancementLevel?: number;
   templateId?: string;
   // A short instruction for what to emphasize/rewrite toward (e.g. the
@@ -352,6 +663,9 @@ export function generateCv(
     name?: string;
     enhancementLevel?: number;
     focusInstructions?: string;
+    /** Replace the document's content instead of only filling empty fields
+     * — for a deliberate re-generation (refine), not a first fill. */
+    replaceContent?: boolean;
   }
 ) {
   return apiFetch<ApiCvDocument | GenerateCvMismatch>(`/api/v1/cv/${cvId}/generate`, {
@@ -384,10 +698,6 @@ export function updateCvContent(
 // missing, or leaves an already-final document as-is.
 export function finalizeCvDocument(cvId: string) {
   return apiFetch<ApiCvDocument>(`/api/v1/cv/${cvId}/finalize`, { method: "POST" });
-}
-
-export function renderCvDocument(cvId: string) {
-  return apiFetch<{ pdfPath: string }>(`/api/v1/cv/${cvId}/render`, { method: "POST" });
 }
 
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED";
@@ -508,4 +818,77 @@ export async function downloadCvPdf(cvId: string): Promise<Blob> {
   }
 
   return res.blob();
+}
+
+export interface ApiCvTemplate {
+  id: string;
+  name: string;
+  description: string;
+  /** Gallery grouping: "Simple" | "Professional" | "Academic" | "Two-column". */
+  category: string;
+  hasPhoto: boolean;
+  twoColumn: boolean;
+  /** Catalog sections the template renders, in order — also the editor's section list. */
+  sections: { key: string; label: string }[];
+  /** Sections the AI asks about when the user's material has nothing for them. */
+  askIfMissing: string[];
+  isDefault: boolean;
+}
+
+// The templates the backend can actually render (preview and PDF share them).
+export function listCvTemplates() {
+  return apiFetch<ApiCvTemplate[]>("/api/v1/templates");
+}
+
+// Renders unsaved editor content with the same template the PDF download
+// uses — the editor shows this HTML in an iframe, so the preview is the PDF.
+export function previewCvHtml(templateId: string, content: CVContentDTO, showMissing = false) {
+  return apiFetch<{ html: string }>("/api/v1/cv/preview", {
+    method: "POST",
+    body: JSON.stringify({ templateId, content, showMissing }),
+  });
+}
+
+// The real PDF of unsaved editor content (no save, no finalize) — "Preview PDF".
+export async function previewCvPdf(templateId: string, content: CVContentDTO): Promise<Blob> {
+  const token = getAccessToken();
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_URL}/api/v1/cv/preview/pdf`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: JSON.stringify({ templateId, content }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(
+      res.status,
+      body?.error?.code ?? "PREVIEW_FAILED",
+      body?.error?.message ?? "Could not create the PDF preview"
+    );
+  }
+
+  return res.blob();
+}
+
+// One of the user's saved CVs rendered with its own template — for resume cards.
+export function getCvThumbnail(cvId: string) {
+  return apiFetch<{ html: string }>(`/api/v1/cv/${encodeURIComponent(cvId)}/thumbnail`);
+}
+
+// A template rendered with a fictional sample CV — for gallery thumbnails.
+// `persona` picks one of several sample people (the backend wraps it around).
+export interface CvTemplateSample {
+  html: string;
+  persona: number;
+  personaCount: number;
+  /** The sample person's headline, e.g. "Data Analyst". */
+  label: string;
+}
+
+export function getCvTemplateSample(templateId: string, persona = 0) {
+  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample?persona=${persona}`);
 }

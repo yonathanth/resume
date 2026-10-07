@@ -10,37 +10,30 @@ import { PricingSection } from "@/components/PricingSection";
 import { Footer } from "@/components/Footer";
 
 export default function Home() {
-  const scrollToEditor = () => {
-    const el = document.getElementById("editor");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
   return (
     <div className="min-h-screen bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
       {/* Subtle background radial dot pattern */}
       <div className="absolute inset-0 bg-grid-pattern opacity-40 pointer-events-none" />
 
       {/* Floating Pill Navigation */}
-      <Navbar onOpenEditor={scrollToEditor} />
+      <Navbar />
 
       {/* Main Content Sections */}
       <main className="relative z-10 flex flex-col">
         {/* Mobbin-inspired Hero */}
-        <Hero onStartBuilding={scrollToEditor} />
+        <Hero />
 
         {/* How It Works (Directly below Hero) */}
         <HowItWorks />
 
         {/* Templates Showcase */}
-        <TemplatesSection onSelectTemplate={() => scrollToEditor()} />
+        <TemplatesSection />
 
         {/* Real Results: Before & After CV Comparison */}
-        <RealResultsSection onTryItYourself={scrollToEditor} />
+        <RealResultsSection />
 
-        {/* 3-Tier Pricing (Pro, Team, Enterprise) */}
-        <PricingSection onSelectPlan={() => scrollToEditor()} />
+        {/* Pricing (Free, Pro) */}
+        <PricingSection />
       </main>
 
       {/* Minimal Footer */}

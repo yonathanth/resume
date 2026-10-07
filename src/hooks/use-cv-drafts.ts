@@ -17,15 +17,3 @@ export function useAllDrafts() {
     },
   });
 }
-
-// CVs under one specific career profile — powers "View Resumes for this Profile".
-export function useDraftsForProfile(profileId: string) {
-  return useQuery({
-    queryKey: ["cv-drafts", profileId],
-    queryFn: async (): Promise<ResumeDraft[]> => {
-      const documents = await listCvDocuments(profileId);
-      return documents.map(toResumeDraft);
-    },
-    enabled: Boolean(profileId),
-  });
-}

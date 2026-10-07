@@ -3,15 +3,17 @@
 import { useMutation } from "@tanstack/react-query";
 import {
   analyzeCv,
-  createProfile,
   createCvDocument,
+  deleteCvDocument,
   generateCv,
   getCvDocument,
-  listCvDocuments,
-  moveCvDocumentProfile,
+  getProfileCvContent,
   polishSummary,
+  updateCvContent,
   uploadCvImport,
   ApiCvDocument,
+  ClarificationQuestion,
+  CVContentDTO,
   GenerateCvMismatch,
 } from "@/lib/api";
 import { serializeCvContentToText } from "@/lib/cv-mapper";
@@ -25,23 +27,34 @@ import { serializeCvContentToText } from "@/lib/cv-mapper";
 // they already had, with the new fields available additively.
 async function analyzeAndPersist(
   sourceText: string,
-  profileId?: string,
-  options?: { jobDescription?: string; focusInstructions?: string }
+  profileId: string | undefined,
+  options: { templateId: string; jobDescription?: string; focusInstructions?: string; email?: string }
 ): Promise<{ profileId: string | null; cvDocumentId: string | null; document: ApiCvDocument | GenerateCvMismatch }> {
+  // The template is chosen before analysis so the AI only writes the sections
+  // it shows (plus its notes) and asks about the ones it needs but can't find.
   const analyzed = await analyzeCv({
     sourceText,
-    jobDescription: options?.jobDescription,
-    focusInstructions: options?.focusInstructions,
+    templateId: options.templateId,
+    jobDescription: options.jobDescription,
+    focusInstructions: options.focusInstructions,
+    email: options.email,
   });
   if ("mismatch" in analyzed) {
     return { profileId: profileId ?? null, cvDocumentId: null, document: analyzed };
   }
 
-  const doc = await createCvDocument(profileId);
-  const document = await generateCv(doc.id, {
-    analyzedContent: analyzed.candidateData,
-    jobDescription: options?.jobDescription,
-  });
+  const doc = await createCvDocument(profileId, options.templateId);
+  let document: ApiCvDocument | GenerateCvMismatch;
+  try {
+    document = await generateCv(doc.id, {
+      analyzedContent: analyzed.candidateData,
+      jobDescription: options.jobDescription,
+    });
+  } catch (err) {
+    // Don't leave an empty draft behind in Past Projects.
+    await deleteCvDocument(doc.id).catch(() => undefined);
+    throw err;
+  }
   if ("mismatch" in document) {
     return { profileId: profileId ?? null, cvDocumentId: doc.id, document };
   }
@@ -64,7 +77,8 @@ export interface AnalyzeFreestyleResult {
 // chooses to save one) and runs the AI parse on the raw freestyle text.
 export function useAnalyzeFreestyle() {
   return useMutation({
-    mutationFn: (sourceText: string): Promise<AnalyzeFreestyleResult> => analyzeAndPersist(sourceText),
+    mutationFn: ({ sourceText, templateId }: { sourceText: string; templateId: string }): Promise<AnalyzeFreestyleResult> =>
+      analyzeAndPersist(sourceText, undefined, { templateId }),
   });
 }
 
@@ -80,12 +94,18 @@ export interface AnalyzeUploadResult {
 // through the same AI parse used by the freestyle flow.
 export function useAnalyzeUpload() {
   return useMutation({
-    mutationFn: async (file: File): Promise<AnalyzeUploadResult> => {
+    mutationFn: async ({ file, templateId }: { file: File; templateId: string }): Promise<AnalyzeUploadResult> => {
       const cvImport = await uploadCvImport(file);
       if (cvImport.status === "failed" || !cvImport.rawText) {
         throw new Error(cvImport.error || "Could not read text from this file");
       }
-      const { profileId, cvDocumentId, document } = await analyzeAndPersist(cvImport.rawText);
+      // The import's regex-extracted email is reliable enough to pin as the
+      // authoritative identity, so the AI can't drop or garble it. (Its name
+      // guess is only "first line looks like a name" — too weak to pin.)
+      const { profileId, cvDocumentId, document } = await analyzeAndPersist(cvImport.rawText, undefined, {
+        templateId,
+        email: cvImport.extractedData?.personal?.email,
+      });
       return { profileId, cvDocumentId, sourceText: cvImport.rawText, document };
     },
   });
@@ -94,11 +114,13 @@ export function useAnalyzeUpload() {
 export interface AnalyzeExistingInput {
   /** A specific existing CV document to pull real content from (e.g. a past project). */
   sourceCvId?: string;
-  /** Or resolve the most recently updated document under this career profile. */
+  /** Or a career profile — its own content (not any one CV) is the source. */
   sourceProfileId?: string;
   /** Where the new working document should be created — omit to create a
    * standalone document not attached to any career profile. */
   targetProfileId?: string;
+  /** The template chosen at the start of the flow. */
+  templateId: string;
   /** New factual content the user typed in that isn't in the source yet
    * (a recent role, project, achievement...) — folded into the source text
    * so the AI can incorporate it, never fabricated on its own. */
@@ -117,28 +139,53 @@ export interface AnalyzeExistingResult {
 }
 
 // "Start from career profile" / "past project" equivalent of Analyze &
-// Continue for Tailor/Enhance: pulls the REAL content of an existing
-// document (never a fabricated skeleton), serializes it back to text, and
-// runs it through a fresh document so the backend's fill-only-empty-fields
-// merge doesn't block the rewrite.
+// Continue: pulls REAL content (a past CV, or the profile's own content —
+// never a fabricated skeleton), serializes it back to text, and runs it
+// through a fresh document so the backend's fill-only-empty-fields merge
+// doesn't block the rewrite.
 export function useAnalyzeExisting() {
   return useMutation({
     mutationFn: async (input: AnalyzeExistingInput): Promise<AnalyzeExistingResult> => {
-      const sourceDoc = input.sourceCvId
-        ? await getCvDocument(input.sourceCvId)
-        : input.sourceProfileId
-          ? (await listCvDocuments(input.sourceProfileId))[0]
-          : undefined;
+      let sourceDoc: { content: CVContentDTO } | undefined;
+      if (input.sourceCvId) {
+        sourceDoc = await getCvDocument(input.sourceCvId);
+      } else if (input.sourceProfileId) {
+        const { content } = await getProfileCvContent(input.sourceProfileId);
+        if (!content.experience?.length && !content.skills?.length) {
+          throw new Error("This profile is still empty. Add your experience and skills on the Career Profiles page first.");
+        }
+        sourceDoc = { content };
+      }
 
       if (!sourceDoc) {
-        throw new Error("This profile doesn't have any resume content yet.");
+        throw new Error("Nothing to start from. Pick a profile or a resume.");
       }
 
       const baseText = serializeCvContentToText(sourceDoc.content);
+
+      // Nothing new to fold in — the source is already structured CV content,
+      // so copy it into the new working document instead of paying for an AI
+      // re-parse of data we already have. Tailor/Enhance run their real AI
+      // rewrite later, in useRefineCv.
+      const hasNewInput = Boolean(
+        input.extraDetails?.trim() || input.jobDescription?.trim() || input.focusInstructions?.trim()
+      );
+      if (!hasNewInput) {
+        const doc = await createCvDocument(input.targetProfileId, input.templateId);
+        const document = await updateCvContent(doc.id, { content: sourceDoc.content });
+        return {
+          profileId: input.targetProfileId ?? null,
+          cvDocumentId: doc.id,
+          sourceText: baseText,
+          document: { ...document, questions: [], jobAnalysis: null },
+        };
+      }
+
       const sourceText = input.extraDetails?.trim()
         ? `${baseText}\n\nAdditional details to incorporate:\n${input.extraDetails.trim()}`
         : baseText;
       const { profileId, cvDocumentId, document } = await analyzeAndPersist(sourceText, input.targetProfileId, {
+        templateId: input.templateId,
         jobDescription: input.jobDescription,
         focusInstructions: input.focusInstructions,
       });
@@ -147,11 +194,58 @@ export function useAnalyzeExisting() {
   });
 }
 
+type PersonalFields = NonNullable<CVContentDTO["personal"]>;
+type PersonalKey = "full_name" | "title" | "email" | "phone" | "location";
+
+// AI clarification question ids that map 1:1 onto a personal field. Anything
+// else (e.g. "current_role_title", which is about an experience entry) needs
+// the AI to place the answer correctly.
+const PERSONAL_QUESTION_IDS: Record<string, PersonalKey> = {
+  full_name: "full_name",
+  name: "full_name",
+  title: "title",
+  professional_title: "title",
+  email: "email",
+  email_address: "email",
+  phone: "phone",
+  phone_number: "phone",
+  location: "location",
+};
+
+/**
+ * Splits clarification answers into structured personal-field values (which
+ * can be written straight into the CV) and free-text lines that need an AI
+ * pass to be incorporated.
+ */
+export function splitClarificationAnswers(
+  questions: ClarificationQuestion[],
+  answers: Record<string, string>
+): { personal: Partial<Record<PersonalKey, string>>; otherLines: string[] } {
+  const personal: Partial<Record<PersonalKey, string>> = {};
+  const otherLines: string[] = [];
+  for (const q of questions) {
+    const answer = answers[q.id]?.trim();
+    if (!answer) continue;
+    const key = PERSONAL_QUESTION_IDS[q.id];
+    if (key) personal[key] = answer;
+    else otherLines.push(`${q.question} ${answer}`);
+  }
+  return { personal, otherLines };
+}
+
 export interface RefineCvInput {
   cvDocumentId: string;
+  /** The template chosen at the start of the flow — steers what the AI writes and asks. */
+  templateId: string;
   sourceText: string;
   jobDescription?: string;
   name?: string;
+  email?: string;
+  /** Personal fields the user typed/confirmed — written directly, never via AI. */
+  personal?: Partial<Record<PersonalKey, string>>;
+  /** False when the only new information is `personal` — then no AI call is
+   * made (and no free generation spent); the fields are patched in directly. */
+  requiresRewrite: boolean;
   /** 0–1, writing intensity — e.g. the Tailor alignment slider or Enhance's boost intent. */
   enhancementLevel?: number;
   /** A short instruction for what to emphasize/rewrite toward (e.g. Enhance's
@@ -160,19 +254,45 @@ export interface RefineCvInput {
   focusInstructions?: string;
 }
 
-// Step 2: "Choose Template & Continue" — re-analyzes with the essentials the
-// user filled in (plus any clarification answers) folded into the source
-// text, then persists the result without a second AI call. Existing
-// non-empty fields are never overwritten (see mergeEmptyFields on the
-// backend). Any leftover questions/gaps from this round are folded onto the
-// returned document, same as the initial analyze step.
+async function applyPersonalFields(
+  cvDocumentId: string,
+  fields: Partial<Record<PersonalKey, string>>
+): Promise<ApiCvDocument> {
+  const current = await getCvDocument(cvDocumentId);
+  const personal: PersonalFields = { ...(current.content.personal ?? {}) };
+  for (const [key, value] of Object.entries(fields) as [PersonalKey, string | undefined][]) {
+    if (value?.trim()) personal[key] = value.trim();
+  }
+  return updateCvContent(cvDocumentId, { content: { personal } });
+}
+
+// Step 2: after the missing-details questions. When the user only supplied personal
+// details (name, email, phone, title...), those are written straight into the
+// document — no AI call, no free generation spent. Otherwise it re-analyzes
+// with everything folded into the source text and REPLACES the draft's
+// content with the rewrite (a fill-only merge would discard the rewrite).
+// `jobAnalysis` is left undefined on the no-AI path so callers keep whatever
+// gaps they already showed.
 export function useRefineCv() {
   return useMutation({
     mutationFn: async (input: RefineCvInput): Promise<ApiCvDocument | GenerateCvMismatch> => {
+      const personal = {
+        ...input.personal,
+        ...(input.name?.trim() ? { full_name: input.name } : {}),
+        ...(input.email?.trim() ? { email: input.email } : {}),
+      };
+
+      if (!input.requiresRewrite) {
+        const document = await applyPersonalFields(input.cvDocumentId, personal);
+        return { ...document, questions: [], jobAnalysis: undefined };
+      }
+
       const analyzed = await analyzeCv({
         sourceText: input.sourceText,
+        templateId: input.templateId,
         jobDescription: input.jobDescription,
-        name: input.name,
+        name: input.name?.trim() || undefined,
+        email: input.email?.trim() || undefined,
         enhancementLevel: input.enhancementLevel,
         focusInstructions: input.focusInstructions,
       });
@@ -181,45 +301,19 @@ export function useRefineCv() {
       const document = await generateCv(input.cvDocumentId, {
         analyzedContent: analyzed.candidateData,
         jobDescription: input.jobDescription,
-        name: input.name,
+        name: input.name?.trim() || undefined,
         enhancementLevel: input.enhancementLevel,
+        replaceContent: true,
       });
       if ("mismatch" in document) return document;
 
-      return { ...document, questions: analyzed.questions, jobAnalysis: analyzed.jobAnalysis };
-    },
-  });
-}
+      // The AI may still have left a personal field out; the user's own
+      // answers are authoritative, so make sure they land.
+      const final = Object.keys(personal).length
+        ? await applyPersonalFields(input.cvDocumentId, personal)
+        : document;
 
-export interface FinalizeCvProfileInput {
-  cvDocumentId: string;
-  /** "create" makes a new career profile and moves the document onto it;
-   * "attach" moves it onto an existing chosen profile; "none" leaves it
-   * standalone (no move needed). */
-  action: "create" | "attach" | "none";
-  targetRole?: string;
-  existingProfileId?: string;
-}
-
-// Step 3: Save/Skip/Attach decision — only now do we know whether this
-// becomes a named career profile, gets attached to an existing one, or stays
-// standalone.
-export function useFinalizeCvProfile() {
-  return useMutation({
-    mutationFn: async (input: FinalizeCvProfileInput): Promise<{ profileId: string | null }> => {
-      if (input.action === "none") {
-        return { profileId: null };
-      }
-      if (input.action === "attach") {
-        if (!input.existingProfileId) {
-          throw new Error("No career profile selected to attach to.");
-        }
-        await moveCvDocumentProfile(input.cvDocumentId, input.existingProfileId);
-        return { profileId: input.existingProfileId };
-      }
-      const profile = await createProfile(input.targetRole || "New Career Profile");
-      await moveCvDocumentProfile(input.cvDocumentId, profile.id);
-      return { profileId: profile.id };
+      return { ...final, questions: analyzed.questions, jobAnalysis: analyzed.jobAnalysis };
     },
   });
 }

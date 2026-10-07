@@ -9,7 +9,6 @@ import React, {
 } from "react";
 import { useRouter } from "next/navigation";
 import { useAllDrafts } from "@/hooks/use-cv-drafts";
-import { useProfiles } from "@/hooks/use-profiles";
 import {
   ApiError,
   getCvDocument,
@@ -20,16 +19,16 @@ import {
 import { toResumeDraft } from "@/lib/cv-mapper";
 import {
   ResumeDraft,
-  CareerProfile,
   CvData,
   TemplateId,
+  templateLabel,
 } from "./create-flow/types";
 
 interface DashboardContextValue {
   drafts: ResumeDraft[];
+  /** True until the user's CVs have loaded the first time. */
+  isLoadingDrafts: boolean;
   setDrafts: React.Dispatch<React.SetStateAction<ResumeDraft[]>>;
-  savedProfiles: CareerProfile[];
-  setSavedProfiles: React.Dispatch<React.SetStateAction<CareerProfile[]>>;
   activeEditingCv: CvData | null;
   setActiveEditingCv: React.Dispatch<React.SetStateAction<CvData | null>>;
 
@@ -37,7 +36,8 @@ interface DashboardContextValue {
   setIsCreateModalOpen: (open: boolean) => void;
   isStartWithTemplateOpen: boolean;
   setIsStartWithTemplateOpen: (open: boolean) => void;
-  preselectedCareerProfile: CareerProfile | null;
+  /** Set when the create flow was opened from a career profile. */
+  preselectedProfileId: string | null;
   preselectedTemplate: TemplateId | undefined;
 
   handleOpenDraftInEditor: (draft: ResumeDraft) => void;
@@ -45,7 +45,7 @@ interface DashboardContextValue {
   handleDeleteDraft: (id: string) => Promise<void>;
   updateDraftFromSavedCv: (savedCv: CvData) => void;
   handleUseTemplate: (templateId: TemplateId) => void;
-  handleCreateCvFromProfile: (profile: CareerProfile) => void;
+  handleCreateCvFromProfile: (profileId: string) => void;
   handleNewResume: () => void;
   goToPastProjects: () => void;
   goToTemplates: () => void;
@@ -57,7 +57,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const [drafts, setDrafts] = useState<ResumeDraft[]>([]);
-  const { data: allDrafts } = useAllDrafts();
+  const { data: allDrafts, isLoading: isLoadingDrafts } = useAllDrafts();
   const hasHydratedDrafts = useRef(false);
 
   // Seed the drafts list from every CV the user owns across all profiles,
@@ -69,24 +69,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     }
   }, [allDrafts]);
 
-  const [savedProfiles, setSavedProfiles] = useState<CareerProfile[]>([]);
-  const { data: fetchedProfiles } = useProfiles();
-  const hasHydratedProfiles = useRef(false);
-
-  // Seed saved profiles from the backend once on load; local edits (creating
-  // a new one) take over from there.
-  useEffect(() => {
-    if (fetchedProfiles && !hasHydratedProfiles.current) {
-      hasHydratedProfiles.current = true;
-      setSavedProfiles(fetchedProfiles);
-    }
-  }, [fetchedProfiles]);
-
   const [activeEditingCv, setActiveEditingCv] = useState<CvData | null>(null);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isStartWithTemplateOpen, setIsStartWithTemplateOpen] = useState(false);
-  const [preselectedCareerProfile, setPreselectedCareerProfile] = useState<CareerProfile | null>(null);
+  const [preselectedProfileId, setPreselectedProfileId] = useState<string | null>(null);
   const [preselectedTemplate, setPreselectedTemplate] = useState<TemplateId | undefined>(undefined);
 
   // Opens a draft in its own dedicated editor page (a real route, not an
@@ -106,13 +93,10 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       targetRole: savedCv.targetRole,
       targetCompany: "General Application",
       atsScore: savedCv.atsScore,
-      lastEdited: "Just now",
-      templateName:
-        savedCv.templateStyle === "tech"
-          ? "Silicon Valley Tech Lead"
-          : savedCv.templateStyle === "executive"
-            ? "Executive Ivy"
-            : "Modern Minimalist",
+      lastEdited: "just now",
+      updatedAt: new Date().toISOString(),
+      templateName: templateLabel(savedCv.templateStyle),
+      templateId: savedCv.templateStyle,
       accentColor: "bg-neutral-950",
       matchedKeywords: savedCv.skills.slice(0, 5),
     };
@@ -133,7 +117,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const handleDuplicateDraft = async (draft: ResumeDraft) => {
     try {
       const original = await getCvDocument(draft.id);
-      const newDoc = await createCvDocument(original.profileId ?? undefined);
+      const newDoc = await createCvDocument(original.profileId ?? undefined, original.templateId);
       const copyTitle = `${draft.title} (Copy)`;
       await updateCvContent(newDoc.id, { content: original.content, title: copyTitle });
       const duplicated: ResumeDraft = {
@@ -147,7 +131,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         ...draft,
         id: `draft-${Date.now()}`,
         title: `${draft.title} (Copy)`,
-        lastEdited: "Just now",
+        lastEdited: "just now",
+        updatedAt: new Date().toISOString(),
       };
       setDrafts((prev) => [duplicated, ...prev]);
       handleOpenDraftInEditor(duplicated);
@@ -172,20 +157,20 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const handleUseTemplate = (templateId: TemplateId) => {
     setPreselectedTemplate(templateId);
-    setPreselectedCareerProfile(null);
+    setPreselectedProfileId(null);
     setIsStartWithTemplateOpen(true);
     router.push("/dashboard");
   };
 
-  const handleCreateCvFromProfile = (profile: CareerProfile) => {
-    setPreselectedCareerProfile(profile);
+  const handleCreateCvFromProfile = (profileId: string) => {
+    setPreselectedProfileId(profileId);
     setPreselectedTemplate(undefined);
     setIsCreateModalOpen(true);
     router.push("/dashboard");
   };
 
   const handleNewResume = () => {
-    setPreselectedCareerProfile(null);
+    setPreselectedProfileId(null);
     setPreselectedTemplate(undefined);
     setIsCreateModalOpen(true);
     router.push("/dashboard");
@@ -198,16 +183,15 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     <DashboardContext.Provider
       value={{
         drafts,
+        isLoadingDrafts,
         setDrafts,
-        savedProfiles,
-        setSavedProfiles,
         activeEditingCv,
         setActiveEditingCv,
         isCreateModalOpen,
         setIsCreateModalOpen,
         isStartWithTemplateOpen,
         setIsStartWithTemplateOpen,
-        preselectedCareerProfile,
+        preselectedProfileId,
         preselectedTemplate,
         handleOpenDraftInEditor,
         handleDuplicateDraft,

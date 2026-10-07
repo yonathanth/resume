@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Sparkles, X } from "lucide-react";
+import { Loader2, Crown, X } from "lucide-react";
 import { useStartProCheckout, useSubscriptionStatus } from "@/hooks/use-subscription";
 import type { CheckoutProvider } from "@/lib/api";
 
@@ -39,7 +39,7 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
         </button>
 
         <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3 bg-amber-50 text-amber-500">
-          <Sparkles className="w-5 h-5" />
+          <Crown className="w-5 h-5" />
         </div>
 
         <h3 className="text-sm font-bold text-neutral-950 mb-1.5">
@@ -48,7 +48,7 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
         <p className="text-xs text-neutral-500 leading-relaxed mb-3">
           {reason ??
             (subscription?.isExpired
-              ? "Renew to keep unlimited AI tailoring — your free generations are already used up."
+              ? "Renew to keep unlimited AI tailoring. Your free generations are already used up."
               : "You've used all 3 free CV generations. Upgrade to FitCV Pro for unlimited AI tailoring.")}
         </p>
 
@@ -71,7 +71,7 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
             <span>
               {checkout.isPending && checkout.variables === "polar"
                 ? "Redirecting..."
-                : "Pay with Polar — $5/month"}
+                : "Pay with Polar · $5/month"}
             </span>
           </button>
           <button
@@ -86,7 +86,7 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
             <span>
               {checkout.isPending && checkout.variables === "chapa"
                 ? "Redirecting..."
-                : "Pay with Chapa (local) — 80 ETB / month"}
+                : "Pay with Chapa (local) · 80 ETB / month"}
             </span>
           </button>
         </div>
