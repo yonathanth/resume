@@ -14,6 +14,7 @@ import {
   ApiCvDocument,
   ClarificationQuestion,
   CVContentDTO,
+  CvFlowType,
   GenerateCvMismatch,
 } from "@/lib/api";
 import { serializeCvContentToText } from "@/lib/cv-mapper";
@@ -28,7 +29,7 @@ import { serializeCvContentToText } from "@/lib/cv-mapper";
 async function analyzeAndPersist(
   sourceText: string,
   profileId: string | undefined,
-  options: { templateId: string; jobDescription?: string; focusInstructions?: string; email?: string }
+  options: { templateId: string; jobDescription?: string; focusInstructions?: string; email?: string; flowType: CvFlowType }
 ): Promise<{ profileId: string | null; cvDocumentId: string | null; document: ApiCvDocument | GenerateCvMismatch }> {
   // The template is chosen before analysis so the AI only writes the sections
   // it shows (plus its notes) and asks about the ones it needs but can't find.
@@ -38,6 +39,7 @@ async function analyzeAndPersist(
     jobDescription: options.jobDescription,
     focusInstructions: options.focusInstructions,
     email: options.email,
+    flowType: options.flowType,
   });
   if ("mismatch" in analyzed) {
     return { profileId: profileId ?? null, cvDocumentId: null, document: analyzed };
@@ -77,8 +79,15 @@ export interface AnalyzeFreestyleResult {
 // chooses to save one) and runs the AI parse on the raw freestyle text.
 export function useAnalyzeFreestyle() {
   return useMutation({
-    mutationFn: ({ sourceText, templateId }: { sourceText: string; templateId: string }): Promise<AnalyzeFreestyleResult> =>
-      analyzeAndPersist(sourceText, undefined, { templateId }),
+    mutationFn: ({
+      sourceText,
+      templateId,
+      flowType,
+    }: {
+      sourceText: string;
+      templateId: string;
+      flowType: CvFlowType;
+    }): Promise<AnalyzeFreestyleResult> => analyzeAndPersist(sourceText, undefined, { templateId, flowType }),
   });
 }
 
@@ -94,7 +103,15 @@ export interface AnalyzeUploadResult {
 // through the same AI parse used by the freestyle flow.
 export function useAnalyzeUpload() {
   return useMutation({
-    mutationFn: async ({ file, templateId }: { file: File; templateId: string }): Promise<AnalyzeUploadResult> => {
+    mutationFn: async ({
+      file,
+      templateId,
+      flowType,
+    }: {
+      file: File;
+      templateId: string;
+      flowType: CvFlowType;
+    }): Promise<AnalyzeUploadResult> => {
       const cvImport = await uploadCvImport(file);
       if (cvImport.status === "failed" || !cvImport.rawText) {
         throw new Error(cvImport.error || "Could not read text from this file");
@@ -105,6 +122,7 @@ export function useAnalyzeUpload() {
       const { profileId, cvDocumentId, document } = await analyzeAndPersist(cvImport.rawText, undefined, {
         templateId,
         email: cvImport.extractedData?.personal?.email,
+        flowType,
       });
       return { profileId, cvDocumentId, sourceText: cvImport.rawText, document };
     },
@@ -129,6 +147,9 @@ export interface AnalyzeExistingInput {
   /** A short instruction for what to emphasize/rewrite toward — sent as its
    * own high-priority prompt block instead of being folded into sourceText. */
   focusInstructions?: string;
+  /** Which dashboard tab this flow started from — only spent when an AI
+   * call actually happens (hasNewInput below); a plain copy is free. */
+  flowType: CvFlowType;
 }
 
 export interface AnalyzeExistingResult {
@@ -188,6 +209,7 @@ export function useAnalyzeExisting() {
         templateId: input.templateId,
         jobDescription: input.jobDescription,
         focusInstructions: input.focusInstructions,
+        flowType: input.flowType,
       });
       return { profileId, cvDocumentId, sourceText, document };
     },
@@ -295,6 +317,9 @@ export function useRefineCv() {
         email: input.email?.trim() || undefined,
         enhancementLevel: input.enhancementLevel,
         focusInstructions: input.focusInstructions,
+        // This document already exists — this call is a continuation of the
+        // flow that was already charged, not a new one.
+        cvDocumentId: input.cvDocumentId,
       });
       if ("mismatch" in analyzed) return analyzed;
 
