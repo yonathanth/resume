@@ -32,7 +32,7 @@ import {
   getQuestionFormState,
   useQuestionPages,
 } from "./ClarifyingQuestionsForm";
-import { ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, updateCvContent } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -40,6 +40,7 @@ import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { ProfileSyncStep } from "./ProfileSyncStep";
 import { ProfilePicker } from "./ProfilePicker";
+import { ConfirmedGap, GapReviewStep, gapsNotInContent, withAddedSkills } from "./GapReviewStep";
 
 interface TailorCvModalProps {
   isOpen: boolean;
@@ -58,6 +59,7 @@ type TailorStep =
   | "new-cv-upload"
   | "new-cv-analyzing"
   | "jd-and-slider"
+  | "review-gaps"
   | "select-template";
 
 export function TailorCvModal({
@@ -122,6 +124,9 @@ export function TailorCvModal({
   // Called before the early `if (!isOpen) return null` so hook order never changes.
   const questionPages = useQuestionPages(clarifyingQuestions, questionAnswers);
   const [jobGaps, setJobGaps] = useState<string[]>([]);
+  // Gaps the user said they do have after seeing them — kept for any later
+  // re-tailor too, since they're facts about the user, not about this job.
+  const [confirmedGaps, setConfirmedGaps] = useState<ConfirmedGap[]>([]);
 
   // A CV document created mid-flow should never outlive an abandoned
   // session — only a completed flow keeps it (see markCompleted() below).
@@ -165,8 +170,8 @@ export function TailorCvModal({
       const { cvDocumentId: docId, sourceText, document } =
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
-            ? { sourceCvId: sourceId, templateId }
-            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId }
+            ? { sourceCvId: sourceId, templateId, flowType: "tailor" }
+            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId, flowType: "tailor" }
         );
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -204,8 +209,11 @@ export function TailorCvModal({
     }, 400);
 
     try {
-      const { cvDocumentId: docId, sourceText, document } =
-        await analyzeUploadMutation.mutateAsync({ file, templateId });
+      const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
+        file,
+        templateId,
+        flowType: "tailor",
+      });
       clearInterval(progressTimer);
 
       if ("mismatch" in document) {
@@ -252,7 +260,11 @@ export function TailorCvModal({
     }
 
     try {
-      const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync({ sourceText: text, templateId });
+      const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync({
+        sourceText: text,
+        templateId,
+        flowType: "tailor",
+      });
       if ("mismatch" in document) {
         setFlowError(document.reason);
         return;
@@ -330,23 +342,25 @@ export function TailorCvModal({
     onComplete(finalCv);
   };
 
-  // "Tailor My CV" — folds the job description, alignment slider, and the
-  // answers to the AI's questions into the backend document via the same
-  // refine endpoint CreateCvModal uses (enhancementLevel here comes from the
-  // 0–10 alignment slider instead of a fixed default).
-  const handleContinueToTemplate = async () => {
-    setFlowError(null);
-    if (!cvDocumentId) {
-      setStep("select-template");
-      return;
-    }
+  // Folds the job description, alignment slider, the answers to the AI's
+  // questions and any gaps the user confirmed into the backend document via
+  // the same refine endpoint CreateCvModal uses (enhancementLevel here comes
+  // from the 0–10 alignment slider instead of a fixed default). Resolves to
+  // the gaps still left, or null when it didn't go through.
+  const runTailoring = async (gapsToAdd: ConfirmedGap[]): Promise<string[] | null> => {
+    if (!cvDocumentId) return null;
 
     const { personal, otherLines } = splitClarificationAnswers(clarifyingQuestions, questionAnswers);
     if (personal.title) setTargetRole(personal.title);
     const extraLines = [...otherLines, ...Object.entries(personal).map(([key, value]) => `${key}: ${value}`)];
-    const augmentedText = extraLines.length
-      ? `${analyzedSourceText}\n\n${extraLines.join("\n")}`
-      : analyzedSourceText;
+    // Read by the "DETAILS THE CANDIDATE CONFIRMED" rule in the backend's
+    // tailoring.rules.ts — keep the heading in sync with it.
+    const gapBlock = gapsToAdd.length
+      ? `Details the candidate confirmed after reviewing the job's requirements:\n${gapsToAdd
+          .map(({ gap, detail }) => `- ${gap}: ${detail || "the candidate has this (no further detail given)"}`)
+          .join("\n")}`
+      : "";
+    const augmentedText = [analyzedSourceText, extraLines.join("\n"), gapBlock].filter(Boolean).join("\n\n");
 
     try {
       const document = await refineMutation.mutateAsync({
@@ -360,19 +374,56 @@ export function TailorCvModal({
         // Tailoring to the job description is the AI rewrite itself.
         requiresRewrite: true,
         enhancementLevel: alignmentLevel / 10,
+        focusInstructions: gapsToAdd.length
+          ? "Work every requirement listed under \"Details the candidate confirmed\" into this CV where it belongs, " +
+            "using only what the candidate wrote about it."
+          : undefined,
       });
       if ("mismatch" in document) {
         setFlowError(document.reason);
-        return;
+        return null;
       }
-      setLatestContent(document.content);
-      if (!targetRole && document.content.personal?.title) setTargetRole(document.content.personal.title);
-      setJobGaps(document.jobAnalysis?.gaps ?? []);
-      setStep("select-template");
+      // Whatever the user ticked must end up in the CV: anything the AI
+      // left out goes into the skills section.
+      let content = document.content;
+      const notInCv = gapsNotInContent(content, gapsToAdd);
+      if (notInCv.length > 0) {
+        content = (await updateCvContent(cvDocumentId, { content: withAddedSkills(content, notInCv) })).content;
+      }
+      setLatestContent(content);
+      if (!targetRole && content.personal?.title) setTargetRole(content.personal.title);
+      // The AI shouldn't list a confirmed gap again, but never show one if it does.
+      const confirmed = new Set(gapsToAdd.map(({ gap }) => gap.toLowerCase()));
+      const remaining = (document.jobAnalysis?.gaps ?? []).filter((gap) => !confirmed.has(gap.toLowerCase()));
+      setJobGaps(remaining);
+      return remaining;
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err)) return null;
       setFlowError(err instanceof Error ? err.message : "Could not tailor your CV. Please try again.");
+      return null;
     }
+  };
+
+  // "Tailor My CV". When the job asks for things the CV doesn't show, the
+  // user gets a chance to add the ones they simply left out before the end.
+  const handleContinueToTemplate = async () => {
+    setFlowError(null);
+    if (!cvDocumentId) {
+      setStep("select-template");
+      return;
+    }
+    const remaining = await runTailoring(confirmedGaps);
+    if (remaining) setStep(remaining.length > 0 ? "review-gaps" : "select-template");
+  };
+
+  // "Add to my CV" on the gaps step — re-tailors with the confirmed gaps.
+  const handleAddConfirmedGaps = async (added: ConfirmedGap[]) => {
+    setFlowError(null);
+    const all = [...confirmedGaps.filter((c) => !added.some((a) => a.gap === c.gap)), ...added];
+    const remaining = await runTailoring(all);
+    if (!remaining) return;
+    setConfirmedGaps(all);
+    setStep("select-template");
   };
 
   return (
@@ -380,7 +431,13 @@ export function TailorCvModal({
       stepKey={step}
       wide={step === "choose-template"}
       onClose={onClose}
-      outside={<ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />}
+      outside={
+        <ProUpgradeModal
+          isOpen={proGate.isPaywallOpen}
+          onClose={proGate.closePaywall}
+          reason="You've already used your free Tailor generation. Upgrade to FitCV Pro for unlimited AI tailoring."
+        />
+      }
     >
         {/* ================= TEMPLATE (right before the first AI call) ================= */}
         {step === "choose-template" && (
@@ -795,6 +852,25 @@ export function TailorCvModal({
           </div>
         )}
 
+        {/* ================= STEP 4: GAPS → ADD WHAT THE USER LEFT OUT, OR CONTINUE AS IS ================= */}
+        {/* Before the ready step: on Pro that step can save the CV to a profile straight away. */}
+        {step === "review-gaps" && (
+          <GapReviewStep
+            gaps={jobGaps}
+            onAdd={handleAddConfirmedGaps}
+            onSkip={() => {
+              setFlowError(null);
+              setStep("select-template");
+            }}
+            onBack={() => {
+              setFlowError(null);
+              setStep("jd-and-slider");
+            }}
+            busy={refineMutation.isPending}
+            error={flowError}
+          />
+        )}
+
         {/* ================= STEP 5: READY → KEEP A PROFILE UP TO DATE ================= */}
         {step === "select-template" && isPro && cvDocumentId && (
           <ProfileSyncStep
@@ -809,7 +885,9 @@ export function TailorCvModal({
                   })()
                 : null
             }
-            hasNewDetails={Object.values(questionAnswers).some((answer) => answer.trim())}
+            hasNewDetails={
+              confirmedGaps.length > 0 || Object.values(questionAnswers).some((answer) => answer.trim())
+            }
             // Tailored to a job: only facts go back, never the wording.
             tailored
             onFinish={handleFinish}

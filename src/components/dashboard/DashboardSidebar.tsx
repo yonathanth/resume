@@ -1,9 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useRef } from "react";
 import Link from "next/link";
 import {
-  FileText,
   LayoutDashboard,
   UserCheck,
   FolderKanban,
@@ -18,6 +17,7 @@ import {
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useMe } from "@/hooks/use-auth";
 import { getAvatarColor, getDisplayName, getInitials } from "@/lib/utils";
+import { Moxie, type MoxieHandle } from "@/components/moxie";
 
 export type DashboardTab =
   | "builder"
@@ -102,6 +102,24 @@ function SidebarLink({
   );
 }
 
+// Moxie is the sidebar's brand mark. The sidebar lives in the dashboard
+// layout, so she greets once when the dashboard opens (not on every page
+// change), then idles; clicking her gets another wave.
+function SidebarMoxie() {
+  const moxieRef = useRef<MoxieHandle>(null);
+  return (
+    <button
+      type="button"
+      onClick={() => moxieRef.current?.play("wave")}
+      title="Moxie"
+      aria-label="Moxie — click to say hi"
+      className="shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
+    >
+      <Moxie ref={moxieRef} animation="welcome" decorative size={48} />
+    </button>
+  );
+}
+
 export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: DashboardSidebarProps) {
   const { data: subscription } = useSubscriptionStatus();
   const isPro = subscription?.isPro ?? false;
@@ -119,10 +137,8 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
     >
       {/* Brand + collapse */}
       <div className={`h-16 shrink-0 border-b border-neutral-200 flex items-center px-4 ${isExpanded ? "justify-between" : "justify-center"}`}>
-        <Link href="/" className="flex items-center gap-2.5 group min-w-0" title="Resumate Home">
-          <span className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center group-hover:scale-105 transition-transform ${ACCENT_TILE}`}>
-            <FileText className="w-[18px] h-[18px]" />
-          </span>
+        <div className="flex items-center gap-2 min-w-0">
+          <SidebarMoxie />
           {isExpanded && (
             <span className="flex items-center gap-2 min-w-0">
               <span className="text-[15px] font-bold tracking-tight text-neutral-950 truncate">Resumate</span>
@@ -133,7 +149,7 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
               )}
             </span>
           )}
-        </Link>
+        </div>
 
         {isExpanded && (
           <button

@@ -2,8 +2,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Compass, Crown, FileText, HelpCircle, Loader2, LogOut, Menu, Settings } from "lucide-react";
+import { Compass, Crown, HelpCircle, Loader2, LogOut, Menu, Settings } from "lucide-react";
 import { useLogout } from "@/hooks/use-auth";
+import { Moxie, type MoxieHandle } from "@/components/moxie";
 
 export interface TopBarNavItem {
   href: string;
@@ -27,6 +28,7 @@ const itemClass =
 export function DashboardTopBar({ title, onStartTour, mobileNavItems, activeHref, isPro }: DashboardTopBarProps) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const moxieRef = useRef<MoxieHandle>(null);
   const logout = useLogout();
 
   useEffect(() => {
@@ -48,14 +50,16 @@ export function DashboardTopBar({ title, onStartTour, mobileNavItems, activeHref
   return (
     <header className="h-16 shrink-0 bg-white border-b border-neutral-200 px-4 sm:px-8 flex items-center justify-between gap-4 z-30">
       <div className="flex items-center gap-3 min-w-0">
-        {/* On small screens the sidebar (and its logo) is hidden. */}
-        <Link
-          href="/"
-          className="md:hidden w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-gradient-to-b from-accent-mid to-accent border border-accent text-white"
-          aria-label="Resumate home"
+        {/* On small screens the sidebar is hidden, so Moxie stands in for its brand mark. */}
+        <button
+          type="button"
+          onClick={() => moxieRef.current?.play("wave")}
+          title="Moxie"
+          aria-label="Moxie — click to say hi"
+          className="md:hidden shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
         >
-          <FileText className="w-4 h-4" />
-        </Link>
+          <Moxie ref={moxieRef} animation="welcome" decorative size={40} />
+        </button>
         <h1 className="text-lg font-semibold tracking-tight text-neutral-950 truncate">{title}</h1>
       </div>
 

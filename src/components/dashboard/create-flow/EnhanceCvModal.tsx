@@ -141,8 +141,11 @@ export function EnhanceCvModal({
     setFlowError(null);
     setUploadedFileName(file.name);
     try {
-      const { cvDocumentId: docId, sourceText, document } =
-        await analyzeUploadMutation.mutateAsync({ file, templateId });
+      const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
+        file,
+        templateId,
+        flowType: "improve",
+      });
       if ("mismatch" in document) {
         setFlowError(document.reason);
         return;
@@ -172,8 +175,8 @@ export function EnhanceCvModal({
       const { cvDocumentId: docId, sourceText, document } =
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
-            ? { sourceCvId: sourceId, templateId }
-            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId }
+            ? { sourceCvId: sourceId, templateId, flowType: "improve" }
+            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId, flowType: "improve" }
         );
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -310,7 +313,13 @@ export function EnhanceCvModal({
       stepKey={step}
       wide={step === "choose-template"}
       onClose={onClose}
-      outside={<ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />}
+      outside={
+        <ProUpgradeModal
+          isOpen={proGate.isPaywallOpen}
+          onClose={proGate.closePaywall}
+          reason="You've already used your free Improve generation. Upgrade to FitCV Pro for unlimited AI tailoring."
+        />
+      }
     >
         {/* ================= TEMPLATE (right before the first AI call) ================= */}
         {step === "choose-template" && (

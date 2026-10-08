@@ -7,10 +7,15 @@ import { useStartProCheckout, useSubscriptionStatus } from "@/hooks/use-subscrip
 import type { CheckoutProvider } from "@/lib/api";
 import { SOFT_TONES } from "./create-flow/OptionCard";
 
-// Mirrors the backend: free accounts get 3 AI generations
-// (FREE_GENERATION_LIMIT in entitlement.service); Pro is unlimited — $5/month
-// recurring through Polar, or a fixed 1-month period for 80 ETB through Chapa.
-const FREE_LIMIT = 3;
+// Mirrors the backend: free accounts get one free use of each dashboard tab,
+// one-time-only — not a shared pool (see entitlement.service.ts). Pro is
+// unlimited — $5/month recurring through Polar, or a fixed 1-month period for
+// 80 ETB through Chapa.
+const FREE_TABS: { key: "freeCreateUsed" | "freeTailorUsed" | "freeImproveUsed"; label: string }[] = [
+  { key: "freeCreateUsed", label: "Create" },
+  { key: "freeTailorUsed", label: "Tailor" },
+  { key: "freeImproveUsed", label: "Improve" },
+];
 
 const PRO_FEATURES = [
   "Unlimited AI resume generations",
@@ -40,7 +45,6 @@ export function UpgradeView() {
     );
   }
 
-  const used = Math.min(subscription.freeGenerationsUsed, FREE_LIMIT);
   const periodEnd = formatDate(subscription.currentPeriodEnd);
 
   // Already Pro: show the plan instead of a pitch.
@@ -99,16 +103,21 @@ export function UpgradeView() {
       {/* Free usage */}
       {!subscription.isExpired && (
         <div className="mt-8 rounded-lg border border-neutral-300 bg-white p-5">
-          <div className="flex items-center justify-between text-sm">
-            <span className="font-semibold text-neutral-900">Free AI generations</span>
-            <span className="text-neutral-500">
-              {used} of {FREE_LIMIT} used
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-1.5">
-            {Array.from({ length: FREE_LIMIT }, (_, i) => (
-              <span key={i} className={`h-1.5 rounded-full ${i < used ? "bg-accent" : "bg-neutral-200"}`} />
-            ))}
+          <span className="text-sm font-semibold text-neutral-900">Free tab usage</span>
+          <p className="mt-1 text-xs text-neutral-500">One free use each — Create, Tailor and Improve.</p>
+          <div className="mt-3 grid grid-cols-3 gap-3">
+            {FREE_TABS.map(({ key, label }) => {
+              const used = subscription[key];
+              return (
+                <div key={key} className="rounded-md border border-neutral-200 p-3 text-center">
+                  <div className="text-xs font-semibold text-neutral-900">{label}</div>
+                  <div className={`mt-1 text-[11px] ${used ? "text-neutral-400" : "text-accent-strong"}`}>
+                    {used ? "Used" : "Available"}
+                  </div>
+                  <span className={`mt-2 block h-1.5 rounded-full ${used ? "bg-neutral-200" : "bg-accent"}`} />
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

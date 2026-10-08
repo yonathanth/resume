@@ -59,6 +59,7 @@ interface BuilderViewProps {
   onOpenDraftInEditor?: (draft: ResumeDraft) => void;
   onDuplicateDraft?: (draft: ResumeDraft) => void;
   onDeleteDraft?: (id: string) => void | Promise<void>;
+  onUpdateDraftFromSavedCv?: (savedCv: CvData) => void;
   isCreateModalOpenExternal?: boolean;
   onCloseCreateModalExternal?: () => void;
   isStartWithTemplateModalOpenExternal?: boolean;
@@ -78,6 +79,7 @@ export function BuilderView({
   onOpenDraftInEditor: externalOpenDraftInEditor,
   onDuplicateDraft: externalDuplicateDraft,
   onDeleteDraft: externalDeleteDraft,
+  onUpdateDraftFromSavedCv: externalUpdateDraftFromSavedCv,
   isCreateModalOpenExternal = false,
   onCloseCreateModalExternal,
   isStartWithTemplateModalOpenExternal = false,
@@ -172,9 +174,38 @@ export function BuilderView({
     localOpenDraftInEditor(duplicated);
   };
 
+  // Upserts the drafts list from a just-saved CV — fallback-only (the real
+  // DashboardContext version also invalidates the cv-drafts query so other
+  // views refetch immediately).
+  const localUpdateDraftFromSavedCv = (savedCv: CvData) => {
+    const newDraft: ResumeDraft = {
+      id: savedCv.id && savedCv.id !== "cv-new" ? savedCv.id : `draft-${Date.now()}`,
+      title: savedCv.title,
+      targetRole: savedCv.targetRole,
+      targetCompany: "General Application",
+      atsScore: savedCv.atsScore,
+      lastEdited: "just now",
+      updatedAt: new Date().toISOString(),
+      templateName: templateLabel(savedCv.templateStyle),
+      templateId: savedCv.templateStyle,
+      accentColor: "bg-neutral-950",
+      matchedKeywords: savedCv.skills.slice(0, 5),
+    };
+    setDrafts((prev) => {
+      const existingIdx = prev.findIndex((d) => d.id === newDraft.id);
+      if (existingIdx >= 0) {
+        const copy = [...prev];
+        copy[existingIdx] = newDraft;
+        return copy;
+      }
+      return [newDraft, ...prev];
+    });
+  };
+
   const openDraftInEditor = externalOpenDraftInEditor ?? localOpenDraftInEditor;
   const duplicateDraft = externalDuplicateDraft ?? localDuplicateDraft;
   const deleteDraft = externalDeleteDraft ?? localDeleteDraft;
+  const updateDraftFromSavedCv = externalUpdateDraftFromSavedCv ?? localUpdateDraftFromSavedCv;
 
   // If a CV is open for editing, render the Form + Live Preview Combo Workspace
   if (activeEditingCv) {
@@ -183,31 +214,7 @@ export function BuilderView({
         initialData={activeEditingCv}
         onBack={() => setActiveEditingCv(null)}
         onSave={(savedCv) => {
-          const newDraft: ResumeDraft = {
-            id:
-              savedCv.id && savedCv.id !== "cv-new"
-                ? savedCv.id
-                : `draft-${Date.now()}`,
-            title: savedCv.title,
-            targetRole: savedCv.targetRole,
-            targetCompany: "General Application",
-            atsScore: savedCv.atsScore,
-            lastEdited: "just now",
-            updatedAt: new Date().toISOString(),
-            templateName: templateLabel(savedCv.templateStyle),
-            templateId: savedCv.templateStyle,
-            accentColor: "bg-neutral-950",
-            matchedKeywords: savedCv.skills.slice(0, 5),
-          };
-          setDrafts((prev) => {
-            const existingIdx = prev.findIndex((d) => d.id === newDraft.id);
-            if (existingIdx >= 0) {
-              const copy = [...prev];
-              copy[existingIdx] = newDraft;
-              return copy;
-            }
-            return [newDraft, ...prev];
-          });
+          updateDraftFromSavedCv(savedCv);
           setActiveEditingCv(null);
         }}
       />
@@ -326,9 +333,14 @@ export function BuilderView({
         </div>
       )}
 
+      {/* Each flow is mounted only while open, so closing it (X) throws away
+          its progress and the next open starts from the first step. Unmounting
+          also cleans up any half-made CV (see useDraftCvLifecycle). */}
+
       {/* ================= MODAL 1: CREATE NEW CV ================= */}
+      {(createModalOpen || isCreateModalOpenExternal) && (
       <CreateCvModal
-        isOpen={createModalOpen || isCreateModalOpenExternal}
+        isOpen
         onClose={() => {
           setCreateModalOpen(false);
           onCloseCreateModalExternal?.();
@@ -340,13 +352,13 @@ export function BuilderView({
         }}
         initialProfileId={preselectedProfileId}
       />
+      )}
 
       {/* ================= MODAL 2: START FROM TEMPLATE ================= */}
+      {isStartWithTemplateModalOpenExternal && (
       <CreateCvModal
-        isOpen={isStartWithTemplateModalOpenExternal}
-        initialTemplate={
-          isStartWithTemplateModalOpenExternal ? preselectedTemplate : undefined
-        }
+        isOpen
+        initialTemplate={preselectedTemplate}
         onClose={() => {
           onCloseStartWithTemplateModalExternal?.();
         }}
@@ -355,10 +367,12 @@ export function BuilderView({
           setActiveEditingCv(cvData);
         }}
       />
+      )}
 
       {/* ================= MODAL 3: TAILOR TO JOB DESCRIPTION ================= */}
+      {tailorModalOpen && (
       <TailorCvModal
-        isOpen={tailorModalOpen}
+        isOpen
         onClose={() => setTailorModalOpen(false)}
         onComplete={(cvData) => {
           setTailorModalOpen(false);
@@ -366,10 +380,12 @@ export function BuilderView({
         }}
         pastProjects={pastProjectsList}
       />
+      )}
 
       {/* ================= MODAL 4: ENHANCE EXISTING CV ================= */}
+      {enhanceModalOpen && (
       <EnhanceCvModal
-        isOpen={enhanceModalOpen}
+        isOpen
         onClose={() => setEnhanceModalOpen(false)}
         onComplete={(cvData) => {
           setEnhanceModalOpen(false);
@@ -377,6 +393,7 @@ export function BuilderView({
         }}
         pastProjects={pastProjectsList}
       />
+      )}
 
       <ConfirmDialog
         isOpen={pendingAction !== null}

@@ -614,6 +614,10 @@ export function deleteCvDocument(cvId: string) {
   });
 }
 
+// Which dashboard tab a CV flow started from — one free use each,
+// one-time-only (see entitlement.service.ts on the backend).
+export type CvFlowType = "create" | "tailor" | "improve";
+
 // Runs the same combined AI analysis /cv/analyze does, without persisting
 // anything — structuring, tailoring, job compatibility, and clarification
 // questions all come back together (see the backend's clarification.rules.ts
@@ -629,6 +633,13 @@ export function analyzeCv(input: {
   // Enhance flow's improvement-goal field) — kept out of sourceText so the
   // AI treats it as a directive, not more candidate narrative.
   focusInstructions?: string;
+  // Required to start a brand new flow (charges that tab's one free use).
+  // Omit only when cvDocumentId is set.
+  flowType?: CvFlowType;
+  // Set only for a flow's own refine/re-analysis call, once the document
+  // already exists — marks this as a continuation already paid for by the
+  // flow's first analyze call, so no second free use is spent.
+  cvDocumentId?: string;
 }) {
   return apiFetch<AnalyzeResult | GenerateCvMismatch>("/api/v1/cv/analyze", {
     method: "POST",
@@ -743,8 +754,10 @@ export type SubscriptionProvider = "POLAR" | "CHAPA" | null;
 
 export interface SubscriptionStatusResult {
   isPro: boolean;
-  freeGenerationsUsed: number;
-  freeGenerationsRemaining: number;
+  // One free use per dashboard tab, one-time-only — not a shared pool.
+  freeCreateUsed: boolean;
+  freeTailorUsed: boolean;
+  freeImproveUsed: boolean;
   subscriptionStatus: SubscriptionStatus;
   subscriptionProvider: SubscriptionProvider;
   currentPeriodEnd: string | null;

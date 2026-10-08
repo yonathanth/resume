@@ -4,11 +4,11 @@ import React, {
   createContext,
   useContext,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { useAllDrafts } from "@/hooks/use-cv-drafts";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAllDrafts, CV_DRAFTS_QUERY_KEY } from "@/hooks/use-cv-drafts";
 import {
   ApiError,
   getCvDocument,
@@ -28,6 +28,9 @@ interface DashboardContextValue {
   drafts: ResumeDraft[];
   /** True until the user's CVs have loaded the first time. */
   isLoadingDrafts: boolean;
+  /** Re-fetches the drafts list from the server — called whenever the
+   * builder page is (re)entered so it never shows a stale list. */
+  refetchDrafts: () => void;
   setDrafts: React.Dispatch<React.SetStateAction<ResumeDraft[]>>;
   activeEditingCv: CvData | null;
   setActiveEditingCv: React.Dispatch<React.SetStateAction<CvData | null>>;
@@ -56,15 +59,16 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
+  const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<ResumeDraft[]>([]);
-  const { data: allDrafts, isLoading: isLoadingDrafts } = useAllDrafts();
-  const hasHydratedDrafts = useRef(false);
+  const { data: allDrafts, isLoading: isLoadingDrafts, refetch: refetchDrafts } = useAllDrafts();
 
-  // Seed the drafts list from every CV the user owns across all profiles,
-  // once on load; local edits (duplicate/delete/save) take over from there.
+  // Keeps `drafts` in sync with the live query data (not just a one-time
+  // seed) — mutations below pair their optimistic `setDrafts` patch with an
+  // invalidation of CV_DRAFTS_QUERY_KEY, so the real server-confirmed list
+  // flows back in here as soon as that refetch resolves.
   useEffect(() => {
-    if (allDrafts && !hasHydratedDrafts.current) {
-      hasHydratedDrafts.current = true;
+    if (allDrafts) {
       setDrafts(allDrafts);
     }
   }, [allDrafts]);
@@ -109,6 +113,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       }
       return [newDraft, ...prev];
     });
+    // Instant optimistic update above, then confirm/correct with the real
+    // server state — the new/updated CV is already persisted by this point.
+    queryClient.invalidateQueries({ queryKey: CV_DRAFTS_QUERY_KEY });
   };
 
   // Duplicates a draft by copying its REAL content into a new standalone
@@ -125,6 +132,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         title: copyTitle,
       };
       setDrafts((prev) => [duplicated, ...prev]);
+      queryClient.invalidateQueries({ queryKey: CV_DRAFTS_QUERY_KEY });
       handleOpenDraftInEditor(duplicated);
     } catch {
       const duplicated: ResumeDraft = {
@@ -153,6 +161,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       }
     }
     setDrafts((prev) => prev.filter((d) => d.id !== id));
+    queryClient.invalidateQueries({ queryKey: CV_DRAFTS_QUERY_KEY });
   };
 
   const handleUseTemplate = (templateId: TemplateId) => {
@@ -184,6 +193,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       value={{
         drafts,
         isLoadingDrafts,
+        refetchDrafts: () => {
+          void refetchDrafts();
+        },
         setDrafts,
         activeEditingCv,
         setActiveEditingCv,

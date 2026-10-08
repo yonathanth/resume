@@ -470,9 +470,12 @@ function PlanSection() {
     return <div className="h-24 rounded-lg bg-neutral-100 animate-pulse" />;
   }
 
-  const freeLimit = subscription.freeGenerationsUsed + subscription.freeGenerationsRemaining;
-  const usedPct = freeLimit > 0 ? Math.min(100, (subscription.freeGenerationsUsed / freeLimit) * 100) : 100;
   const isChapa = subscription.subscriptionProvider === "CHAPA";
+  const freeTabs: { key: "freeCreateUsed" | "freeTailorUsed" | "freeImproveUsed"; label: string }[] = [
+    { key: "freeCreateUsed", label: "Create" },
+    { key: "freeTailorUsed", label: "Tailor" },
+    { key: "freeImproveUsed", label: "Improve" },
+  ];
 
   const handleConfirmCancel = async () => {
     setCancelError(null);
@@ -526,16 +529,24 @@ function PlanSection() {
                 : "Pro makes AI generations and tailoring unlimited."}
           </p>
 
-          {!subscription.isPro && freeLimit > 0 && (
+          {!subscription.isPro && (
             <div className="mt-5 max-w-sm">
-              <div className="flex items-center justify-between text-xs mb-1.5">
-                <span className="text-neutral-600">Free AI generations</span>
-                <span className="font-semibold text-neutral-900">
-                  {subscription.freeGenerationsUsed} of {freeLimit} used
-                </span>
-              </div>
-              <div className="h-1.5 rounded-full bg-neutral-100 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-accent to-accent-light" style={{ width: `${usedPct}%` }} />
+              <div className="text-xs text-neutral-600 mb-1.5">Free tab usage — one use each</div>
+              <div className="flex gap-2">
+                {freeTabs.map(({ key, label }) => {
+                  const used = subscription[key];
+                  return (
+                    <span
+                      key={key}
+                      className={`flex-1 rounded-md border px-2 py-1.5 text-center text-[11px] font-semibold ${
+                        used ? "border-neutral-200 text-neutral-400" : "border-accent-border bg-accent-soft text-accent-strong"
+                      }`}
+                    >
+                      {label}
+                      <span className="block text-[10px] font-normal">{used ? "Used" : "Available"}</span>
+                    </span>
+                  );
+                })}
               </div>
             </div>
           )}

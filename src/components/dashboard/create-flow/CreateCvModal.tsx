@@ -223,6 +223,7 @@ export function CreateCvModal({
         templateId: selectedTemplate,
         sourceProfileId: selectedProfileId,
         targetProfileId: selectedProfileId,
+        flowType: "create",
         extraDetails: flowExtraDetails || undefined,
         jobDescription: jobDescription || undefined,
       });
@@ -266,7 +267,11 @@ export function CreateCvModal({
     }
 
     try {
-      const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync({ sourceText: text, templateId });
+      const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync({
+        sourceText: text,
+        templateId,
+        flowType: "create",
+      });
       if ("mismatch" in document) {
         setFlowError(document.reason);
         return;
@@ -301,8 +306,11 @@ export function CreateCvModal({
     }, 400);
 
     try {
-      const { cvDocumentId: docId, sourceText, document } =
-        await analyzeUploadMutation.mutateAsync({ file, templateId });
+      const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
+        file,
+        templateId,
+        flowType: "create",
+      });
       clearInterval(progressTimer);
 
       if ("mismatch" in document) {
@@ -1246,7 +1254,11 @@ export function CreateCvModal({
         </div>
       )}
 
-      <ProUpgradeModal isOpen={proGate.isPaywallOpen} onClose={proGate.closePaywall} />
+      <ProUpgradeModal
+        isOpen={proGate.isPaywallOpen}
+        onClose={proGate.closePaywall}
+        reason="You've already used your free Create generation. Upgrade to FitCV Pro for unlimited AI tailoring."
+      />
     </div>
   );
 }
