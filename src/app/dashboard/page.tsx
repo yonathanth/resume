@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { BuilderView } from "@/components/dashboard/BuilderView";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 
@@ -7,11 +8,13 @@ export default function BuilderPage() {
   const {
     drafts,
     setDrafts,
+    refetchDrafts,
     activeEditingCv,
     setActiveEditingCv,
     handleOpenDraftInEditor,
     handleDuplicateDraft,
     handleDeleteDraft,
+    updateDraftFromSavedCv,
     isCreateModalOpen,
     setIsCreateModalOpen,
     isStartWithTemplateOpen,
@@ -22,6 +25,16 @@ export default function BuilderPage() {
     goToTemplates,
   } = useDashboard();
 
+  // The dashboard is a persistent layout (DashboardProvider never remounts
+  // while navigating within /dashboard/*), so its one-time query load would
+  // otherwise go stale — re-fetch the resume list every time this page is
+  // actually (re)entered.
+  useEffect(() => {
+    refetchDrafts();
+    // Only on entering this page, not on every drafts/refetch identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <BuilderView
       drafts={drafts}
@@ -31,6 +44,7 @@ export default function BuilderPage() {
       onOpenDraftInEditor={handleOpenDraftInEditor}
       onDuplicateDraft={handleDuplicateDraft}
       onDeleteDraft={handleDeleteDraft}
+      onUpdateDraftFromSavedCv={updateDraftFromSavedCv}
       isCreateModalOpenExternal={isCreateModalOpen}
       onCloseCreateModalExternal={() => setIsCreateModalOpen(false)}
       isStartWithTemplateModalOpenExternal={isStartWithTemplateOpen}

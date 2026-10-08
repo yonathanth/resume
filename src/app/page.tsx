@@ -1,6 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { getAccessToken } from "@/lib/api";
 import { Navbar } from "@/components/Navbar";
 import { Hero } from "@/components/Hero";
 import { TemplatesSection } from "@/components/TemplatesSection";
@@ -10,6 +12,17 @@ import { PricingSection } from "@/components/PricingSection";
 import { Footer } from "@/components/Footer";
 
 export default function Home() {
+  const router = useRouter();
+
+  // Signed-in visitors go straight to their dashboard. The dashboard's own
+  // logo links to "/?home", so they can still open this page on purpose.
+  // Only the stored token is checked (no refresh call), so logged-out
+  // visitors never wait on the network to see the page.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("home")) return;
+    if (getAccessToken()) router.replace("/dashboard");
+  }, [router]);
+
   return (
     <div className="min-h-screen bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
       {/* Subtle background radial dot pattern */}

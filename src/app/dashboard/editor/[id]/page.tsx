@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileQuestion } from "lucide-react";
 import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWorkspace";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { useRefreshSubscriptionStatus } from "@/hooks/use-subscription";
 import { getCvDocument } from "@/lib/api";
 import { applyCvContent, createBlankCv, toResumeDraft } from "@/lib/cv-mapper";
 import { CvData, DEFAULT_TEMPLATE_ID } from "@/components/dashboard/create-flow/types";
@@ -21,6 +22,7 @@ export default function CvEditorPage({
   const { id } = use(params);
   const router = useRouter();
   const { updateDraftFromSavedCv } = useDashboard();
+  const refreshSubscriptionStatus = useRefreshSubscriptionStatus();
   // Keyed by document id, so navigating to another resume shows the loading
   // state again instead of the previous one's content.
   const [loaded, setLoaded] = useState<{ id: string; cv: CvData | null; notFound: boolean } | null>(null);
@@ -96,6 +98,7 @@ export default function CvEditorPage({
       onBack={() => router.push("/dashboard")}
       onSave={(savedCv) => {
         updateDraftFromSavedCv(savedCv);
+        refreshSubscriptionStatus();
         router.push("/dashboard");
       }}
     />

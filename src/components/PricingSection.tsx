@@ -6,12 +6,13 @@ import { ArrowRight, Check } from "lucide-react";
 import { CtaButton } from "@/components/CtaButton";
 import { Reveal } from "@/components/Reveal";
 
-// Mirrors what the app actually sells: free accounts get 3 AI generations
-// (FREE_GENERATION_LIMIT in resume-back entitlement.service), Pro is unlimited —
-// $5/month through Polar, or 80 ETB/month through Chapa.
+// Mirrors what the app actually sells: free accounts get one free AI
+// generation per dashboard tab — Create, Tailor, Improve — one-time-only
+// (entitlement.service.ts's FlowType), Pro is unlimited — $5/month through
+// Polar, or 80 ETB/month through Chapa.
 
 const FREE_FEATURES = [
-  "3 AI resume generations",
+  "1 free use each of Create, Tailor and Improve",
   "Every recruiter-tested template",
   "Import your old CV (PDF or DOCX)",
   "Click-to-edit resume editor",

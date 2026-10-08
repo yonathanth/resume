@@ -5,10 +5,9 @@ import { usePathname } from "next/navigation";
 import { DashboardSidebar, DashboardTab } from "@/components/dashboard/DashboardSidebar";
 import { DashboardProvider, useDashboard } from "@/components/dashboard/DashboardContext";
 import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWorkspace";
-import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { useRefreshSubscriptionStatus, useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useMe } from "@/hooks/use-auth";
 import { OnboardingModal } from "@/components/dashboard/OnboardingModal";
-import { templateLabel } from "@/components/dashboard/create-flow/types";
 import { AuthGuard } from "@/components/AuthGuard";
 import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
 import { QuickTour } from "@/components/dashboard/QuickTour";
@@ -42,7 +41,8 @@ const TAB_HREFS: Record<DashboardTab, string> = {
 };
 
 function EditorOverlay() {
-  const { activeEditingCv, setActiveEditingCv, setDrafts } = useDashboard();
+  const { activeEditingCv, setActiveEditingCv, updateDraftFromSavedCv } = useDashboard();
+  const refreshSubscriptionStatus = useRefreshSubscriptionStatus();
   if (!activeEditingCv) return null;
 
   return (
@@ -50,29 +50,14 @@ function EditorOverlay() {
       initialData={activeEditingCv}
       onBack={() => setActiveEditingCv(null)}
       onSave={(savedCv) => {
-        setDrafts((prev) => {
-          const id = savedCv.id && savedCv.id !== "cv-new" ? savedCv.id : `draft-${Date.now()}`;
-          const newDraft = {
-            id,
-            title: savedCv.title,
-            targetRole: savedCv.targetRole,
-            targetCompany: "General Application",
-            atsScore: savedCv.atsScore,
-            lastEdited: "just now",
-            updatedAt: new Date().toISOString(),
-            templateName: templateLabel(savedCv.templateStyle),
-            templateId: savedCv.templateStyle,
-            accentColor: "bg-neutral-950",
-            matchedKeywords: savedCv.skills.slice(0, 5),
-          };
-          const existingIdx = prev.findIndex((d) => d.id === id);
-          if (existingIdx >= 0) {
-            const copy = [...prev];
-            copy[existingIdx] = newDraft;
-            return copy;
-          }
-          return [newDraft, ...prev];
-        });
+        // Same helper the dedicated editor route and BuilderView use — it
+        // pairs the optimistic draft patch with a CV_DRAFTS_QUERY_KEY
+        // invalidation, so the dashboard's list reflects the real saved
+        // state once that refetch resolves, not just the local guess.
+        updateDraftFromSavedCv(savedCv);
+        // A generation may have just spent a free tab use — refresh so the
+        // dashboard's Pro/free-usage state isn't left stale.
+        refreshSubscriptionStatus();
         setActiveEditingCv(null);
       }}
     />
