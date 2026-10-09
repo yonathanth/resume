@@ -145,6 +145,12 @@ export function login(email: string, password: string) {
   });
 }
 
+// Redirect-based Google sign-in: a full-page navigation to the backend, which
+// bounces through Google and lands back on /auth/google with a refresh cookie.
+export function googleSignInUrl() {
+  return `${API_URL}/api/v1/auth/google/start`;
+}
+
 export function googleAuth(idToken: string) {
   return apiFetch<AuthResponse>("/api/v1/auth/google", {
     method: "POST",
