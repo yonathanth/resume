@@ -3,11 +3,11 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Eye, EyeOff } from "lucide-react";
-import { useRegister, useLogin, useGoogleAuth } from "@/hooks/use-auth";
-import { useGoogleIdentity } from "@/hooks/use-google-identity";
+import { useRegister, useLogin } from "@/hooks/use-auth";
+import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
-import { ApiError } from "@/lib/api";
+import { ApiError, googleSignInUrl } from "@/lib/api";
 
 interface AuthLayoutProps {
   mode: "signup" | "login";
@@ -133,6 +133,12 @@ function GoogleIcon() {
   );
 }
 
+const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
+  GOOGLE_CANCELLED: "Google sign-in was cancelled.",
+  GOOGLE_NOT_CONFIGURED: "Google sign-in is not configured.",
+  EMAIL_NOT_VERIFIED: "Your Google account's email is not verified.",
+};
+
 export function AuthLayout({ mode }: AuthLayoutProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -144,14 +150,24 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
 
   const registerMutation = useRegister();
   const loginMutation = useLogin();
-  const googleAuthMutation = useGoogleAuth();
-  const { promptGoogleSignIn } = useGoogleIdentity();
+  const [isGoogleRedirecting, setIsGoogleRedirecting] = useState(false);
 
-  const isPending = registerMutation.isPending || loginMutation.isPending || googleAuthMutation.isPending;
+  const isPending = registerMutation.isPending || loginMutation.isPending || isGoogleRedirecting;
+
+  // The backend's Google callback sends failures back as /login?error=CODE.
+  // Read only after mount (window), and hidden once the user tries again.
+  const hasMounted = useHasMounted();
+  const [showGoogleError, setShowGoogleError] = useState(true);
+  const googleErrorCode = hasMounted ? new URLSearchParams(window.location.search).get("error") : null;
+  const googleError = googleErrorCode
+    ? GOOGLE_ERROR_MESSAGES[googleErrorCode] ?? "Google sign-in failed. Please try again."
+    : null;
+  const displayedError = formError ?? (showGoogleError ? googleError : null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+    setShowGoogleError(false);
     try {
       if (isSignup) {
         await registerMutation.mutateAsync({ email, password });
@@ -165,17 +181,9 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
 
   const handleGoogleClick = () => {
     setFormError(null);
-    try {
-      promptGoogleSignIn((credential) => {
-        googleAuthMutation.mutate(credential, {
-          onError: (err) => {
-            setFormError(err instanceof ApiError ? err.message : "Google sign-in failed");
-          },
-        });
-      });
-    } catch {
-      setFormError("Google sign-in is not configured");
-    }
+    setShowGoogleError(false);
+    setIsGoogleRedirecting(true);
+    window.location.href = googleSignInUrl();
   };
 
   return (
@@ -240,7 +248,7 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
               </button>
             </div>
 
-            {formError && <p className="text-[13.5px] font-medium text-red-400">{formError}</p>}
+            {displayedError && <p className="text-[13.5px] font-medium text-red-400">{displayedError}</p>}
 
             <button
               type="submit"
