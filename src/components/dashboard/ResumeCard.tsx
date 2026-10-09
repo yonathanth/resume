@@ -6,6 +6,7 @@ import { ArrowRight, Copy, Download, MoreVertical, PenLine, Trash2 } from "lucid
 import { ApiError, downloadCvPdf, finalizeCvDocument, getCvThumbnail } from "@/lib/api";
 import { CvPreviewFrame } from "./create-flow/CvPreviewFrame";
 import { useToast } from "@/components/Toaster";
+import { getCvFileName } from "@/lib/utils";
 import { ResumeDraft, templateLabel } from "./create-flow/types";
 
 /** A saved CV's first page, rendered by the backend with the CV's own template. */
@@ -38,7 +39,7 @@ export async function downloadDraftPdf(draft: ResumeDraft): Promise<void> {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${draft.title || "resume"}.pdf`;
+  link.download = getCvFileName(draft.fullName, draft.title);
   document.body.appendChild(link);
   link.click();
   link.remove();

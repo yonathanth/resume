@@ -181,6 +181,7 @@ export function BuilderView({
     const newDraft: ResumeDraft = {
       id: savedCv.id && savedCv.id !== "cv-new" ? savedCv.id : `draft-${Date.now()}`,
       title: savedCv.title,
+      fullName: savedCv.personalInfo.fullName,
       targetRole: savedCv.targetRole,
       targetCompany: "General Application",
       atsScore: savedCv.atsScore,

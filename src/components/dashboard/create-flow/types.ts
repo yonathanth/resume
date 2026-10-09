@@ -389,6 +389,8 @@ export interface ResumeDraft {
   /** ISO timestamp of the last save — busts the cached thumbnail after edits. */
   updatedAt?: string;
   title: string;
+  /** Name on the CV itself — used for the downloaded file's name. */
+  fullName?: string;
   targetRole: string;
   targetCompany: string;
   atsScore: number;

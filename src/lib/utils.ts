@@ -28,6 +28,27 @@ export function getDisplayName(fullName?: string | null, email?: string | null):
   return fullName?.trim() || email?.trim() || "Account";
 }
 
+// Name a downloaded CV for the recruiter who receives it: "Jane-Doe-Resume.pdf"
+// (first + last name; middle names dropped). Falls back to the CV's title,
+// then plain "Resume". Keep in sync with cvFileName in resume-back's cv.routes.ts.
+export function getCvFileName(fullName?: string | null, fallbackTitle?: string | null): string {
+  const toSlug = (s: string) =>
+    s
+      .split(/\s+/)
+      .map((part) => part.replace(/[^\p{L}\p{N}'-]/gu, ""))
+      .filter(Boolean);
+
+  const nameParts = toSlug(fullName ?? "");
+  const base =
+    nameParts.length > 1
+      ? [nameParts[0], nameParts[nameParts.length - 1]]
+      : nameParts.length === 1
+        ? nameParts
+        : toSlug(fallbackTitle ?? "");
+
+  return [...base, "Resume"].join("-") + ".pdf";
+}
+
 // Avatar background for an account: looks random, but is stable for a given
 // user (hashed from their id), so it never changes between visits. The
 // palette deliberately leaves out pinks, purples and baby blues — colours
