@@ -3,7 +3,6 @@
 import React, { useRef, useState } from "react";
 import {
   FolderOpen,
-  FileSearch,
   FilePlus,
   UserCheck,
   FileText,
@@ -16,7 +15,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { FlowModal, TemplateStep, JobGaps } from "./FlowUI";
+import { AiWaitLoader, FlowModal, TemplateStep, JobGaps, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -92,7 +91,6 @@ export function TailorCvModal({
   const [phone, setPhone] = useState("");
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   // Job Description state
   const [targetRole, setTargetRole] = useState("");
@@ -142,6 +140,9 @@ export function TailorCvModal({
   // The profile this CV is being tailored from, if any — facts go back to it.
   const [sourceProfileId, setSourceProfileId] = useState<string | null>(null);
   const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  // The quick save after the AI pass (adding confirmed gaps) — Moxie stays up through it.
+  const [finishingUp, setFinishingUp] = useState(false);
+  const { done: aiDone, celebrate } = useAiDone();
 
   if (!isOpen) return null;
 
@@ -202,11 +203,6 @@ export function TailorCvModal({
     setFlowError(null);
     setUploadedFileName(file.name);
     setStep("new-cv-analyzing");
-    setUploadProgress(15);
-
-    const progressTimer = setInterval(() => {
-      setUploadProgress((p) => (p < 90 ? p + 15 : p));
-    }, 400);
 
     try {
       const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
@@ -214,7 +210,6 @@ export function TailorCvModal({
         templateId,
         flowType: "tailor",
       });
-      clearInterval(progressTimer);
 
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -222,7 +217,6 @@ export function TailorCvModal({
         return;
       }
 
-      setUploadProgress(100);
       setCvDocumentId(docId);
       setLatestContent(document.content);
       setAnalyzedSourceText(sourceText);
@@ -235,7 +229,6 @@ export function TailorCvModal({
       setTargetRole(personal.title ?? "");
       setStep("new-cv-missing");
     } catch (err) {
-      clearInterval(progressTimer);
       if (proGate.isProRequired(err)) {
         setStep("new-cv-upload");
         return;
@@ -388,7 +381,12 @@ export function TailorCvModal({
       let content = document.content;
       const notInCv = gapsNotInContent(content, gapsToAdd);
       if (notInCv.length > 0) {
-        content = (await updateCvContent(cvDocumentId, { content: withAddedSkills(content, notInCv) })).content;
+        setFinishingUp(true);
+        content = (
+          await updateCvContent(cvDocumentId, { content: withAddedSkills(content, notInCv) }).finally(() =>
+            setFinishingUp(false)
+          )
+        ).content;
       }
       setLatestContent(content);
       if (!targetRole && content.personal?.title) setTargetRole(content.personal.title);
@@ -413,7 +411,14 @@ export function TailorCvModal({
       return;
     }
     const remaining = await runTailoring(confirmedGaps);
-    if (remaining) setStep(remaining.length > 0 ? "review-gaps" : "select-template");
+    if (!remaining) return;
+    // Gaps left to review means it isn't finished yet — save the ta-da for the end.
+    if (remaining.length > 0) {
+      setStep("review-gaps");
+      return;
+    }
+    await celebrate("tailor");
+    setStep("select-template");
   };
 
   // "Add to my CV" on the gaps step — re-tailors with the confirmed gaps.
@@ -423,14 +428,28 @@ export function TailorCvModal({
     const remaining = await runTailoring(all);
     if (!remaining) return;
     setConfirmedGaps(all);
+    await celebrate("tailor");
     setStep("select-template");
   };
+
+  const aiWait: AiWait | null =
+    aiDone ??
+    (analyzeUploadMutation.isPending
+      ? "read-file"
+      : analyzeMutation.isPending
+        ? "read-story"
+        : analyzeExistingMutation.isPending
+          ? "read-cv"
+          : refineMutation.isPending || finishingUp
+            ? "tailor"
+            : null);
 
   return (
     <FlowModal
       stepKey={step}
       wide={step === "choose-template"}
       onClose={onClose}
+      loader={aiWait && <AiWaitLoader wait={aiWait} done={aiDone !== null} fileName={uploadedFileName} />}
       outside={
         <ProUpgradeModal
           isOpen={proGate.isPaywallOpen}
@@ -713,28 +732,8 @@ export function TailorCvModal({
           </div>
         )}
 
-        {/* ================= STEP 2B-5: UPLOAD SCANNING ANIMATION ================= */}
-        {step === "new-cv-analyzing" && (
-          <div className="py-8 text-center space-y-5">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-b from-accent-mid to-accent border border-accent text-white flex items-center justify-center mx-auto animate-pulse">
-              <FileSearch className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-neutral-950">
-                Parsing Background &amp; Credentials
-              </h3>
-              <p className="text-sm text-neutral-500 mt-1">
-                Extracting work history from {uploadedFileName || "document"}...
-              </p>
-            </div>
-            <div className="w-full bg-neutral-100 rounded-full h-2 overflow-hidden max-w-xs mx-auto">
-              <div
-                className="bg-accent h-full transition-all duration-300 rounded-full"
-                style={{ width: `${uploadProgress}%` }}
-              />
-            </div>
-          </div>
-        )}
+        {/* STEP 2B-5 ("new-cv-analyzing") has no content of its own: it only
+            lasts while the upload is read, and the AI-wait loader covers that. */}
 
         {/* ================= STEP 2B-6: MISSING ESSENTIALS PROMPT ================= */}
         {/* Exact same missing details step as Create New CV Flow */}

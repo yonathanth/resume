@@ -1,5 +1,5 @@
 import { gsap } from "gsap";
-import { MOXIE_PRESETS, toNeutral } from "./moxie.animations";
+import { endTickle, MOXIE_PRESETS, tickleGiggle, toNeutral } from "./moxie.animations";
 import type { MoxieAnimation, MoxieParts, MoxieTimelineFactory } from "./moxie.types";
 
 /** Time to ease back to neutral before starting a new animation. */
@@ -20,6 +20,8 @@ interface ControllerOptions {
  */
 export class MoxieController {
   private timeline: gsap.core.Timeline | null = null;
+  /** The tickle giggle, while it plays (the animation underneath is paused). */
+  private giggle: gsap.core.Timeline | null = null;
   private paused = false;
   /** The animation currently showing ("idle" again once a reaction has finished). */
   current: MoxieAnimation | null = null;
@@ -30,6 +32,7 @@ export class MoxieController {
   ) {}
 
   play(animation: MoxieAnimation): void {
+    this.stopGiggle(); // anything new takes over from a giggle at once
     const preset = MOXIE_PRESETS[animation];
     const { parts } = this;
     const tl = gsap.timeline();
@@ -57,15 +60,46 @@ export class MoxieController {
     this.start(tl);
   }
 
+  /**
+   * Tickled: whatever's playing pauses where it is, she giggles (on layers
+   * no animation uses), then it picks up exactly where it stopped. Ignored
+   * while she's already giggling or paused. Returns whether she reacted.
+   */
+  tickle(): boolean {
+    if (this.giggle || this.paused) return false;
+    this.timeline?.pause();
+    const giggle = tickleGiggle(this.parts, this.options.reducedMotion);
+    giggle.eventCallback("onComplete", () => {
+      this.giggle = null;
+      if (!this.paused) this.timeline?.resume();
+    });
+    this.giggle = giggle;
+    return true;
+  }
+
   setPaused(paused: boolean): void {
     this.paused = paused;
-    if (paused) this.timeline?.pause();
-    else this.timeline?.resume();
+    if (paused) {
+      this.timeline?.pause();
+      this.giggle?.pause();
+    } else if (this.giggle) {
+      this.giggle.resume(); // the animation underneath resumes when the giggle ends
+    } else {
+      this.timeline?.resume();
+    }
   }
 
   destroy(): void {
+    this.stopGiggle();
     this.timeline?.kill();
     this.timeline = null;
+  }
+
+  private stopGiggle() {
+    if (!this.giggle) return;
+    this.giggle.kill();
+    this.giggle = null;
+    endTickle(this.parts);
   }
 
   /** Back to idle first, then notify — so a callback that plays something new wins. */
@@ -85,6 +119,6 @@ export class MoxieController {
   private start(tl: gsap.core.Timeline) {
     this.timeline?.kill();
     this.timeline = tl;
-    if (this.paused) tl.pause();
+    if (this.paused || this.giggle) tl.pause();
   }
 }

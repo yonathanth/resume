@@ -8,6 +8,8 @@ export const MOXIE_COLORS = {
   ink: "#14142B",
   cream: "#FFF8F0",
   blush: "#FFC94A",
+  /** Lighter than her shell, so the tip of her tongue shows against it. */
+  tongue: "#FF9E80",
 } as const;
 
 /**
@@ -44,19 +46,155 @@ export const LID = {
   closed: 90,
 } as const;
 
+// ─── Props (hidden at rest; shown by the scenes that use them) ───────────────
+
+/** The big claw's shoulder — everything it holds swings around this point. */
+export const SHOULDER = { x: 240, y: 312 } as const;
+
+/**
+ * Where the pencil's point sits when the claw is at rest: the middle of the
+ * writing area, as seen from the shoulder (angle and distance). The writer
+ * scene turns the claw toward each point and reaches the remaining distance,
+ * so the point lands exactly on the ink — about ±8° and ±24 units at most.
+ */
+export const PENCIL_TIP = { x: 165, y: 154 } as const;
+/** From the pincer's grip up to the point. */
+export const PENCIL = { length: 62, angle: -110 } as const;
+
+/** Centre of her mouth, where the other mouth shapes sit. */
+export const MOUTH = { x: 301, y: 324 } as const;
+
+/**
+ * The read scene's paper, turned to face her — we see its blank back,
+ * foreshortened (narrow, its far edge shorter) — held out at arm's length to
+ * her right in the small claw: the farsighted reader. Drawn where it sits
+ * when the small claw is raised by READ_HOLD degrees; it pivots on that
+ * claw's shoulder too, so it moves exactly as if held.
+ */
+export const READ_PAPER = { x: 390, y: 214, width: 36, height: 74, skew: 7 } as const;
+
+/**
+ * A point on that sheet, from its own across (u) and down (v), both 0–1:
+ * the sheet is angled, its far (left) edge shorter, so lines of text on it
+ * slope and squeeze toward that edge.
+ */
+export function paperPoint(u: number, v: number): { x: number; y: number } {
+  const { x, y, width, height, skew } = READ_PAPER;
+  const top = y + skew * (1 - u);
+  return { x: x + u * width, y: top + v * (height - 2 * skew * (1 - u)) };
+}
+
+/** Where the stamp scene's seal lands on that sheet (across, down). */
+export const PAPER_SEAL = { u: 0.6, v: 0.8 } as const;
+
+export interface PaperRow {
+  kind: "name" | "title" | "heading" | "line" | "strike";
+  /** How far down the sheet (0–1), and where the line starts and ends across it (0–1). */
+  v: number;
+  u0: number;
+  u1: number;
+}
+
+/**
+ * The CV on the sheet she holds out: a name, a job title, a heading, then
+ * lines. Printed when she's reading it; handwritten, row by row, when she's
+ * writing it — including a scribble through one line she changes her mind about.
+ */
+export const PAPER_ROWS: readonly PaperRow[] = [
+  { kind: "name", v: 0.13, u0: 0.16, u1: 0.66 },
+  { kind: "title", v: 0.23, u0: 0.16, u1: 0.52 },
+  { kind: "heading", v: 0.37, u0: 0.16, u1: 0.42 },
+  { kind: "line", v: 0.46, u0: 0.16, u1: 0.8 },
+  { kind: "line", v: 0.55, u0: 0.16, u1: 0.72 },
+  { kind: "line", v: 0.64, u0: 0.16, u1: 0.82 },
+  { kind: "line", v: 0.73, u0: 0.16, u1: 0.6 },
+  { kind: "strike", v: 0.55, u0: 0.12, u1: 0.76 },
+];
+
+/** Points along a row on the sheet: a slight handwriting wobble, or a zig-zag for a scribble. */
+export function paperRowPoints(row: PaperRow): { x: number; y: number }[] {
+  const across = (row.u1 - row.u0) * READ_PAPER.width;
+  const count = Math.max(3, Math.round(across / 3.5) + 1);
+  return Array.from({ length: count }, (_, i) => {
+    const pt = paperPoint(row.u0 + ((row.u1 - row.u0) * i) / (count - 1), row.v);
+    const wobble = row.kind === "strike" ? (i % 2 ? 2.6 : -2.6) : 0.8 * Math.sin(i * 1.4);
+    return { x: pt.x, y: pt.y + wobble };
+  });
+}
+/** Small-claw angle while reading: raised, its pincer gripping the paper's bottom-left corner from behind. */
+export const READ_HOLD = -25;
+
+/**
+ * The job post the tailor scene reads, then puts down in front of her: lying
+ * flat on the ground just right of her feet (seen from the front, so it's a
+ * squashed quad — far edge narrower and higher, near edge lower and wider).
+ */
+export const GROUND_POST = {
+  farLeft: { x: 336, y: 391 },
+  farRight: { x: 398, y: 388 },
+  nearRight: { x: 414, y: 404 },
+  nearLeft: { x: 334, y: 409 },
+} as const;
+
+/** A point on the job post lying on the ground, from its own across (u) and down (v), both 0–1. */
+export function groundPoint(u: number, v: number): { x: number; y: number } {
+  const { farLeft: fl, farRight: fr, nearRight: nr, nearLeft: nl } = GROUND_POST;
+  const top = { x: fl.x + (fr.x - fl.x) * u, y: fl.y + (fr.y - fl.y) * u };
+  const bottom = { x: nl.x + (nr.x - nl.x) * u, y: nl.y + (nr.y - nl.y) * u };
+  return { x: top.x + (bottom.x - top.x) * v, y: top.y + (bottom.y - top.y) * v };
+}
+
+/** The line she writes on the CV and then cuts out, because it doesn't fit the job (an index into PAPER_ROWS). */
+export const TAILOR_CUT_ROW = 4;
+/** The small claw's shoulder. */
+export const SMALL_SHOULDER = { x: 368, y: 328 } as const;
+
+/** Half-moon reading glasses, worn low: lens corners relative to each eye's centre. */
+export const GLASSES = { halfWidth: 27, top: 12, bottom: 35, bridgeLift: 6 } as const;
+
+/** Where the bridge meets each lens (its inner top corner), in that eye's own drawing space. */
+export function lensCorner(side: "L" | "R") {
+  const eye = side === "L" ? EYE_L : EYE_R;
+  return { x: eye.cx + (side === "L" ? GLASSES.halfWidth : -GLASSES.halfWidth), y: eye.cy + GLASSES.top };
+}
+
+/** The bridge: a gentle arch from one lens corner to the other. */
+export function bridgePath(a: { x: number; y: number }, b: { x: number; y: number }) {
+  const midX = (a.x + b.x) / 2;
+  const midY = Math.min(a.y, b.y) - GLASSES.bridgeLift;
+  return `M${a.x.toFixed(1)} ${a.y.toFixed(1)} Q${midX.toFixed(1)} ${midY.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+}
+
+/** Handwriting styles on the held sheet. `opacity` is what a stroke shows once drawn. */
+export const INK_STYLE: Record<PaperRow["kind"], { color: string; width: number; opacity: number }> = {
+  name: { color: MOXIE_COLORS.coral, width: 5, opacity: 1 },
+  title: { color: MOXIE_COLORS.ink, width: 3, opacity: 0.75 },
+  heading: { color: MOXIE_COLORS.coral, width: 3, opacity: 0.9 },
+  line: { color: MOXIE_COLORS.ink, width: 2.6, opacity: 0.6 },
+  strike: { color: MOXIE_COLORS.coralShade, width: 2.5, opacity: 1 },
+};
+
+/** Length of a polyline — used as the stroke's dash length so it can be "drawn". */
+export function polylineLength(points: { x: number; y: number }[]): number {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
+  return Math.ceil(total);
+}
+
 /**
  * Rotation/scale pivots per layer. Each layer always uses the same pivot
  * (set once at mount) so GSAP never has to compensate for origin changes.
  */
 export const PIVOTS = {
   root: "305 392", // ground beneath her feet
+  jiggle: "305 392", // the giggle shakes her from the ground up too
   shadow: "305 393",
   legs: "305 352",
-  smallClaw: "368 328", // shoulder
+  smallClaw: `${SMALL_SHOULDER.x} ${SMALL_SHOULDER.y}`, // shoulder
   smallPincer: "404 320", // wrist
   body: "305 374", // bottom of the shell-less body
   face: "305 374", // must match body so squash keeps the face aligned
-  bigClaw: "240 312", // shoulder
+  bigClaw: `${SHOULDER.x} ${SHOULDER.y}`, // shoulder
   bigPincer: "214 291", // wrist
   stalkL: "285 282", // where each stalk meets the body
   stalkR: "318 282",
@@ -66,6 +204,10 @@ export const PIVOTS = {
   eyeR: `${EYE_R.cx} ${EYE_R.cy}`,
   pupilL: `${EYE_L.cx + PUPIL_REST.x} ${EYE_L.cy + PUPIL_REST.y}`,
   pupilR: `${EYE_R.cx + PUPIL_REST.x} ${EYE_R.cy + PUPIL_REST.y}`,
+  mouthTalk: `${MOUTH.x} ${MOUTH.y}`, // mouthing words squashes it open and shut about its centre
+  mouthO: `${MOUTH.x} ${MOUTH.y}`,
+  paperBack: `${SMALL_SHOULDER.x} ${SMALL_SHOULDER.y}`, // held in the small claw, so it shares that claw's pivot
+  paperSheet: `${READ_PAPER.x + READ_PAPER.width / 2} ${READ_PAPER.y + READ_PAPER.height / 2}`, // turns over around its middle
 } as const;
 
 /**

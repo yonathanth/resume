@@ -4,9 +4,7 @@ import React, { useRef, useState } from "react";
 import {
   Upload,
   PenLine,
-  FileSearch,
   PenTool,
-  CheckCircle2,
   ArrowRight,
   X,
   FileCheck,
@@ -21,7 +19,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { FlowStep, TemplateStep, JobGaps } from "./FlowUI";
+import { AiWaitLoader, FlowStepWithLoader, TemplateStep, JobGaps, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard, SOFT_TONES } from "./OptionCard";
 import {
   useAnalyzeFreestyle,
@@ -162,7 +160,6 @@ export function CreateCvModal({
 
   // Upload state
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
-  const [analysisProgress, setAnalysisProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real backend integration covers freestyle, upload, and "start from
@@ -210,6 +207,7 @@ export function CreateCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const proGate = useProGate();
+  const { done: aiDone, celebrate } = useAiDone();
 
   // Generates the CV from the chosen profile's own content (see
   // useAnalyzeExisting), linked to that profile. Runs once, after every
@@ -244,8 +242,12 @@ export function CreateCvModal({
       setTargetRole(personal.title || targetRole);
       const gaps = document.jobAnalysis?.gaps ?? [];
       setJobGaps(gaps);
-      if (document.questions?.length) setStep("scratch-missing");
-      else goToProfileStep(document.content, gaps.length > 0, docId);
+      if (document.questions?.length) {
+        setStep("scratch-missing");
+      } else {
+        await celebrate(jobDescription.trim() ? "tailor" : "write");
+        goToProfileStep(document.content, gaps.length > 0, docId);
+      }
     } catch (err) {
       if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not build your CV from this profile. Please try again.");
@@ -299,11 +301,6 @@ export function CreateCvModal({
     setFlowError(null);
     setUploadedFileName(file.name);
     setStep("upload-analyzing");
-    setAnalysisProgress(15);
-
-    const progressTimer = setInterval(() => {
-      setAnalysisProgress((p) => (p < 90 ? p + 15 : p));
-    }, 400);
 
     try {
       const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
@@ -311,7 +308,6 @@ export function CreateCvModal({
         templateId,
         flowType: "create",
       });
-      clearInterval(progressTimer);
 
       if ("mismatch" in document) {
         setFlowError(document.reason);
@@ -319,7 +315,6 @@ export function CreateCvModal({
         return;
       }
 
-      setAnalysisProgress(100);
       setCvDocumentId(docId);
       setLatestContent(document.content);
       setAnalyzedSourceText(sourceText);
@@ -333,7 +328,6 @@ export function CreateCvModal({
       setFlowExtraDetails("");
       setStep("upload-instructions");
     } catch (err) {
-      clearInterval(progressTimer);
       if (proGate.isProRequired(err)) {
         setStep("upload-cv");
         return;
@@ -394,6 +388,7 @@ export function CreateCvModal({
       setLatestContent(document.content);
       const gaps = document.jobAnalysis !== undefined ? document.jobAnalysis?.gaps ?? [] : jobGaps;
       if (document.jobAnalysis !== undefined) setJobGaps(gaps);
+      await celebrate(jobDescription.trim() ? "tailor" : "write");
       // Gaps are worth reading before the editor opens, so keep the step then.
       goToProfileStep(document.content, gaps.length > 0);
       return true;
@@ -527,14 +522,31 @@ export function CreateCvModal({
     onComplete(buildLocalCv(content));
   };
 
-  const isTemplateStep = step === "select-template-first";
+  const tailoring = Boolean(optionalJd.trim());
+  const aiWait: AiWait | null = aiDone ?? (analyzeUploadMutation.isPending
+    ? "read-file"
+    : analyzeMutation.isPending
+      ? "read-story"
+      : isFinishing
+        ? tailoring
+          ? "tailor"
+          : "write"
+        : null);
+
+  const isTemplateStep = step === "select-template-first" && !aiWait;
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 transition-colors ${
+        aiWait ? "bg-transparent" : "bg-neutral-950/60 backdrop-blur-sm"
+      }`}
+    >
       {/* Card: never taller than the viewport — its body scrolls instead of being cut off.
-          It is a little wider for the template step (two previews per row) and compact for the rest. */}
+          It is a little wider for the template step (two previews per row) and compact for the rest.
+          While Moxie is up (on her own over the screen), it steps aside but stays mounted. */}
       <div
-        className={`relative w-full ${
+        inert={Boolean(aiWait)}
+        className={`relative w-full ${aiWait ? "invisible" : ""} ${
           isTemplateStep ? "max-w-xl" : "max-w-lg"
         } max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col bg-white rounded-xl border border-neutral-200/90 shadow-2xl overflow-hidden transition-[max-width] duration-300 animate-in fade-in zoom-in-95`}
       >
@@ -549,7 +561,14 @@ export function CreateCvModal({
         </button>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-7 sm:p-9">
-        <FlowStep stepKey={step}>
+        <FlowStepWithLoader
+          stepKey={step}
+          loader={
+            aiWait && (
+              <AiWaitLoader wait={aiWait} done={aiDone !== null} fileName={uploadedFileName} />
+            )
+          }
+        >
 
         {/* ================= STEP 1: SELECT METHOD ================= */}
         {step === "select-method" && (
@@ -926,45 +945,8 @@ export function CreateCvModal({
           </div>
         )}
 
-        {/* ================= STEP 2B-1: UPLOAD ANALYZING SCANNER ================= */}
-        {step === "upload-analyzing" && (
-          <div className="text-center py-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-b from-accent-mid to-accent border border-accent text-white flex items-center justify-center mx-auto mb-4 animate-pulse">
-              <FileSearch className="w-6 h-6" />
-            </div>
-            <h2 className="text-xl font-bold text-neutral-950">
-              Analyzing Resume
-            </h2>
-            <p className="text-sm text-neutral-500 mt-1 mb-6">
-              Parsing {uploadedFileName || "resume"} against ATS compliance standards...
-            </p>
-
-            {/* Progress Bar */}
-            <div className="w-full bg-neutral-100 h-2.5 rounded-full overflow-hidden mb-4">
-              <div
-                className="bg-neutral-950 h-full transition-all duration-300 rounded-full"
-                style={{ width: `${analysisProgress}%` }}
-              />
-            </div>
-
-            <div className="space-y-2 text-left text-sm text-neutral-600 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200/80">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Extracted Work Experience &amp; Roles</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Extracted Education &amp; Verified Degrees</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3.5 h-3.5 rounded-full border-2 border-neutral-950 border-t-transparent animate-spin shrink-0" />
-                <span className="font-medium text-neutral-950">
-                  Calculating ATS Keyword Density...
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* STEP 2B-1 ("upload-analyzing") has no content of its own: it only
+            lasts while the upload is read, and the AI-wait loader covers that. */}
 
         {/* ================= STEP 2B-1B: ANYTHING ELSE? (optional) ================= */}
         {/* The upload was already turned into a full CV by the AI, following
@@ -1186,7 +1168,7 @@ export function CreateCvModal({
             </div>
           ))}
 
-        </FlowStep>
+        </FlowStepWithLoader>
         </div>
       </div>
 

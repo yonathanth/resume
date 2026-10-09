@@ -14,7 +14,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { FlowModal, TemplateStep, JobGaps } from "./FlowUI";
+import { AiWaitLoader, FlowModal, TemplateStep, JobGaps, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard, SOFT_TONES } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -119,6 +119,9 @@ export function EnhanceCvModal({
   const [wordingPreview, setWordingPreview] = useState<
     (WordingPreview & { profile: NonNullable<WordingPreview["profile"]> }) | null
   >(null);
+  // The quick request after the AI pass (the wording preview) — Moxie stays up through it.
+  const [finishingUp, setFinishingUp] = useState(false);
+  const { done: aiDone, celebrate } = useAiDone();
 
   if (!isOpen) return null;
 
@@ -197,7 +200,17 @@ export function EnhanceCvModal({
   };
 
   // The final AI pass, then the quick save that opens the editor.
-  const isImproving = refineMutation.isPending;
+  const isImproving = refineMutation.isPending || finishingUp;
+
+  const aiWait: AiWait | null =
+    aiDone ??
+    (analyzeUploadMutation.isPending
+      ? "read-file"
+      : analyzeExistingMutation.isPending
+        ? "read-cv"
+        : isImproving
+          ? "improve"
+          : null);
 
   const { canSubmit: canSubmitAnswers } = getQuestionFormState(
     clarifyingQuestions,
@@ -273,8 +286,10 @@ export function EnhanceCvModal({
       setLatestContent(document.content);
       const gaps = document.jobAnalysis?.gaps ?? [];
       setJobGaps(gaps);
-      const wording = await loadWordingPreview(cvDocumentId);
+      setFinishingUp(true);
+      const wording = await loadWordingPreview(cvDocumentId).finally(() => setFinishingUp(false));
       setWordingPreview(wording);
+      await celebrate("improve");
       // Straight into the editor — unless there's improved wording to offer
       // back to a profile, or the job description showed gaps.
       if (wording || gaps.length > 0) setStep("select-template");
@@ -313,6 +328,7 @@ export function EnhanceCvModal({
       stepKey={step}
       wide={step === "choose-template"}
       onClose={onClose}
+      loader={aiWait && <AiWaitLoader wait={aiWait} done={aiDone !== null} fileName={uploadedFileName} />}
       outside={
         <ProUpgradeModal
           isOpen={proGate.isPaywallOpen}
