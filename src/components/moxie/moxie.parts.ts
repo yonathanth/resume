@@ -2,7 +2,7 @@ import { gsap } from "gsap";
 import { LEG_PIVOTS, PIVOTS } from "./moxie.constants";
 import type { MoxieParts } from "./moxie.types";
 
-type SinglePart = Exclude<keyof MoxieParts, "legList" | "sparkles" | "zs" | "paperInks">;
+type SinglePart = Exclude<keyof MoxieParts, "legList" | "sparkles" | "zs" | "paperInks" | "confetti">;
 
 /** Finds every animatable layer inside a rendered <MoxieArt>. */
 export function queryParts(svg: SVGSVGElement): MoxieParts {
@@ -63,6 +63,14 @@ export function queryParts(svg: SVGSVGElement): MoxieParts {
     bladeB: one("bladeB"),
     paperJob: one("paperJob"),
     groundPost: one("groundPost"),
+    magnifier: one("magnifier"),
+    pdfFile: one("pdfFile"),
+    coin: one("coin"),
+    coinFace: one("coinFace"),
+    crown: one("crown"),
+    confetti: all<SVGGElement>("confetti"),
+    folderBack: one("folderBack"),
+    folderFront: one("folderFront"),
     glassesL: one("glassesL"),
     glassesR: one("glassesR"),
     glassesBridge: one("glassesBridge"),
@@ -76,7 +84,11 @@ export function prepareParts(parts: MoxieParts): void {
   }
   parts.legList.forEach((leg, i) => gsap.set(leg, { svgOrigin: LEG_PIVOTS[i] }));
   // Particles are drawn around (0, 0) inside a positioned wrapper.
-  gsap.set([...parts.sparkles, ...parts.zs], { svgOrigin: "0 0", scale: 0 });
+  gsap.set([...parts.sparkles, ...parts.zs, ...parts.confetti], { svgOrigin: "0 0", scale: 0 });
+  // The coin flips over about its own middle (it rides in her moving claw).
+  gsap.set(parts.coinFace, { transformOrigin: "50% 50%" });
+  // The crown rides on her right eye; it wobbles and lands about its own bottom-centre.
+  gsap.set(parts.crown, { transformOrigin: "50% 100%" });
   gsap.set(parts.paperSeal, { svgOrigin: "0 0" });
   // The blades turn about the screw at their own inner end (they ride in a turned, moving claw,
   // so a fixed point in the drawing won't do — the pivot is set on their own box instead).

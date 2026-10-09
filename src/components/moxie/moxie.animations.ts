@@ -1,6 +1,8 @@
 import { gsap } from "gsap";
 import {
   bridgePath,
+  CROWN,
+  CROWN_BASE,
   DEPTH,
   INK_STYLE,
   lensCorner,
@@ -47,7 +49,7 @@ function transformLayers(p: MoxieParts) {
   return [
     p.root, p.legs, ...p.legList, p.smallClaw, p.smallPincer, p.body, p.bellyShade, p.bigClaw, p.bigPincer,
     p.stalkL, p.stalkR, p.stalkLineL, p.stalkLineR, p.eyeL, p.eyeR, p.pupilL, p.pupilR, p.glintL, p.glintR,
-    p.lidL, p.lidR, p.face, p.paperBack, p.paperSheet, p.groundPost, p.glassesL, p.glassesR,
+    p.lidL, p.lidR, p.face, p.pdfFile, p.coin, p.coinFace, p.crown, p.paperBack, p.paperSheet, p.groundPost, p.glassesL, p.glassesR,
     p.bladeA, p.bladeB,
   ];
 }
@@ -55,7 +57,7 @@ function transformLayers(p: MoxieParts) {
 /** Scene props — faded out by toNeutral so every other animation starts without them. */
 function propLayers(p: MoxieParts) {
   return [
-    p.pencil, p.stamp, p.scissors,
+    p.pencil, p.stamp, p.scissors, p.magnifier, p.pdfFile, p.coin, p.folderBack, p.folderFront, ...p.confetti,
     p.paperBack, p.groundPost, p.glassesL, p.glassesR, p.glassesBridge,
   ];
 }
@@ -1360,6 +1362,500 @@ const tailor: MoxiePreset = {
   },
 };
 
+// ─── Celebrations and moments (tier 2) ───────────────────────────────────────
+
+/** A sparkle popping at a point in the drawing (sparkles are positioned from their own origin). */
+function sparkleAt(tl: TL, p: MoxieParts, index: number, at: number, point: Point, size = 0.8) {
+  const sparkle = p.sparkles[index];
+  const spot = { x: point.x - SPARKLE_ORIGIN.x, y: point.y - SPARKLE_ORIGIN.y };
+  tl.set(sparkle, { ...spot, scale: 0, rotation: 0, opacity: 1 }, at)
+    .to(sparkle, { scale: size, rotation: 120, duration: 0.3, ease: "back.out(3)" }, at)
+    .to(sparkle, { scale: 0, rotation: 200, opacity: 0, duration: 0.35, ease: "power1.in" }, at + 0.35);
+}
+
+/** Where the eyes meet when the stalks swing together. */
+const EYES_MEET = { x: 305, y: 166 } as const;
+
+/**
+ * Ta-da, the bigger one: a crouch, a high jump with sparkles bursting out —
+ * and on the way up, beaming, she swings her eyes together on purpose:
+ * clink! A star where they meet, the stalks spring apart, and she floats
+ * down and lands lightly, grinning. (No squash on landing.)
+ */
+const tada: MoxiePreset = {
+  mode: "once",
+  intro: (p) => {
+    const tl = timeline();
+    // Crouch…
+    tl.to(p.root, { scaleY: 0.86, scaleX: 1.08, duration: 0.22, ease: "power2.in" }, 0)
+      .to(p.shadow, { scaleX: 1.06, duration: 0.22 }, 0)
+      .to(p.bigClaw, { rotation: -8, duration: 0.22 }, 0);
+    stretchStalks(tl, p, 0.9, 0, 0.22, "power2.in");
+    look(tl, p, 0, 1, 0.22, 0.2);
+
+    // …and up, high: claw thrown up, legs dangling, stalks streaming, a big grin.
+    const apex = 0.72;
+    tl.to(p.root, { y: -72, scaleY: 1.08, scaleX: 0.94, duration: apex - 0.22, ease: "power2.out" }, 0.22)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.3 }, apex - 0.1)
+      .to(p.shadow, { scaleX: 0.45, opacity: SHADOW_OPACITY * 0.35, duration: apex - 0.22, ease: "power2.out" }, 0.22)
+      .to(p.bigClaw, { rotation: 24, duration: 0.4, ease: "back.out(2)" }, 0.22)
+      .to(p.bigPincer, { rotation: -14, duration: 0.4, ease: "back.out(2)" }, 0.26)
+      .to(p.smallClaw, { rotation: -35, duration: 0.4, ease: "back.out(2)" }, 0.24)
+      .to(p.legList, { rotation: (i: number) => (i - 1) * 10, y: -4, duration: 0.3 }, 0.26)
+      .to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, 0.3);
+    stretchStalks(tl, p, 1.12, 0.22, 0.35, "back.out(2)");
+    mouth(tl, p, "smile", 0.25);
+    // (Sparkles 0 and 1 are saved for the clink.)
+    p.sparkles.slice(2).forEach((sparkle, i) => {
+      const b = SPARKLE_BURST[i + 2];
+      const at = 0.4 + i * 0.05;
+      tl.set(sparkle, { x: 0, y: 0, scale: 0, rotation: 0, opacity: 1 }, at)
+        .to(sparkle, { x: b.x * 1.1, y: b.y * 1.1, scale: b.scale, rotation: 140, duration: 0.8, ease: "power3.out" }, at)
+        .to(sparkle, { opacity: 0, scale: b.scale * 0.3, duration: 0.45, ease: "power1.in" }, at + 0.6);
+    });
+
+    // Near the top, on purpose: eyes swung together — clink! (Happy-squinting, not dazed.)
+    const clink = apex - 0.06;
+    const height = -70; // she's this high when they meet (the sparkles don't move with her)
+    tl.to(p.stalkL, { rotation: 7, duration: 0.14, ease: "power2.in" }, clink - 0.14)
+      .to(p.stalkR, { rotation: -7, duration: 0.14, ease: "power2.in" }, clink - 0.14)
+      .to([p.eyeL, p.eyeR], { scaleX: 0.86, scaleY: 1.06, duration: 0.05, ease: "power2.out" }, clink)
+      .to([p.eyeL, p.eyeR], { scaleX: 1, scaleY: 1, duration: 0.35, ease: "elastic.out(1, 0.4)" }, clink + 0.05)
+      .to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.7, ease: "elastic.out(1, 0.35)" }, clink + 0.06);
+    sparkleAt(tl, p, 0, clink, { x: EYES_MEET.x, y: EYES_MEET.y + height }, 1.5);
+    sparkleAt(tl, p, 1, clink + 0.05, { x: EYES_MEET.x + 14, y: EYES_MEET.y + height - 22 }, 0.75);
+    mouth(tl, p, "o", clink, 0.05);
+    mouth(tl, p, "smile", clink + 0.2);
+
+    // Down she floats, and lands lightly — feet first, body upright, no squash.
+    const land = apex + 0.42;
+    tl.to(p.root, { y: 0, duration: land - apex, ease: "power2.in" }, apex)
+      .to(p.shadow, { scaleX: 1, opacity: SHADOW_OPACITY, duration: land - apex, ease: "power2.in" }, apex)
+      .to(p.legList, { rotation: 0, y: 0, duration: 0.15 }, land - 0.1)
+      .to(p.root, { y: -5, duration: 0.12, ease: "power2.out" }, land)
+      .to(p.root, { y: 0, duration: 0.25, ease: "power2.in" }, land + 0.12);
+    stretchStalks(tl, p, 1, land - 0.2, 0.3, "power2.inOut");
+    // A happy wiggle of the claw, then back to normal.
+    tl.to(p.bigClaw, { rotation: 30, duration: 0.15, ease: "power2.out" }, land + 0.1)
+      .to(p.bigClaw, { rotation: 22, duration: 0.3, ease: "back.out(2)" }, land + 0.25);
+    blink(tl, p, land + 0.45, LID.happy);
+    tl.add(toNeutral(p, 0.5), land + 0.9);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.to(p.bigClaw, { rotation: 22, duration: 0.4 }, 0).to([p.lidL, p.lidR], { y: LID.happy, duration: 0.4 }, 0);
+    return tl;
+  },
+};
+
+/**
+ * Downloaded: she looks up, a PDF file drops out of the sky into her
+ * pincer — "oh!" — and she holds it up like a trophy, with a hop.
+ */
+const downloaded: MoxiePreset = {
+  mode: "once",
+  intro: (p) => {
+    const tl = timeline();
+    look(tl, p, 0, -11, 0, 0.25);
+    mouth(tl, p, "o", 0.05);
+    tl.to(p.bigClaw, { rotation: 6, duration: 0.3, ease: "power2.out" }, 0)
+      .to(p.bigPincer, { rotation: -14, duration: 0.25, ease: "power2.out" }, 0.05) // opening to catch
+      .set(p.pdfFile, { opacity: 1, y: -170 }, 0.15)
+      .to(p.pdfFile, { y: 0, duration: 0.45, ease: "power2.in" }, 0.15);
+    // Caught: the claw dips with it, the pincer closes on it.
+    const caught = 0.6;
+    tl.to(p.bigClaw, { rotation: -3, duration: 0.08, ease: "power2.out" }, caught)
+      .to(p.bigClaw, { rotation: 6, duration: 0.3, ease: "back.out(2)" }, caught + 0.08)
+      .to(p.bigPincer, { rotation: 4, duration: 0.08, ease: "power3.in" }, caught)
+      .to(p.bigPincer, { rotation: 0, duration: 0.2 }, caught + 0.08);
+    look(tl, p, -9, -3, caught, 0.15);
+    // Got it! Held up high, a hop and a glint.
+    const trophy = 1.0;
+    mouth(tl, p, "smile", trophy);
+    tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, trophy)
+      .to(p.bigClaw, { rotation: 26, duration: 0.35, ease: "back.out(2)" }, trophy)
+      .to(p.root, { y: -12, scaleY: 1.03, duration: 0.18, ease: "power2.out" }, trophy + 0.1)
+      .to(p.root, { y: 0, scaleY: 1, duration: 0.35, ease: "bounce.out" }, trophy + 0.28);
+    look(tl, p, -9, -8, trophy, 0.2);
+    sparkleAt(tl, p, 0, trophy + 0.35, { x: 249, y: 168 });
+    tl.add(toNeutral(p, 0.5), trophy + 1.4);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set(p.pdfFile, { opacity: 1 }, 0).to(p.bigClaw, { rotation: 26, duration: 0.4 }, 0).to([p.lidL, p.lidR], { y: LID.happy, duration: 0.4 }, 0);
+    return tl;
+  },
+};
+
+/** The coin raised up close to her left eye for a good look. */
+const COIN_HOLD = 14;
+const COIN_AT = { x: 223, y: 178 } as const;
+
+/**
+ * Verifying a payment: glasses on, a gold coin held right up to her eye —
+ * "hmm" — turned over, turned over again, then tossed and caught. Ting! A
+ * satisfied nod, and she checks it again.
+ */
+const verifying: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    glassesOn(tl, p, 0);
+    tl.set(p.coin, { opacity: 0, y: 0 }, 0)
+      .to(p.coin, { opacity: 1, duration: 0.2 }, 0.1)
+      .to(p.bigClaw, { rotation: COIN_HOLD, duration: 0.5, ease: "back.out(1.6)" }, 0.1)
+      .to(p.stalkL, { rotation: -4, duration: 0.5, ease: "back.out(1.6)" }, 0.2)
+      .to([p.lidL, p.lidR], { y: READ_LID, duration: 0.3 }, 0.3);
+    look(tl, p, -11, 3, 0.3, 0.3);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+    // A close look, turning it over — "hmm".
+    mouth(tl, p, "flat", 0);
+    tl.to([p.lidL, p.lidR], { y: LID.squint, duration: 0.2 }, 0.1);
+    for (const at of [0.35, 0.95]) {
+      tl.to(p.coinFace, { scaleX: 0.06, duration: 0.12, ease: "power2.in" }, at).to(
+        p.coinFace,
+        { scaleX: 1, duration: 0.14, ease: "power2.out" },
+        at + 0.12,
+      );
+    }
+    // Toss it — eyes up — and catch it.
+    const toss = 1.5;
+    tl.to([p.lidL, p.lidR], { y: LID.open, duration: 0.15 }, toss - 0.1)
+      .to(p.bigClaw, { rotation: COIN_HOLD + 6, duration: 0.1, ease: "power2.out" }, toss - 0.1)
+      .to(p.bigClaw, { rotation: COIN_HOLD, duration: 0.2 }, toss)
+      .to(p.coin, { y: -75, duration: 0.38, ease: "power2.out" }, toss)
+      .to(p.coin, { y: 0, duration: 0.36, ease: "power2.in" }, toss + 0.38);
+    for (let i = 0; i < 5; i++) {
+      tl.to(p.coinFace, { scaleX: i % 2 ? 1 : 0.06, duration: 0.074, ease: "none" }, toss + i * 0.074);
+    }
+    tl.to(p.coinFace, { scaleX: 1, duration: 0.08 }, toss + 0.37);
+    look(tl, p, -6, -11, toss, 0.25);
+    look(tl, p, -11, 3, toss + 0.45, 0.25);
+    const caught = toss + 0.74;
+    tl.to(p.bigClaw, { rotation: COIN_HOLD - 3, duration: 0.07 }, caught).to(p.bigClaw, { rotation: COIN_HOLD, duration: 0.25, ease: "back.out(2)" }, caught + 0.07);
+    sparkleAt(tl, p, 0, caught + 0.05, COIN_AT, 0.55); // ting!
+    // Real gold. A nod.
+    mouth(tl, p, "smile", caught + 0.1);
+    tl.to([p.lidL, p.lidR], { y: READ_LID, duration: 0.2 }, caught + 0.15)
+      .to(p.root, { rotation: -2, duration: 0.15 }, caught + 0.3)
+      .to(p.root, { rotation: 0, duration: 0.3, ease: "back.out(2)" }, caught + 0.45)
+      .to({}, { duration: 0 }, caught + 1.1);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    tl.set([p.coin, p.glassesL, p.glassesR, p.glassesBridge], { opacity: 1 }, 0)
+      .to(p.bigClaw, { rotation: COIN_HOLD, duration: 0.4 }, 0)
+      .to([p.lidL, p.lidR], { y: READ_LID, duration: 0.4 }, 0);
+    look(tl, p, -11, 3, 0, 0.4);
+    return tl;
+  },
+};
+
+/** The crown's jewel, where it glints (on her right eye, at rest). */
+const CROWN_JEWEL = {
+  x: CROWN_BASE.x + 11 * Math.sin((CROWN.tilt * Math.PI) / 180),
+  y: CROWN_BASE.y - 11 * Math.cos((CROWN.tilt * Math.PI) / 180),
+} as const;
+
+/**
+ * Paid — she's Pro: a crown drops out of the sky onto her shell. Her eyes
+ * follow it down — "oh!" — then a jump for joy with sparkles. After that she
+ * wears it proudly, the jewel glinting, glancing down at it now and then.
+ */
+const paid: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = timeline();
+    // Out of the sky, onto her shell — both eyes follow it down.
+    tl.set(p.crown, { opacity: 1, y: -170, rotation: -30 }, 0).to(p.crown, { y: 0, rotation: 0, duration: 0.45, ease: "power2.in" }, 0);
+    look(tl, p, 7, -10, 0.05, 0.2);
+    look(tl, p, 8, 10, 0.3, 0.2);
+    stretchStalks(tl, p, 1.06, 0.05, 0.3, "power2.out");
+    // It lands — clunk — she bobs under it, and it wobbles into place.
+    const lands = 0.45;
+    tl.to(p.crown, { rotation: 12, duration: 0.08 }, lands)
+      .to(p.crown, { rotation: 0, duration: 0.5, ease: "elastic.out(1, 0.35)" }, lands + 0.08)
+      .to(p.root, { y: 3, duration: 0.07, ease: "power2.out" }, lands)
+      .to(p.root, { y: 0, duration: 0.25, ease: "back.out(2)" }, lands + 0.07);
+    mouth(tl, p, "o", lands, 0.05);
+    // A jump for joy.
+    const jump = 1.0;
+    mouth(tl, p, "smile", jump);
+    tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, jump)
+      .to(p.root, { y: -34, duration: 0.3, ease: "power2.out" }, jump + 0.05)
+      .to(p.root, { y: 0, duration: 0.3, ease: "power2.in" }, jump + 0.35)
+      .to(p.bigClaw, { rotation: 26, duration: 0.3, ease: "back.out(2)" }, jump + 0.05)
+      .to(p.bigClaw, { rotation: 0, duration: 0.5, ease: "back.out(1.5)" }, jump + 0.7);
+    stretchStalks(tl, p, 1, jump, 0.3, "power2.out");
+    lookHome(tl, p, jump, 0.3);
+    p.sparkles.forEach((sparkle, i) => {
+      const b = SPARKLE_BURST[i];
+      const at = jump + 0.1 + i * 0.04;
+      tl.set(sparkle, { x: 0, y: 0, scale: 0, rotation: 0, opacity: 1 }, at)
+        .to(sparkle, { x: b.x, y: b.y, scale: b.scale, rotation: 140, duration: 0.75, ease: "power3.out" }, at)
+        .to(sparkle, { opacity: 0, scale: b.scale * 0.3, duration: 0.45, ease: "power1.in" }, at + 0.55);
+    });
+    tl.to([p.lidL, p.lidR], { y: LID.open, duration: 0.3 }, jump + 1.0);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = timeline();
+    const total = 4;
+    // Standing proud: a slow breath…
+    tl.to(p.root, { y: -2, scaleY: 1.015, duration: total / 2 }, 0).to(p.root, { y: 0, scaleY: 1, duration: total / 2 }, total / 2);
+    // …the jewel glints…
+    sparkleAt(tl, p, 0, 0.6, CROWN_JEWEL, 0.5);
+    // …and a proud glance down at it, with a happy squint.
+    look(tl, p, 8, 10, 2.0, 0.3);
+    tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.25 }, 2.1)
+      .to(p.crown, { rotation: 4, duration: 0.15 }, 2.2)
+      .to(p.crown, { rotation: 0, duration: 0.5, ease: "elastic.out(1, 0.4)" }, 2.35)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, 3.0);
+    lookHome(tl, p, 3.0, 0.35);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set(p.crown, { opacity: 1 }, 0).to([p.lidL, p.lidR], { y: LID.happy, duration: 0.4 }, 0);
+    return tl;
+  },
+};
+
+/**
+ * Onboarded — welcome aboard: a crouch, a pop of confetti bursting out above
+ * her as she hops, then a big wave hello, beaming.
+ */
+const onboarded: MoxiePreset = {
+  mode: "once",
+  intro: (p) => {
+    const tl = timeline();
+    tl.to(p.root, { scaleY: 0.9, scaleX: 1.05, duration: 0.18, ease: "power2.in" }, 0)
+      .to(p.root, { y: -26, scaleY: 1.05, scaleX: 0.97, duration: 0.25, ease: "power2.out" }, 0.18)
+      .to(p.root, { y: 0, scaleY: 1, scaleX: 1, duration: 0.35, ease: "bounce.out" }, 0.43)
+      .to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, 0.2);
+    stretchStalks(tl, p, 1.1, 0.18, 0.3, "back.out(2)");
+    stretchStalks(tl, p, 1, 0.6, 0.5, "elastic.out(1, 0.4)");
+    mouth(tl, p, "o", 0.2, 0.05);
+    mouth(tl, p, "smile", 0.6);
+    // Confetti!
+    p.confetti.forEach((piece, i) => {
+      const at = 0.22 + (i % 4) * 0.03;
+      const out = { x: random(-160, 160), y: random(-110, -30) };
+      tl.set(piece, { x: 0, y: 0, scale: random(0.9, 1.4), rotation: random(0, 180), opacity: 1 }, at)
+        .to(piece, { x: out.x, y: out.y, rotation: `+=${random(90, 270)}`, duration: 0.5, ease: "power2.out" }, at)
+        .to(piece, { x: out.x + random(-30, 30), y: out.y + random(170, 260), rotation: `+=${random(180, 540)}`, duration: 1.5, ease: "power1.in" }, at + 0.5)
+        .to(piece, { opacity: 0, duration: 0.4 }, at + 1.6);
+    });
+    // A big wave hello.
+    const end = waveClaw(tl, p, 0.7, 3, 22, -6);
+    look(tl, p, 0, 2, 0.7, 0.3);
+    tl.to([p.lidL, p.lidR], { y: LID.open, duration: 0.3 }, end - 0.3);
+    tl.add(toNeutral(p, 0.5), Math.max(end, 2.4));
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.to(p.bigClaw, { rotation: 14, duration: 0.4 }, 0).to([p.lidL, p.lidR], { y: LID.happy, duration: 0.4 }, 0);
+    return tl;
+  },
+};
+
+/**
+ * Saved to a career profile: she holds up the CV in a folder, tucks it in
+ * — the sheet slides down behind the folder's front — gives the folder a
+ * tidy little shake, and pumps her other claw: filed!
+ */
+const saved: MoxiePreset = {
+  mode: "once",
+  intro: (p) => {
+    const tl = timeline();
+    resetPaper(tl, p, "cv", 0);
+    tl.set(p.paperBack, { rotation: -READ_HOLD, x: 0, opacity: 0 }, 0)
+      .set(p.paperSheet, { y: 0, opacity: 1 }, 0)
+      .to(p.paperBack, { opacity: 1, duration: 0.2 }, 0)
+      .set([p.folderBack, p.folderFront], { opacity: 0 }, 0)
+      .to([p.folderBack, p.folderFront], { opacity: 1, duration: 0.25 }, 0.35);
+    holdPaper(tl, p, 0, 0, 0.5, "back.out(1.4)");
+    look(tl, p, READ_GAZE.from.x, READ_GAZE.from.y - 3, 0.2, 0.3);
+    // In it goes.
+    const tuck = 0.85;
+    // (It fades as it goes, so it never shows below the folder.)
+    tl.to(p.paperSheet, { y: 26, duration: 0.4, ease: "power2.in" }, tuck).to(p.paperSheet, { opacity: 0, duration: 0.22 }, tuck + 0.12);
+    look(tl, p, READ_GAZE.from.x, READ_GAZE.from.y + 3, tuck, 0.3);
+    // A tidy shake, and a glint.
+    const tidy = tuck + 0.5;
+    holdPaper(tl, p, -4, tidy, 0.08, "power2.out");
+    holdPaper(tl, p, 3, tidy + 0.08, 0.1);
+    holdPaper(tl, p, 0, tidy + 0.18, 0.3, "back.out(2)");
+    sparkleAt(tl, p, 0, tidy + 0.2, paperPoint(0.5, 0.75), 0.7);
+    // Filed! A fist pump with the other claw.
+    const pump = tidy + 0.55;
+    mouth(tl, p, "smile", pump);
+    tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, pump)
+      .to(p.bigClaw, { rotation: 30, duration: 0.18, ease: "power2.out" }, pump)
+      .to(p.bigClaw, { rotation: 22, duration: 0.3, ease: "back.out(2)" }, pump + 0.18)
+      .to(p.root, { y: -6, duration: 0.15, ease: "power2.out" }, pump + 0.05)
+      .to(p.root, { y: 0, duration: 0.3, ease: "back.out(2.5)" }, pump + 0.2);
+    lookHome(tl, p, pump, 0.3);
+    tl.add(toNeutral(p, 0.5), pump + 1.2);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set([p.paperBack, p.folderBack, p.folderFront], { opacity: 1 }, 0).set(p.paperBack, { rotation: 0 }, 0);
+    resetPaper(tl, p, "cv", 0);
+    tl.set(p.paperSheet, { y: 20 }, 0).to(p.smallClaw, { rotation: READ_HOLD, duration: 0.4 }, 0).to([p.lidL, p.lidR], { y: LID.happy, duration: 0.4 }, 0);
+    return tl;
+  },
+};
+
+// ─── Empty states (tier 3) ───────────────────────────────────────────────────
+
+/**
+ * A shrug: shoulders up, the big claw out, eyes up, a flat "hmm" — held for
+ * `hold` seconds, then let go. `smallClaw` joins in only when it's free (not
+ * holding something). Returns when it's done.
+ */
+function shrug(tl: TL, p: MoxieParts, at: number, hold = 0.8, smallClaw = true): number {
+  tl.to(p.root, { scaleY: 1.035, y: -2, duration: 0.18, ease: "power2.out" }, at)
+    .to(p.bigClaw, { rotation: -14, y: -6, duration: 0.22, ease: "back.out(2)" }, at)
+    .to(p.bigPincer, { rotation: -10, duration: 0.22, ease: "back.out(2)" }, at + 0.03)
+    .to([p.lidL, p.lidR], { y: LID.flat, duration: 0.2 }, at);
+  if (smallClaw) tl.to(p.smallClaw, { rotation: -24, duration: 0.22, ease: "back.out(2)" }, at);
+  stretchStalks(tl, p, 1.05, at, 0.22, "back.out(2)");
+  look(tl, p, 2, -6, at, 0.2);
+  mouth(tl, p, "flat", at + 0.05);
+  const release = at + hold;
+  tl.to(p.root, { scaleY: 1, y: 0, duration: 0.3, ease: "power2.inOut" }, release)
+    .to(p.bigClaw, { rotation: 0, y: 0, duration: 0.35, ease: "power2.inOut" }, release)
+    .to(p.bigPincer, { rotation: 0, duration: 0.3 }, release)
+    .to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, release);
+  if (smallClaw) tl.to(p.smallClaw, { rotation: 0, duration: 0.35, ease: "power2.inOut" }, release);
+  stretchStalks(tl, p, 1, release, 0.35, "power2.inOut");
+  return release + 0.35;
+}
+
+/** Magnifying-glass sweeps: where the claw holds it, and where her eyes look through it. */
+const SEARCH_SWEEP = [
+  { claw: -12, eyes: { x: -11, y: 5 } },
+  { claw: 16, eyes: { x: -6, y: -9 } },
+  { claw: -4, eyes: { x: -11, y: 1 } },
+  { claw: 20, eyes: { x: -4, y: -10 } },
+] as const;
+const SEARCH_HOLD = 8;
+
+/**
+ * Nothing found (search): a magnifying glass, swept this way and that, her
+ * eyes following it, stalks craning — nothing. A shrug, a look at you, and
+ * she tries again.
+ */
+const searching: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = timeline();
+    tl.set(p.magnifier, { opacity: 0 }, 0)
+      .to(p.magnifier, { opacity: 1, duration: 0.2 }, 0.1)
+      .to(p.bigClaw, { rotation: SEARCH_HOLD, duration: 0.45, ease: "back.out(1.6)" }, 0.1);
+    look(tl, p, -11, -3, 0.2, 0.3);
+    stretchStalks(tl, p, 1.08, 0.2, 0.4, "back.out(1.6)");
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = timeline();
+    let t = 0;
+    mouth(tl, p, "flat", 0);
+    // This way, that way…
+    SEARCH_SWEEP.forEach(({ claw, eyes }, i) => {
+      tl.to(p.bigClaw, { rotation: claw, duration: 0.55, ease: "sine.inOut" }, t)
+        .to(p.stalkL, { rotation: claw > 5 ? 2 : -7, duration: 0.55, ease: "sine.inOut" }, t + 0.05)
+        .to(p.stalkR, { rotation: claw > 5 ? 6 : -4, duration: 0.55, ease: "sine.inOut" }, t + 0.08)
+        .to(p.root, { rotation: claw > 5 ? 1 : -1.5, duration: 0.55, ease: "sine.inOut" }, t);
+      look(tl, p, eyes.x, eyes.y, t + 0.1, 0.4, "sine.inOut");
+      if (i === 1) blink(tl, p, t + 0.3);
+      t += 0.62;
+    });
+    // …nothing. Glass down, a shrug.
+    tl.to(p.bigClaw, { rotation: -4, duration: 0.3 }, t)
+      .to([p.stalkL, p.stalkR, p.root], { rotation: 0, duration: 0.3 }, t);
+    look(tl, p, 2, 2, t, 0.25);
+    t = shrug(tl, p, t + 0.3, 0.9);
+    // Try again.
+    tl.to(p.bigClaw, { rotation: SEARCH_HOLD, duration: 0.4, ease: "back.out(1.6)" }, t + 0.2);
+    stretchStalks(tl, p, 1.08, t + 0.2, 0.4, "back.out(1.6)");
+    look(tl, p, -11, -3, t + 0.25, 0.3);
+    tl.to({}, { duration: 0 }, t + 0.8);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set(p.magnifier, { opacity: 1 }, 0).to(p.bigClaw, { rotation: SEARCH_HOLD, duration: 0.4 }, 0);
+    look(tl, p, -11, -3, 0, 0.4);
+    return tl;
+  },
+};
+
+/**
+ * Nothing in here yet (no resumes, no career profiles, no CVs linked): she peers into
+ * an empty folder — stalks craned right over it — gives it a shake (nothing
+ * falls out), then looks at you with a hopeful shrug.
+ */
+const emptyFolder: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = timeline();
+    resetPaper(tl, p, "blank", 0);
+    tl.set(p.paperBack, { rotation: -READ_HOLD, x: 0, opacity: 0 }, 0)
+      .set(p.paperSheet, { opacity: 0 }, 0)
+      .set([p.folderBack, p.folderFront], { opacity: 1 }, 0)
+      .to(p.paperBack, { opacity: 1, duration: 0.2 }, 0);
+    holdPaper(tl, p, 0, 0, 0.6, "back.out(1.4)");
+    look(tl, p, 8, 6, 0.3, 0.3);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = timeline();
+    // A peek inside: stalks craned right over it, eyes down into it.
+    tl.to(p.stalkL, { rotation: 7, duration: 0.45, ease: "back.out(1.6)" }, 0)
+      .to(p.stalkR, { rotation: 11, duration: 0.45, ease: "back.out(1.6)" }, 0.05)
+      .to(p.root, { rotation: 1.5, duration: 0.45 }, 0);
+    stretchStalks(tl, p, 1.12, 0, 0.45, "back.out(1.6)");
+    look(tl, p, 9, 10, 0.1, 0.3);
+    mouth(tl, p, "o", 0.3);
+    // A shake — nothing falls out.
+    const shake = 1.1;
+    for (let i = 0; i < 4; i++) holdPaper(tl, p, i % 2 ? 5 : -5, shake + i * 0.09, 0.09, "sine.inOut");
+    holdPaper(tl, p, 0, shake + 0.36, 0.3, "back.out(2)");
+    look(tl, p, 9, 11, shake, 0.2);
+    // Empty. A hopeful look at you, and a shrug.
+    const back = shake + 0.75;
+    tl.to([p.stalkL, p.stalkR, p.root], { rotation: 0, duration: 0.4, ease: "power2.inOut" }, back);
+    stretchStalks(tl, p, 1, back, 0.4, "power2.inOut");
+    look(tl, p, 1, 1, back, 0.3);
+    const end = shrug(tl, p, back + 0.35, 0.9, false);
+    holdPaper(tl, p, -6, back + 0.35, 0.22, "back.out(2)");
+    holdPaper(tl, p, 0, back + 1.25, 0.35, "power2.inOut");
+    mouth(tl, p, "smile", end);
+    blink(tl, p, end + 0.4);
+    tl.to({}, { duration: 0 }, end + 1.2);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set([p.paperBack, p.folderBack, p.folderFront], { opacity: 1 }, 0).set(p.paperBack, { rotation: -READ_HOLD }, 0);
+    resetPaper(tl, p, "blank", 0);
+    tl.set(p.paperSheet, { opacity: 0 }, 0);
+    holdPaper(tl, p, 0, 0, 0.4);
+    look(tl, p, 8, 6, 0, 0.4);
+    return tl;
+  },
+};
+
 // ─── Tickle ───────────────────────────────────────────────────────────────────
 
 /** How long the giggle lasts, start to "ahem". */
@@ -1425,4 +1921,12 @@ export const MOXIE_PRESETS: Record<MoxieAnimation, MoxiePreset> = {
   read,
   polish,
   stamp,
+  tada,
+  downloaded,
+  verifying,
+  paid,
+  onboarded,
+  saved,
+  searching,
+  emptyFolder,
 };

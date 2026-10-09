@@ -26,8 +26,10 @@ function initialNames(me: ApiUser): { first: string; last: string } {
  * First-run questions for a new account: name, phone and profession. Saved to
  * the account (editable later in Account settings) and used by the AI as the
  * default contact details on every CV, so it doesn't have to ask each time.
+ * `onFinished` is called with their first name when they complete it (not
+ * when they skip it) — the dashboard welcomes them with it.
  */
-export function OnboardingModal({ me }: { me: ApiUser }) {
+export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: (firstName: string) => void }) {
   const updateProfile = useUpdateProfile();
   const names = initialNames(me);
   const [step, setStep] = useState<Step>("name");
@@ -62,6 +64,7 @@ export function OnboardingModal({ me }: { me: ApiUser }) {
             }
       );
       // The saved user no longer needs onboarding, so the dashboard stops rendering this.
+      if (!skipAll) onFinished?.(firstName.trim());
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save your details. Please try again.");
     }

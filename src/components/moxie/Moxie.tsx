@@ -35,6 +35,8 @@ export interface MoxieProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 
   ticklish?: boolean;
   /** Called each time she's tickled (and reacts). */
   onTickle?: () => void;
+  /** Wears the Pro crown (on her right eye), whatever she's doing — for Pro accounts. */
+  crowned?: boolean;
 }
 
 /** A tickle: this many back-and-forths of the pointer over her… */
@@ -79,6 +81,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
     onAnimationComplete,
     ticklish = false,
     onTickle,
+    crowned = false,
     className,
     style,
     ...rest
@@ -90,6 +93,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
   const animationRef = useRef(animation);
   const onCompleteRef = useRef(onAnimationComplete);
   const pausedRef = useRef(paused);
+  const crownedRef = useRef(crowned);
   const visibleRef = useRef(true);
   const reducedMotion = usePrefersReducedMotion();
   // Clip-path ids must be unique per instance and safe inside url(#…).
@@ -99,6 +103,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
     animationRef.current = animation;
     onCompleteRef.current = onAnimationComplete;
     pausedRef.current = paused;
+    crownedRef.current = crowned;
   });
 
   // Build the controller once the SVG exists (and again if the motion preference changes).
@@ -109,6 +114,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
     prepareParts(parts);
     const controller = new MoxieController(parts, {
       reducedMotion,
+      crowned: crownedRef.current,
       onComplete: (finished) => onCompleteRef.current?.(finished),
     });
     controllerRef.current = controller;
@@ -126,6 +132,11 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
     const controller = controllerRef.current;
     if (controller && controller.current !== animation) controller.play(animation);
   }, [animation]);
+
+  // Crown on or off as the account changes (e.g. right after upgrading).
+  useEffect(() => {
+    controllerRef.current?.setCrowned(crowned);
+  }, [crowned]);
 
   // Pause when the `paused` prop says so, or while she's scrolled out of view.
   useEffect(() => {

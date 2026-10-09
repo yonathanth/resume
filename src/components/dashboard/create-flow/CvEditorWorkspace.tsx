@@ -72,6 +72,7 @@ import {
 import { usePolishSummary } from "@/hooks/use-cv-generation";
 import { useCvPreview } from "@/hooks/use-cv-preview";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { bulletToText, flattenSkillGroups, newLocalId, toCVContentPatch } from "@/lib/cv-mapper";
 import { getMissingDetails, type MissingDetail } from "@/lib/missing-details";
 import { resolvePreviewPath, type EditorTarget } from "@/lib/preview-paths";
@@ -572,6 +573,7 @@ function TemplateGalleryCard({
 
 export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorkspaceProps) {
   const toast = useToast();
+  const isPro = useSubscriptionStatus().data?.isPro ?? false;
   const [cv, setCv] = useState<CvData>(initialData);
   const [isSaving, setIsSaving] = useState(false);
   const [showExportChecklist, setShowExportChecklist] = useState(false);
@@ -904,7 +906,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       link.remove();
       URL.revokeObjectURL(url);
 
-      toast.success("Your PDF is ready", { description: `Saved as ${fileName}` });
+      toast.success("Your PDF is ready", { description: `Saved as ${fileName}`, moxie: "downloaded", placement: "top" });
     } catch (err) {
       // One message at a time — retrying replaces it instead of stacking another.
       toast.error("Couldn't create the PDF", {
@@ -2135,6 +2137,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       {pdfPreview?.status === "loading" && (
         <MoxieLoader
           animation="stamp"
+          crowned={isPro}
           messages={["Creating your PDF…", "Laying out your pages…", "Setting the type…", "Getting it print-ready…"]}
         />
       )}

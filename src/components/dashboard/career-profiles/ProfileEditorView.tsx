@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { ICON_TONES } from "@/components/dashboard/create-flow/OptionCard";
+import { DashboardMoxie } from "@/components/dashboard/DashboardMoxie";
 import { ChipListEditor, INPUT_CLASS, LABEL_CLASS, ProfileSectionEditor } from "./ProfileSectionEditor";
 import { ItemRecord, PROFILE_SECTIONS, describeChangeCounts, missingRequired, tempId, toSavePayload } from "./profile-sections";
 
@@ -343,7 +344,8 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
       {tab === "resumes" && (
         <div className="rounded-lg border border-neutral-300 bg-white">
           {profile.documents.length === 0 ? (
-            <div className="py-12 text-center">
+            <div className="py-10 text-center">
+              <DashboardMoxie animation="emptyFolder" size={100} className="mx-auto mb-1" />
               <p className="text-sm font-semibold text-neutral-800">No CVs linked yet</p>
               <p className="mt-1 text-xs text-neutral-500">CVs you create from this profile, or save to it, show up here.</p>
             </div>

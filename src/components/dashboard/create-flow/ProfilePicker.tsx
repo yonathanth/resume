@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Loader2, UserCheck } from "lucide-react";
 import type { ApiCareerProfile } from "@/lib/api";
 import { SOFT_TONES } from "./OptionCard";
+import { DashboardMoxie } from "../DashboardMoxie";
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -47,7 +48,8 @@ export function ProfilePicker({
 }) {
   if (profiles.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-10 text-center">
+      <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-8 text-center">
+        <DashboardMoxie animation="emptyFolder" size={96} className="mx-auto mb-1" />
         <p className="text-sm font-semibold text-neutral-900">No career profiles yet</p>
         <p className="mt-1 text-sm text-neutral-500">Create one for a role you&apos;re going for, then come back here.</p>
         <Link

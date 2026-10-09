@@ -1,17 +1,36 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { notFound } from "next/navigation";
-import { Moxie, MOXIE_ANIMATIONS, type MoxieAnimation } from "@/components/moxie";
+import { Moxie, MOXIE_ANIMATIONS, type MoxieAnimation, type MoxieHandle } from "@/components/moxie";
 import { AiWaitLoader, type AiWait } from "@/components/dashboard/create-flow/FlowUI";
 
 const WAITS: AiWait[] = ["read-file", "read-story", "read-cv", "write", "improve", "tailor"];
+
+const MOMENTS: { name: MoxieAnimation; label: string }[] = [
+  { name: "celebrate", label: "ta-da (current)" },
+  { name: "tada", label: "ta-da (new: eye bonk)" },
+  { name: "downloaded", label: "PDF downloaded" },
+  { name: "verifying", label: "verifying payment" },
+  { name: "paid", label: "payment success (Pro)" },
+  { name: "onboarded", label: "onboarding finished" },
+  { name: "saved", label: "saved to profile" },
+];
+
+const EMPTY_STATES: { name: MoxieAnimation; label: string }[] = [
+  { name: "searching", label: "no search results" },
+  { name: "emptyFolder", label: "no resumes / profiles / CVs linked" },
+];
 
 /** Dev-only playground for Moxie's animations and the AI-wait loaders. */
 export default function MoxiePlayground() {
   if (process.env.NODE_ENV === "production") notFound();
 
   const [animation, setAnimation] = useState<MoxieAnimation>("tailor");
+  const [moment, setMoment] = useState<MoxieAnimation | null>(null);
+  // Preview a Pro account: she wears the crown through everything.
+  const [crowned, setCrowned] = useState(false);
+  const momentRef = useRef<MoxieHandle>(null);
   const [wait, setWait] = useState<AiWait>("tailor");
   // Remounting restarts the loader's timers, so its captions and impatience can be watched from the start.
   const [run, setRun] = useState(0);
@@ -38,7 +57,13 @@ export default function MoxiePlayground() {
 
   return (
     <main className="min-h-dvh bg-neutral-50 p-6 sm:p-10">
-      <h1 className="text-xl font-bold text-neutral-950">Moxie playground</h1>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-xl font-bold text-neutral-950">Moxie playground</h1>
+        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-neutral-700">
+          <input type="checkbox" checked={crowned} onChange={(e) => setCrowned(e.target.checked)} className="h-4 w-4 accent-[var(--accent)]" />
+          Pro account (crown on)
+        </label>
+      </div>
 
       <section className="mt-8">
         <h2 className="text-sm font-semibold text-neutral-500">Animation</h2>
@@ -57,9 +82,52 @@ export default function MoxiePlayground() {
           ))}
         </div>
         <div className="mt-6 flex items-end gap-10 rounded-2xl border border-neutral-200 bg-white p-8">
-          <Moxie animation={animation} size={320} />
-          <Moxie animation={animation} size={156} />
-          <Moxie animation={animation} size={64} />
+          <Moxie animation={animation} size={320} crowned={crowned} />
+          <Moxie animation={animation} size={156} crowned={crowned} />
+          <Moxie animation={animation} size={64} crowned={crowned} />
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold text-neutral-500">Celebrations, moments &amp; empty states (tier 2 &amp; 3 preview)</h2>
+        <p className="mt-1 text-sm text-neutral-500">Each button replays it. Compare the current ta-da (celebrate) with the new one (tada).</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {MOMENTS.map(({ name, label }) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => {
+                setMoment(name);
+                momentRef.current?.play(name);
+              }}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium cursor-pointer ${
+                moment === name ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-200 bg-white text-neutral-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <h3 className="mt-5 text-sm font-semibold text-neutral-500">Empty states (tier 3 preview)</h3>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {EMPTY_STATES.map(({ name, label }) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => {
+                setMoment(name);
+                momentRef.current?.play(name);
+              }}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium cursor-pointer ${
+                moment === name ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-200 bg-white text-neutral-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-6 flex items-end justify-center rounded-2xl border border-neutral-200 bg-white p-10">
+          <Moxie ref={momentRef} animation="idle" size={340} ticklish crowned={crowned} />
         </div>
       </section>
 

@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Moxie } from "./Moxie";
+import { WordByWord } from "./WordByWord";
 import { TICKLE_SECONDS } from "./moxie.animations";
 import type { MoxieAnimation } from "./moxie.types";
 
@@ -13,8 +14,6 @@ const IMPATIENT_EVERY_S = 20;
 const IMPATIENT_FOR_S = 4;
 /** Long enough to read a line and watch her for a moment before the next one. */
 const LINE_EVERY_MS = 3800;
-/** Each word of a new line arrives this long after the one before it. */
-const WORD_STAGGER_MS = 55;
 /** A new line waits this long for the old one to fade (moxie-line-out in globals.css) so they never overlap. */
 const LINE_HANDOVER_MS = 380;
 
@@ -41,27 +40,8 @@ export interface MoxieLoaderProps {
   done?: boolean;
   /** The line once it's done. */
   doneMessage?: string;
-}
-
-/**
- * A line of text that arrives word by word: each word blurs in and rises a
- * beat after the one before, starting `delayMs` in (e.g. once the line it
- * replaces has faded, so the two never overlap).
- */
-function WordByWord({ text, delayMs = 0 }: { text: string; delayMs?: number }) {
-  const words = text.split(" ");
-  return (
-    <>
-      {words.map((word, i) => (
-        <React.Fragment key={i}>
-          <span className="moxie-word-in" style={{ animationDelay: `${delayMs + i * WORD_STAGGER_MS}ms` }}>
-            {word}
-          </span>
-          {i < words.length - 1 && " "}
-        </React.Fragment>
-      ))}
-    </>
-  );
+  /** She wears the Pro crown (for Pro accounts). */
+  crowned?: boolean;
 }
 
 /**
@@ -80,6 +60,7 @@ export function MoxieLoader({
   size = 168,
   done = false,
   doneMessage = "Done!",
+  crowned = false,
 }: MoxieLoaderProps) {
   const [introDone, setIntroDone] = useState(!intro);
   const [elapsed, setElapsed] = useState(0);
@@ -108,7 +89,7 @@ export function MoxieLoader({
   const impatient =
     slow && !SCENES.has(animation) && (elapsed - IMPATIENT_AFTER_S) % IMPATIENT_EVERY_S < IMPATIENT_FOR_S;
   const current: MoxieAnimation = done
-    ? "celebrate"
+    ? "tada"
     : !introDone && intro
       ? intro
       : impatient
@@ -145,6 +126,7 @@ export function MoxieLoader({
               size={size}
               decorative
               ticklish={!done}
+              crowned={crowned}
               onTickle={onTickle}
               onAnimationComplete={(finished) => {
                 if (finished === intro) setIntroDone(true);

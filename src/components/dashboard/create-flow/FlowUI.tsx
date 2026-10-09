@@ -3,6 +3,7 @@
 import React, { useCallback, useState } from "react";
 import { ArrowRight, Loader2, X } from "lucide-react";
 import { MoxieLoader, type MoxieLoaderProps } from "@/components/moxie";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { TemplatePicker } from "./TemplatePicker";
 import { TemplateId, templateLabel } from "./types";
 
@@ -58,10 +59,11 @@ export function AiWaitLoader({
   /** The work finished — Moxie's ta-da (see useAiDone). */
   done?: boolean;
 }) {
+  const crowned = useSubscriptionStatus().data?.isPro ?? false;
   const config = AI_WAITS[wait];
   const messages =
     wait === "read-file" && fileName ? [`Reading ${fileName}…`, ...config.messages.slice(1)] : config.messages;
-  return <MoxieLoader {...config} messages={messages} done={done} />;
+  return <MoxieLoader {...config} messages={messages} done={done} crowned={crowned} />;
 }
 
 /** Long enough for her celebration jump to land, short enough not to feel like another wait. */

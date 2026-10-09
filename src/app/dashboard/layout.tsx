@@ -8,6 +8,7 @@ import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWo
 import { useRefreshSubscriptionStatus, useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useMe } from "@/hooks/use-auth";
 import { OnboardingModal } from "@/components/dashboard/OnboardingModal";
+import { MoxieMoment } from "@/components/moxie";
 import { AuthGuard } from "@/components/AuthGuard";
 import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
 import { QuickTour } from "@/components/dashboard/QuickTour";
@@ -69,6 +70,8 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
   const { activeEditingCv } = useDashboard();
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  // Set when someone finishes onboarding: Moxie welcomes them by name.
+  const [welcome, setWelcome] = useState<string | null>(null);
   const { data: subscription } = useSubscriptionStatus();
   const isPro = subscription?.isPro ?? false;
   const { data: me } = useMe();
@@ -129,7 +132,14 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
 
       {/* First-run details for a brand-new account. `=== false` so an older
           API that doesn't send the flag never shows it. */}
-      {me && me.onboardingCompleted === false && <OnboardingModal me={me} />}
+      {me && me.onboardingCompleted === false && <OnboardingModal me={me} onFinished={(firstName) => setWelcome(firstName)} />}
+      {welcome !== null && (
+        <MoxieMoment
+          animation="onboarded"
+          message={welcome ? `Welcome aboard, ${welcome}!` : "Welcome aboard!"}
+          onDone={() => setWelcome(null)}
+        />
+      )}
     </div>
   );
 }

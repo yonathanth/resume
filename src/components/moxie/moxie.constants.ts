@@ -61,6 +61,31 @@ export const PENCIL_TIP = { x: 165, y: 154 } as const;
 /** From the pincer's grip up to the point. */
 export const PENCIL = { length: 62, angle: -110 } as const;
 
+/** The PDF file that drops into her big pincer: its bottom edge sits in the pincer's tips. */
+export const PDF_FILE = { x: 176, y: 158, width: 30, height: 42 } as const;
+
+/** The coin she holds up in her big pincer, gripped between its tips. */
+export const COIN = { x: 191, y: 186, radius: 12 } as const;
+
+/**
+ * The Pro crown, worn on her body: perched on the top-right of her shell,
+ * tilted with its curve — clear of the stalk beside it, so it's always in view.
+ * `angle` is where on the shell (degrees from her right, upward negative);
+ * `sink` sets it slightly into the outline so it sits rather than floats.
+ */
+export const CROWN = { angle: -58, sink: 3, tilt: 26, width: 44, height: 26 } as const;
+
+/** Where the crown's bottom-centre sits on her shell, in the drawing. */
+export const CROWN_BASE = {
+  x: 305 + (88 - CROWN.sink) * Math.cos((CROWN.angle * Math.PI) / 180),
+  y: 320 + (54 - CROWN.sink) * Math.sin((CROWN.angle * Math.PI) / 180),
+} as const;
+
+/** Where the confetti bursts from — above her head — and how many pieces. */
+export const CONFETTI_ORIGIN = { x: 305, y: 150 } as const;
+export const CONFETTI_COLORS = ["#FF6A3D", "#FFC94A", "#7FC8A9", "#8FB8F0", "#E04E24", "#FFF8F0"] as const;
+export const CONFETTI_COUNT = 14;
+
 /** Centre of her mouth, where the other mouth shapes sit. */
 export const MOUTH = { x: 301, y: 324 } as const;
 

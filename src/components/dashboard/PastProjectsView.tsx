@@ -1,12 +1,13 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, Copy, Download, FileText, LayoutGrid, List, Plus, Search, Trash2, X } from "lucide-react";
+import { ArrowRight, Copy, Download, LayoutGrid, List, Plus, Search, Trash2, X } from "lucide-react";
 import { ResumeDraft, TemplateId, templateLabel } from "./create-flow/types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CvThumbnail, ResumeCard, downloadDraftPdf, downloadErrorMessage } from "./ResumeCard";
-import { ICON_TONES } from "./create-flow/OptionCard";
 import { useToast } from "@/components/Toaster";
+import { getCvFileName } from "@/lib/utils";
+import { DashboardMoxie } from "./DashboardMoxie";
 
 interface PastProjectsViewProps {
   drafts?: ResumeDraft[];
@@ -63,7 +64,7 @@ export function PastProjectsView({
     setDownloadingId(draft.id);
     try {
       await downloadDraftPdf(draft);
-      toast.success("Your PDF is ready", { description: draft.title });
+      toast.success("Your PDF is ready", { description: `Saved as ${getCvFileName(draft.fullName, draft.title)}`, moxie: "downloaded", placement: "top" });
     } catch (err) {
       toast.error(`Couldn't download "${draft.title}"`, { description: downloadErrorMessage(err) });
     } finally {
@@ -160,9 +161,8 @@ export function PastProjectsView({
         </div>
       ) : filteredDrafts.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 px-6 py-16 text-center">
-          <span className={`w-11 h-11 rounded-xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.neutral}`}>
-            {hasDrafts ? <Search className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-          </span>
+          {/* Searching with a magnifying glass when a search finds nothing; peering into an empty folder when there are none yet. */}
+          <DashboardMoxie animation={hasDrafts ? "searching" : "emptyFolder"} size={120} className="mx-auto -mt-4 mb-2" />
           <h2 className="text-base font-bold text-neutral-950">{hasDrafts ? "No matching resumes" : "No resumes yet"}</h2>
           <p className="mt-1 text-sm text-neutral-500">
             {hasDrafts ? `Nothing matches “${searchQuery.trim()}”. Try a different search.` : "Every resume you create is saved here."}

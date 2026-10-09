@@ -122,6 +122,16 @@ body {
   animation: toast-enter 180ms ease-out;
 }
 
+/* …or drop in from above, for toasts at the top. */
+@keyframes toast-enter-top {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-enter-top {
+  animation: toast-enter-top 220ms ease-out;
+}
+
 /* Moxie's full-screen wait (components/moxie/MoxieLoader.tsx): the frosted backdrop
    fades in; each line above her arrives word by word (every word blurs in and rises,
    a beat after the one before) while the line it replaces drifts up and fades away;

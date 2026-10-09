@@ -18,6 +18,16 @@ export const MOXIE_ANIMATIONS = [
   "read",
   "polish",
   "stamp",
+  // Celebrations and moments (tier 2) — previewed on /dev/moxie.
+  "tada",
+  "downloaded",
+  "verifying",
+  "paid",
+  "onboarded",
+  "saved",
+  // Empty states (tier 3) — previewed on /dev/moxie.
+  "searching",
+  "emptyFolder",
 ] as const;
 
 export type MoxieAnimation = (typeof MOXIE_ANIMATIONS)[number];
@@ -102,6 +112,20 @@ export interface MoxieParts {
   paperJob: SVGGElement;
   /** The job post lying on the ground in front of her (tailor scene), between readings. */
   groundPost: SVGGElement;
+  /** A magnifying glass, held in the big pincer like the pencil (the lens where the point would be). */
+  magnifier: SVGGElement;
+  /** A PDF file that drops into her big pincer (the "downloaded" moment). */
+  pdfFile: SVGGElement;
+  /** A gold coin held in the big pincer (verifying a payment); the face flips over, the whole coin is tossed. */
+  coin: SVGGElement;
+  coinFace: SVGGElement;
+  /** The Pro crown that lands on her head (payment success). */
+  crown: SVGGElement;
+  /** Confetti pieces, burst out above her (onboarding finished). */
+  confetti: SVGGElement[];
+  /** A folder around the held sheet (saved to a profile): its back behind the sheet, its front over it. */
+  folderBack: SVGGElement;
+  folderFront: SVGGElement;
   /** Half-moon reading glasses, one lens inside each eye so they follow the eyes. */
   glassesL: SVGGElement;
   glassesR: SVGGElement;

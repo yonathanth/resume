@@ -9,6 +9,8 @@ const REDUCED_HOLD = 1.4;
 
 interface ControllerOptions {
   reducedMotion: boolean;
+  /** Wears the Pro crown through every animation. */
+  crowned?: boolean;
   onComplete?: (animation: MoxieAnimation) => void;
 }
 
@@ -33,6 +35,8 @@ export class MoxieController {
 
   play(animation: MoxieAnimation): void {
     this.stopGiggle(); // anything new takes over from a giggle at once
+    // The crown stays on (or off) whatever she does — except in the Pro moment, which drops it in itself.
+    if (animation !== "paid") gsap.set(this.parts.crown, { opacity: this.options.crowned ? 1 : 0 });
     const preset = MOXIE_PRESETS[animation];
     const { parts } = this;
     const tl = gsap.timeline();
@@ -75,6 +79,12 @@ export class MoxieController {
     });
     this.giggle = giggle;
     return true;
+  }
+
+  /** Puts the Pro crown on, or takes it off. */
+  setCrowned(crowned: boolean): void {
+    this.options.crowned = crowned;
+    if (this.current !== "paid") gsap.set(this.parts.crown, { opacity: crowned ? 1 : 0 });
   }
 
   setPaused(paused: boolean): void {

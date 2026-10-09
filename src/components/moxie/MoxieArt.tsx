@@ -1,6 +1,12 @@
 import React from "react";
 import {
   bridgePath,
+  COIN,
+  CONFETTI_COLORS,
+  CONFETTI_COUNT,
+  CONFETTI_ORIGIN,
+  CROWN,
+  CROWN_BASE,
   EYE_L,
   EYE_R,
   EYE_RADIUS,
@@ -14,6 +20,7 @@ import {
   MOXIE_COLORS as C,
   MOXIE_VIEWBOX,
   PAPER_ROWS,
+  PDF_FILE,
   PAPER_SEAL,
   paperPoint,
   paperRowPoints,
@@ -108,6 +115,83 @@ function Eye({ side, eye, clipId }: { side: "L" | "R"; eye: { cx: number; cy: nu
   );
 }
 
+/**
+ * A PDF file — a page with a download arrow and a coral "PDF" band — gripped
+ * in the big pincer (drawn behind it, so the tips hold its bottom edge).
+ */
+function PdfFile() {
+  const { x, y, width: w, height: h } = PDF_FILE;
+  const mid = x + w / 2;
+  return (
+    <g data-part="pdfFile" style={{ opacity: 0 }}>
+      <path
+        d={`M${x + 3} ${y} H${x + w - 8} L${x + w} ${y + 8} V${y + h - 3} Q${x + w} ${y + h} ${x + w - 3} ${y + h} H${x + 3} Q${x} ${y + h} ${x} ${y + h - 3} V${y + 3} Q${x} ${y} ${x + 3} ${y} Z`}
+        fill={C.cream}
+        stroke={C.ink}
+        strokeWidth="2.6"
+        strokeLinejoin="round"
+      />
+      <path d={`M${x + w - 8} ${y} V${y + 8} H${x + w}`} fill="#EADFD0" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" />
+      <path d={`M${mid} ${y + 8} V${y + 21} M${mid - 6} ${y + 15.5} L${mid} ${y + 21.5} L${mid + 6} ${y + 15.5}`} fill="none" stroke={C.ink} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x={x} y={y + h - 14} width={w} height="12" fill={C.coral} stroke={C.ink} strokeWidth="2.2" />
+      <text x={mid} y={y + h - 4.8} textAnchor="middle" fontSize="8.5" fontWeight="800" fill={C.cream} fontFamily="system-ui, sans-serif">
+        PDF
+      </text>
+    </g>
+  );
+}
+
+/** A gold coin gripped in the big pincer. Its face flips over; the whole coin can be tossed. */
+function Coin() {
+  const { x, y, radius: r } = COIN;
+  return (
+    <g data-part="coin" style={{ opacity: 0 }}>
+      <g data-part="coinFace">
+        <circle cx={x} cy={y} r={r} fill={C.blush} stroke={C.ink} strokeWidth="2.6" />
+        <circle cx={x} cy={y} r={r - 4} fill="none" stroke={C.coralShade} strokeWidth="1.4" opacity="0.6" />
+        <text x={x} y={y + 4.5} textAnchor="middle" fontSize="13" fontWeight="800" fill={C.coralShade} fontFamily="system-ui, sans-serif">
+          $
+        </text>
+        <path d={`M${x - 6} ${y - 6} Q${x - 3} ${y - 9} ${x + 1} ${y - 9}`} fill="none" stroke="#FFFFFF" strokeWidth="1.8" strokeLinecap="round" opacity="0.8" />
+      </g>
+    </g>
+  );
+}
+
+/** The Pro crown: gold points tipped with coral, a jewel in front. Sits on top of her body. */
+function Crown() {
+  const { width: w, height: h, tilt } = CROWN;
+  // Drawn around its own bottom-centre (0, 0), then set on top of the eye, tilted.
+  const x = 0;
+  const y = 0;
+  const left = x - w / 2;
+  const right = x + w / 2;
+  const top = y - h;
+  const tips = [
+    { x: left, y: top + 7 },
+    { x, y: top },
+    { x: right, y: top + 7 },
+  ];
+  return (
+    <g transform={`translate(${CROWN_BASE.x} ${CROWN_BASE.y}) rotate(${tilt})`}>
+    <g data-part="crown" style={{ opacity: 0 }}>
+      <path
+        d={`M${left} ${y} V${top + 7} L${left + w * 0.27} ${top + 15} L${x} ${top} L${right - w * 0.27} ${top + 15} L${right} ${top + 7} V${y} Z`}
+        fill={C.blush}
+        stroke={C.ink}
+        strokeWidth="3"
+        strokeLinejoin="round"
+      />
+      <path d={`M${left + 2} ${y - 6} H${right - 2}`} stroke={C.coralShade} strokeWidth="2" opacity="0.55" />
+      {tips.map((tip) => (
+        <circle key={tip.x} cx={tip.x} cy={tip.y} r="3" fill={C.coral} stroke={C.ink} strokeWidth="1.8" />
+      ))}
+      <circle cx={x} cy={y - 11} r="3.6" fill={C.coral} stroke={C.ink} strokeWidth="1.8" />
+    </g>
+    </g>
+  );
+}
+
 /** A tool gripped in the big pincer like the pencil: drawn along +x from the grip, its working end at PENCIL_TIP. */
 function HeldTool({ part, children }: { part: string; children: React.ReactNode }) {
   const rad = (PENCIL.angle * Math.PI) / 180;
@@ -149,6 +233,23 @@ function Stamp() {
       <circle cx="2" cy="0" r="7" fill={C.coral} stroke={C.ink} strokeWidth="2.5" />
       <rect x={L - 19} y="-9" width="12" height="18" rx="2.5" fill={C.coral} stroke={C.ink} strokeWidth="2.5" />
       <rect x={L - 7} y="-10" width="7" height="20" rx="1.5" fill={C.ink} />
+    </HeldTool>
+  );
+}
+
+/**
+ * A magnifying glass: a handle from the grip, and the lens — a ring with a
+ * glint — at the working end, where the pencil's point would be.
+ */
+function Magnifier() {
+  const L = PENCIL.length;
+  const r = 15;
+  return (
+    <HeldTool part="magnifier">
+      <rect x="-6" y="-3.5" width={L - 2 * r + 6} height="7" rx="3" fill={C.coralShade} stroke={C.ink} strokeWidth="2.4" />
+      <circle cx={L - r} cy="0" r={r} fill="#FFFFFF" fillOpacity="0.35" stroke={C.ink} strokeWidth="3" />
+      <circle cx={L - r} cy="0" r={r - 3} fill="none" stroke={C.blush} strokeWidth="2" />
+      <path d={`M${L - r - 5} -4 Q${L - r - 2} -7 ${L - r + 2} -6.5`} fill="none" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" />
     </HeldTool>
   );
 }
@@ -259,6 +360,11 @@ function ReadPaper({ idPrefix }: { idPrefix: string }) {
           <stop offset="1" stopColor="#FCF7F0" />
         </linearGradient>
       </defs>
+      {/* A folder (saved-to-a-profile moment): its back, with a tab, behind the sheet… */}
+      <g data-part="folderBack" style={{ opacity: 0 }}>
+        <path d={paperQuad(-0.12, 0.42, 0.04, 0.16)} fill="#E7B458" stroke={C.ink} strokeWidth="2.4" strokeLinejoin="round" />
+        <path d={paperQuad(-0.12, 1.12, 0.12, 1.1)} fill="#E7B458" stroke={C.ink} strokeWidth="2.6" strokeLinejoin="round" />
+      </g>
       <g data-part="paperSheet">
         {/* Page two, peeking out behind. */}
         <path d={sheet(6, 4.5)} fill="#E8DCCB" stroke={C.ink} strokeWidth="2.4" strokeLinejoin="round" />
@@ -356,8 +462,19 @@ function ReadPaper({ idPrefix }: { idPrefix: string }) {
           </g>
         </g>
       </g>
+      {/* …and its front, over the sheet's lower part — the sheet slides down behind it. */}
+      <g data-part="folderFront" style={{ opacity: 0 }}>
+        <path d={paperQuad(-0.12, 1.12, 0.5, 1.1)} fill="#F6CF7E" stroke={C.ink} strokeWidth="2.6" strokeLinejoin="round" />
+        <path d={paperQuad(0.3, 0.7, 0.62, 0.7)} fill="#FFFFFF" fillOpacity="0.6" stroke={C.ink} strokeWidth="1.4" strokeOpacity="0.5" />
+      </g>
     </g>
   );
+}
+
+/** A quad on the held sheet's surface, from across u0–u1 and down v0–v1 (it slopes with the sheet). */
+function paperQuad(u0: number, u1: number, v0: number, v1: number) {
+  const corners = [paperPoint(u0, v0), paperPoint(u1, v0), paperPoint(u1, v1), paperPoint(u0, v1)];
+  return `M${corners.map((c) => `${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" L")} Z`;
 }
 
 export interface MoxieArtProps {
@@ -521,12 +638,17 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
           style={{ opacity: 0 }}
         />
 
+        {/* The Pro crown on her shell: over the stalk beside it, under the big claw. */}
+        <Crown />
+
         {/* In front of the stalks (it is the nearer layer), so a claw reaching across her
             body passes over them — and over her face. */}
         <g data-part="bigClaw">
           <path d="M240 312 Q 222 300 212 288" fill="none" stroke={C.ink} strokeWidth="24" strokeLinecap="round" />
           <path d="M240 312 Q 222 300 212 288" fill="none" stroke={C.coral} strokeWidth="15" strokeLinecap="round" />
           <g data-part="bigPincer">
+            <PdfFile />
+            <Coin />
             <path
               d="M215 297 C165 302 143 257 158 214 C163 198 180 198 184 214 L194 246 L200 213 C205 192 232 196 234 224 C238 266 232 292 215 297 Z"
               fill={C.coral}
@@ -538,6 +660,7 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
             <Pencil />
             <Stamp />
             <Scissors />
+            <Magnifier />
           </g>
         </g>
 
@@ -549,6 +672,13 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
 
       {/* Effects — positioned by a static outer group, animated on the inner one. */}
       <g aria-hidden="true">
+        {Array.from({ length: CONFETTI_COUNT }, (_, i) => (
+          <g key={`confetti-${i}`} transform={`translate(${CONFETTI_ORIGIN.x} ${CONFETTI_ORIGIN.y})`}>
+            <g data-part="confetti" style={{ opacity: 0 }}>
+              <rect x="-4" y="-2" width="8" height="4" rx="1.2" fill={CONFETTI_COLORS[i % CONFETTI_COLORS.length]} stroke={C.ink} strokeWidth="1" />
+            </g>
+          </g>
+        ))}
         {SPARKLE_BURST.map((s, i) => (
           <g key={`sparkle-${i}`} transform={`translate(${SPARKLE_ORIGIN.x} ${SPARKLE_ORIGIN.y})`}>
             <g data-part="sparkle" style={{ opacity: 0 }}>

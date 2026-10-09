@@ -95,7 +95,7 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
     setIsDownloading(true);
     try {
       await downloadDraftPdf(draft);
-      toast.success("Your PDF is ready", { description: draft.title });
+      toast.success("Your PDF is ready", { description: `Saved as ${getCvFileName(draft.fullName, draft.title)}`, moxie: "downloaded", placement: "top" });
     } catch (err) {
       toast.error(`Couldn't download "${draft.title}"`, { description: downloadErrorMessage(err) });
     } finally {

@@ -13,6 +13,7 @@ import {
 import { useInvalidateProfiles } from "@/hooks/use-profiles";
 import { useUpdateProfile as useUpdateAccount } from "@/hooks/use-auth";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
+import { MoxieMoment } from "@/components/moxie";
 import { describeChangeCounts, isEmptyChange, sectionLabel } from "@/components/dashboard/career-profiles/profile-sections";
 
 // The last step of making a CV: offer to keep the matching career profile up
@@ -112,6 +113,8 @@ export function ProfileSyncStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
+  // The profile it was just saved to — Moxie files it away, then on to the editor.
+  const [savedTo, setSavedTo] = useState<string | null>(null);
 
   const data = suggestion.data?.found;
   const applied = suggestion.data?.autoApplied ?? null;
@@ -131,7 +134,7 @@ export function ProfileSyncStep({
       const result = await syncCvIntoProfile({ cvDocumentId, factsOnly, ...input });
       invalidateProfiles(result.profile.id);
       if (alwaysUpdate) updateAccount.mutate({ profileAutoSync: "always" });
-      onFinish();
+      setSavedTo(result.profile.title);
     } catch (err) {
       if (onProRequired(err)) return;
       if (err instanceof ApiError && err.code === "PROFILE_ROLE_EXISTS" && typeof err.details.existingProfileId === "string") {
@@ -181,6 +184,11 @@ export function ProfileSyncStep({
       )}
     </>
   );
+
+  // ---- just saved: Moxie files it away (profiles are Pro, so she wears her crown), then on to the editor
+  if (savedTo !== null) {
+    return <MoxieMoment animation="saved" message={`Saved to your ${savedTo} profile`} crowned durationMs={2400} onDone={onFinish} />;
+  }
 
   // ---- a CV written from a profile, with nothing new to give back
   if (sourceProfile && !hasNewDetails) {

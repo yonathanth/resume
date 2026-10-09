@@ -58,7 +58,7 @@ export function DashboardTopBar({ title, onStartTour, mobileNavItems, activeHref
           aria-label="Moxie — click to say hi"
           className="md:hidden shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
         >
-          <Moxie ref={moxieRef} animation="welcome" decorative size={40} />
+          <Moxie ref={moxieRef} animation="welcome" decorative size={40} crowned={isPro} />
         </button>
         <h1 className="text-lg font-semibold tracking-tight text-neutral-950 truncate">{title}</h1>
       </div>
