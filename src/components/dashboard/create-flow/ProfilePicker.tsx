@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, Loader2, UserCheck } from "lucide-react";
+import { ArrowRight, Loader2, User } from "lucide-react";
 import type { ApiCareerProfile } from "@/lib/api";
 import { SOFT_TONES } from "./OptionCard";
 import { DashboardMoxie } from "../DashboardMoxie";
@@ -51,7 +51,6 @@ export function ProfilePicker({
       <div className="rounded-xl border border-dashed border-neutral-300 px-6 py-8 text-center">
         <DashboardMoxie animation="emptyFolder" size={96} className="mx-auto mb-1" />
         <p className="text-sm font-semibold text-neutral-900">No career profiles yet</p>
-        <p className="mt-1 text-sm text-neutral-500">Create one for a role you&apos;re going for, then come back here.</p>
         <Link
           href="/dashboard/career-profiles"
           onClick={onManageProfiles}
@@ -78,7 +77,7 @@ export function ProfilePicker({
             className="group flex w-full cursor-pointer items-center gap-3 rounded-xl border border-neutral-200 bg-white p-3.5 text-left transition-colors hover:border-accent-border disabled:cursor-not-allowed disabled:hover:border-neutral-200"
           >
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${SOFT_TONES.lavender} ${usable ? "" : "opacity-50"}`}>
-              <UserCheck className="h-4 w-4" />
+              <User className="h-4 w-4" />
             </span>
             <span className="min-w-0 flex-1">
               <span className={`block truncate text-sm font-semibold ${usable ? "text-neutral-900" : "text-neutral-400"}`}>{profile.title}</span>

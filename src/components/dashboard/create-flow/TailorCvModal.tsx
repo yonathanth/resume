@@ -4,7 +4,7 @@ import React, { useRef, useState } from "react";
 import {
   FolderOpen,
   FilePlus,
-  UserCheck,
+  User,
   FileText,
   Upload,
   ArrowRight,
@@ -493,7 +493,7 @@ export function TailorCvModal({
                 onClick={() => setStep("existing-cv-choice")}
               />
               <OptionCard
-                icon={UserCheck}
+                icon={User}
                 tone="violet"
                 title="Start from a career profile"
                 description={

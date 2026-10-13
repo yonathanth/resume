@@ -2,7 +2,7 @@
 
 import React, { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck } from "lucide-react";
+import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound } from "lucide-react";
 import {
   useSubscriptionStatus,
   useStartProCheckout,
@@ -860,7 +860,7 @@ export function SettingsView() {
           {active === "career-profiles" && (
             <Section
               id="career-profiles"
-              icon={UserCheck}
+              icon={User}
               tone="emerald"
               title="Career profiles"
               description="How new CVs keep your role profiles up to date."

@@ -4,7 +4,7 @@ import React, { useRef } from "react";
 import Link from "next/link";
 import {
   LayoutDashboard,
-  UserCheck,
+  User,
   FolderKanban,
   ChevronsLeft,
   ChevronsRight,
@@ -45,7 +45,7 @@ type NavItem = {
 
 const TOP_NAV_ITEMS: NavItem[] = [
   { id: "builder", label: "The Builder", href: "/dashboard", icon: LayoutDashboard },
-  { id: "career-profiles", label: "Career Profiles", href: "/dashboard/career-profiles", icon: UserCheck, proOnly: true },
+  { id: "career-profiles", label: "Career Profiles", href: "/dashboard/career-profiles", icon: User, proOnly: true },
   { id: "past-projects", label: "Past Projects", href: "/dashboard/past-projects", icon: FolderKanban },
   { id: "templates", label: "Templates", href: "/dashboard/templates", icon: LayoutTemplate },
 ];

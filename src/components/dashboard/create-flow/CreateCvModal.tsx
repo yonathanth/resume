@@ -8,7 +8,7 @@ import {
   ArrowRight,
   X,
   FileCheck,
-  UserCheck,
+  User,
   Lightbulb,
   Check,
   Target,
@@ -604,7 +604,7 @@ export function CreateCvModal({
                 }}
               />
               <OptionCard
-                icon={UserCheck}
+                icon={User}
                 tone="violet"
                 title="Start from career profile"
                 description={
@@ -1163,7 +1163,7 @@ export function CreateCvModal({
                 onClick={() => handleFinish()}
                 className="w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all cursor-pointer shadow-md"
               >
-                Open Editor
+                Continue
               </button>
             </div>
           ))}

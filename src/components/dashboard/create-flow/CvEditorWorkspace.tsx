@@ -593,8 +593,11 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState<boolean>(false);
   const formScrollRef = useRef<HTMLDivElement>(null);
 
+  // The switcher offers only the listed templates; the CV's own template is looked up among all of them, so one
+  // using a hidden (photo) template still renders as it was made.
   const { data: templates } = useCvTemplates();
-  const currentTemplate = templates?.find((t) => t.id === cv.templateStyle) ?? templates?.find((t) => t.isDefault);
+  const { data: allTemplates } = useCvTemplates({ includeHidden: true });
+  const currentTemplate = allTemplates?.find((t) => t.id === cv.templateStyle) ?? allTemplates?.find((t) => t.isDefault);
 
   // The editor shows the forms for exactly the sections this template
   // renders. Content in other sections is kept (switching templates never

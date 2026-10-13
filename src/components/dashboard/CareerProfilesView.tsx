@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Crown, FilePlus, Loader2, Plus, UserCheck, X } from "lucide-react";
+import { ArrowRight, User, Crown, FilePlus, Loader2, Plus, Search, X } from "lucide-react";
 import { ApiCareerProfile, ApiError } from "@/lib/api";
 import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
@@ -17,6 +17,14 @@ import { tempId } from "./career-profiles/profile-sections";
 interface CareerProfilesViewProps {
   onCreateCvFromProfile?: (profileId: string) => void;
 }
+
+// Same field and button styles as the other dashboard pages (Past Projects, Templates).
+const FIELD_CLASS =
+  "rounded-lg border border-neutral-300 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 transition";
+const PRIMARY_BUTTON =
+  "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer";
+
+type SortBy = "updated" | "title";
 
 // Each profile gets a soft tile colour so the grid is easy to scan.
 const PROFILE_TONES: OptionTone[] = ["accent", "sky", "violet", "emerald"];
@@ -46,6 +54,14 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
   const [newSkills, setNewSkills] = useState<string[]>([]);
   const [createError, setCreateError] = useState<string | null>(null);
   const [existing, setExisting] = useState<{ id: string; title: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortBy>("updated");
+
+  const hasProfiles = profiles.length > 0;
+  const query = searchQuery.trim().toLowerCase();
+  const shownProfiles = profiles
+    .filter((p) => !query || [p.title, p.headline, p.occupationCategory].some((text) => text?.toLowerCase().includes(query)))
+    .sort((a, b) => (sortBy === "title" ? a.title.localeCompare(b.title) : Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
 
   const openNew = () => {
     if (!isPro) {
@@ -89,22 +105,47 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
 
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
-        <div className="max-w-2xl">
-          <h1 className="text-xl font-bold text-neutral-950 tracking-tight">Career profiles</h1>
-          <p className="mt-1 text-sm text-neutral-500 leading-relaxed">
-            One profile per role you go for. Each holds your experience, skills and education for that role, so every
-            new CV starts from everything you&apos;ve already told us.
-          </p>
+      {/* Toolbar, like Past Projects: search on the left, sorting and the main action on the right. */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-8">
+        <div className="relative flex-1 lg:max-w-md">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by role"
+            aria-label="Search profiles"
+            disabled={!hasProfiles}
+            className={`${FIELD_CLASS} w-full pl-10 pr-9 py-2.5 disabled:bg-neutral-50`}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-md text-neutral-400 hover:text-neutral-800 cursor-pointer"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={openNew}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 transition-colors self-start sm:self-auto cursor-pointer"
-        >
-          {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
-          New profile
-        </button>
+
+        <div className="flex items-center gap-2.5 lg:ml-auto">
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            aria-label="Sort profiles"
+            className={`${FIELD_CLASS} px-3 py-2.5 font-medium text-neutral-800 cursor-pointer`}
+          >
+            <option value="updated">Last updated</option>
+            <option value="title">A–Z</option>
+          </select>
+
+          <button type="button" onClick={openNew} className={`${PRIMARY_BUTTON} ml-auto lg:ml-0`}>
+            {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
+            New profile
+          </button>
+        </div>
       </div>
 
       {!isPro && profiles.length > 0 && (
@@ -116,17 +157,37 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
         </div>
       )}
 
+      {/* Section header, like Past Projects' "All resumes". */}
+      {!isLoading && hasProfiles && (
+        <div className="flex items-center gap-2 mb-5">
+          <h2 className="text-sm font-semibold text-neutral-600">{query ? "Search results" : "All profiles"}</h2>
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500">{shownProfiles.length}</span>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center py-24 text-neutral-400">
           <Loader2 className="w-5 h-5 animate-spin" />
         </div>
-      ) : profiles.length === 0 ? (
+      ) : hasProfiles && shownProfiles.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 px-6 py-16 text-center">
+          <DashboardMoxie animation="searching" size={120} className="mx-auto -mt-4 mb-2" />
+          <h2 className="text-base font-bold text-neutral-950">No matching profiles</h2>
+          <button
+            type="button"
+            onClick={() => setSearchQuery("")}
+            className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-800 hover:border-neutral-400 cursor-pointer"
+          >
+            Clear search
+          </button>
+        </div>
+      ) : !hasProfiles ? (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 px-6 py-16 text-center">
           <DashboardMoxie animation="emptyFolder" size={120} className="mx-auto -mt-4 mb-2" />
           <h2 className="text-base font-bold text-neutral-950">No profiles yet</h2>
           <p className="mt-1 text-sm text-neutral-500 max-w-md mx-auto leading-relaxed">
             {isPro
-              ? "Create one for a role you're targeting, or save the next CV you make to a profile."
+              ? "One profile per role you go for."
               : "Career profiles are part of FitCV Pro. Keep everything for a role in one place and build tailored CVs from it."}
           </p>
           <button
@@ -140,7 +201,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {profiles.map((profile, idx) => {
+          {shownProfiles.map((profile, idx) => {
             const tone = PROFILE_TONES[idx % PROFILE_TONES.length];
             const facts = profileFacts(profile);
             return (
@@ -155,7 +216,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
                 />
                 <div className="flex items-start gap-3.5">
                   <span className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES[tone]}`}>
-                    <UserCheck className="w-[18px] h-[18px]" />
+                    <User className="w-[18px] h-[18px]" />
                   </span>
                   <div className="min-w-0 flex-1">
                     <h3 className="text-base font-bold text-neutral-950 tracking-tight truncate">{profile.title}</h3>
@@ -187,7 +248,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
             );
           })}
 
-          {isPro && (
+          {isPro && !query && (
             <button
               type="button"
               onClick={openNew}

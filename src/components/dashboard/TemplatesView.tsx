@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Eye, LayoutTemplate, RotateCw, Search, X } from "lucide-react";
-import { groupTemplatesByCategory, useCvTemplates } from "@/hooks/use-cv-templates";
+import { groupTemplatesByCategory, SHOW_PHOTO_TEMPLATES, useCvTemplates } from "@/hooks/use-cv-templates";
 import { ApiCvTemplate } from "@/lib/api";
 import { TemplateThumbnail } from "./create-flow/TemplateThumbnail";
 import { ICON_TONES } from "./create-flow/OptionCard";
@@ -139,16 +139,19 @@ export function TemplatesView({ onUseTemplate }: TemplatesViewProps) {
             </button>
           )}
         </div>
-        <select
-          value={photo}
-          onChange={(e) => setPhoto(e.target.value as PhotoFilter)}
-          aria-label="Photo"
-          className={`${FIELD_CLASS} px-3 py-2.5 font-medium text-neutral-800 cursor-pointer lg:ml-auto self-start lg:self-auto`}
-        >
-          <option value="any">Photo: any</option>
-          <option value="with">With a photo</option>
-          <option value="without">Without a photo</option>
-        </select>
+        {/* Only offered while photo templates are listed (they're hidden for now). */}
+        {SHOW_PHOTO_TEMPLATES && (
+          <select
+            value={photo}
+            onChange={(e) => setPhoto(e.target.value as PhotoFilter)}
+            aria-label="Photo"
+            className={`${FIELD_CLASS} px-3 py-2.5 font-medium text-neutral-800 cursor-pointer lg:ml-auto self-start lg:self-auto`}
+          >
+            <option value="any">Photo: any</option>
+            <option value="with">With a photo</option>
+            <option value="without">Without a photo</option>
+          </select>
+        )}
       </div>
 
       {/* Category chips */}
