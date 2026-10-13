@@ -72,9 +72,12 @@ import {
 import { usePolishSummary } from "@/hooks/use-cv-generation";
 import { useCvPreview } from "@/hooks/use-cv-preview";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { bulletToText, flattenSkillGroups, newLocalId, toCVContentPatch } from "@/lib/cv-mapper";
 import { getMissingDetails, type MissingDetail } from "@/lib/missing-details";
 import { resolvePreviewPath, type EditorTarget } from "@/lib/preview-paths";
+import { getCvFileName } from "@/lib/utils";
+import { MoxieLoader } from "@/components/moxie";
 import { useToast } from "@/components/Toaster";
 import { CvPreviewFrame } from "./CvPreviewFrame";
 import { TemplateThumbnail } from "./TemplateThumbnail";
@@ -570,6 +573,7 @@ function TemplateGalleryCard({
 
 export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorkspaceProps) {
   const toast = useToast();
+  const isPro = useSubscriptionStatus().data?.isPro ?? false;
   const [cv, setCv] = useState<CvData>(initialData);
   const [isSaving, setIsSaving] = useState(false);
   const [showExportChecklist, setShowExportChecklist] = useState(false);
@@ -589,8 +593,11 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState<boolean>(false);
   const formScrollRef = useRef<HTMLDivElement>(null);
 
+  // The switcher offers only the listed templates; the CV's own template is looked up among all of them, so one
+  // using a hidden (photo) template still renders as it was made.
   const { data: templates } = useCvTemplates();
-  const currentTemplate = templates?.find((t) => t.id === cv.templateStyle) ?? templates?.find((t) => t.isDefault);
+  const { data: allTemplates } = useCvTemplates({ includeHidden: true });
+  const currentTemplate = allTemplates?.find((t) => t.id === cv.templateStyle) ?? allTemplates?.find((t) => t.isDefault);
 
   // The editor shows the forms for exactly the sections this template
   // renders. Content in other sections is kept (switching templates never
@@ -892,7 +899,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       await finalizeCvDocument(id);
       const blob = await downloadCvPdf(id);
 
-      const fileName = `${cv.title || "resume"}.pdf`;
+      const fileName = getCvFileName(cv.personalInfo.fullName, cv.title);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -902,7 +909,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       link.remove();
       URL.revokeObjectURL(url);
 
-      toast.success("Your PDF is ready", { description: `Saved as ${fileName}` });
+      toast.success("Your PDF is ready", { description: `Saved as ${fileName}`, moxie: "downloaded", placement: "top" });
     } catch (err) {
       // One message at a time — retrying replaces it instead of stacking another.
       toast.error("Couldn't create the PDF", {
@@ -2129,7 +2136,15 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       )}
 
       {/* ================= PDF PREVIEW ================= */}
-      {pdfPreview && (
+      {/* While it's being made, Moxie stamps it on her own over the screen; the preview opens once it's ready. */}
+      {pdfPreview?.status === "loading" && (
+        <MoxieLoader
+          animation="stamp"
+          crowned={isPro}
+          messages={["Creating your PDF…", "Laying out your pages…", "Setting the type…", "Getting it print-ready…"]}
+        />
+      )}
+      {pdfPreview?.status === "ready" && (
         <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex p-3 sm:p-8" role="dialog" aria-modal="true" aria-label="PDF preview">
           <div className="bg-white rounded-lg w-full max-w-5xl mx-auto flex flex-col overflow-hidden shadow-2xl border border-neutral-300">
             <div className="px-4 sm:px-6 py-4 border-b border-neutral-200 flex items-center justify-between gap-3">
@@ -2140,12 +2155,10 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
                 <h2 className="text-base font-bold text-neutral-950 tracking-tight truncate">PDF preview</h2>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {pdfPreview.status === "ready" && (
-                  <a href={pdfPreview.url} target="_blank" rel="noreferrer" className={secondaryButtonClass} title="Open in a new tab">
-                    <ExternalLink className="w-4 h-4" />
-                    <span className="hidden sm:inline">Open</span>
-                  </a>
-                )}
+                <a href={pdfPreview.url} target="_blank" rel="noreferrer" className={secondaryButtonClass} title="Open in a new tab">
+                  <ExternalLink className="w-4 h-4" />
+                  <span className="hidden sm:inline">Open</span>
+                </a>
                 <button
                   type="button"
                   disabled={isDownloading}
@@ -2169,14 +2182,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
               </div>
             </div>
             <div className="flex-1 min-h-0 bg-neutral-100">
-              {pdfPreview.status === "loading" ? (
-                <div className="h-full flex flex-col items-center justify-center gap-3 text-neutral-500">
-                  <Loader2 className="w-6 h-6 animate-spin text-accent" />
-                  <span className="text-sm font-medium">Creating your PDF…</span>
-                </div>
-              ) : (
-                <iframe src={pdfPreview.url} title="PDF preview" className="w-full h-full border-0" />
-              )}
+              <iframe src={pdfPreview.url} title="PDF preview" className="w-full h-full border-0" />
             </div>
           </div>
         </div>

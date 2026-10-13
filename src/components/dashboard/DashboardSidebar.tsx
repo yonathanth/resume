@@ -4,7 +4,7 @@ import React, { useRef } from "react";
 import Link from "next/link";
 import {
   LayoutDashboard,
-  UserCheck,
+  User,
   FolderKanban,
   ChevronsLeft,
   ChevronsRight,
@@ -46,7 +46,7 @@ type NavItem = {
 
 const TOP_NAV_ITEMS: NavItem[] = [
   { id: "builder", label: "The Builder", href: "/dashboard", icon: LayoutDashboard },
-  { id: "career-profiles", label: "Career Profiles", href: "/dashboard/career-profiles", icon: UserCheck, proOnly: true },
+  { id: "career-profiles", label: "Career Profiles", href: "/dashboard/career-profiles", icon: User, proOnly: true },
   { id: "past-projects", label: "Past Projects", href: "/dashboard/past-projects", icon: FolderKanban },
   { id: "templates", label: "Templates", href: "/dashboard/templates", icon: LayoutTemplate },
 ];
@@ -106,7 +106,7 @@ function SidebarLink({
 // Moxie is the sidebar's brand mark. The sidebar lives in the dashboard
 // layout, so she greets once when the dashboard opens (not on every page
 // change), then idles; clicking her gets another wave.
-function SidebarMoxie() {
+function SidebarMoxie({ crowned }: { crowned: boolean }) {
   const moxieRef = useRef<MoxieHandle>(null);
   return (
     <button
@@ -116,7 +116,7 @@ function SidebarMoxie() {
       aria-label="Moxie — click to say hi"
       className="shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
     >
-      <Moxie ref={moxieRef} animation="welcome" decorative size={48} />
+      <Moxie ref={moxieRef} animation="welcome" decorative size={48} crowned={crowned} />
     </button>
   );
 }
@@ -141,7 +141,7 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
       {/* Brand + collapse */}
       <div className={`h-16 shrink-0 border-b border-neutral-200 flex items-center px-4 ${isExpanded ? "justify-between" : "justify-center"}`}>
         <div className="flex items-center gap-2 min-w-0">
-          <SidebarMoxie />
+          <SidebarMoxie crowned={isPro} />
           {isExpanded && (
             <span className="flex items-center gap-2 min-w-0">
               <span className="text-[15px] font-bold tracking-tight text-neutral-950 truncate">Resumate</span>

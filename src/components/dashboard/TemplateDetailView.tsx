@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, LayoutTemplate } from "lucide-react";
-import { useCvTemplates } from "@/hooks/use-cv-templates";
+import { SHOW_PHOTO_TEMPLATES, useCvTemplates } from "@/hooks/use-cv-templates";
 import { getCvTemplateSample } from "@/lib/api";
 import { CvPreviewFrame } from "./create-flow/CvPreviewFrame";
 import { ICON_TONES } from "./create-flow/OptionCard";
@@ -87,9 +87,9 @@ export function TemplateDetailView({ templateId, onUseTemplate }: TemplateDetail
   const related = (templates ?? []).filter((t) => t.category === template.category && t.id !== template.id).slice(0, RELATED_COUNT);
   const facts = [
     template.twoColumn ? "Two-column layout" : "Single-column layout",
-    template.hasPhoto ? "Has a photo" : "No photo",
+    SHOW_PHOTO_TEMPLATES && (template.hasPhoto ? "Has a photo" : "No photo"),
     `${template.sections.length} sections`,
-  ];
+  ].filter((fact): fact is string => Boolean(fact));
 
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pb-16 max-w-7xl mx-auto w-full">

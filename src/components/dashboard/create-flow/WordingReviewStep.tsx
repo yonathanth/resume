@@ -121,7 +121,7 @@ export function WordingReviewStep({ cvDocumentId, preview, children, onFinish, o
           onClick={save}
           className="w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {busy ? "Saving..." : `Save ${selected.size} to profile & open editor`}
+          {busy ? "Saving..." : `Save ${selected.size} to profile and Continue`}
         </button>
         <button
           type="button"

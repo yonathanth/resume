@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { FilePlus, LayoutTemplate, UserCheck, CreditCard, Search, Mail, ArrowRight } from "lucide-react";
+import { FilePlus, LayoutTemplate, User, CreditCard, Search, Mail, ArrowRight } from "lucide-react";
 import { useDashboard } from "./DashboardContext";
 import { useMe } from "@/hooks/use-auth";
 import { SOFT_TONES, SoftTone } from "./create-flow/OptionCard";
@@ -28,7 +28,7 @@ export function HelpView() {
   }[] = [
     { title: "New Resume", description: "Start a new resume in a few minutes.", icon: FilePlus, tone: "peach", onClick: handleNewResume },
     { title: "Browse templates", description: "Preview every layout.", icon: LayoutTemplate, tone: "sage", href: "/dashboard/templates" },
-    { title: "Career profiles", description: "Your experience and skills, one profile per role.", icon: UserCheck, tone: "lavender", href: "/dashboard/career-profiles" },
+    { title: "Career profiles", description: "Your experience and skills, one profile per role.", icon: User, tone: "lavender", href: "/dashboard/career-profiles" },
     { title: "Plan & billing", description: "Upgrade, renew or cancel.", icon: CreditCard, tone: "blue", href: "/dashboard/settings#plan" },
   ];
 

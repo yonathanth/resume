@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookmarkPlus, Check, ChevronDown, Loader2, RotateCcw, UserCheck } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, Loader2, RotateCcw, User } from "lucide-react";
 import {
   ApiError,
   ProfileChangeSummary,
@@ -13,6 +13,7 @@ import {
 import { useInvalidateProfiles } from "@/hooks/use-profiles";
 import { useUpdateProfile as useUpdateAccount } from "@/hooks/use-auth";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
+import { MoxieMoment } from "@/components/moxie";
 import { describeChangeCounts, isEmptyChange, sectionLabel } from "@/components/dashboard/career-profiles/profile-sections";
 
 // The last step of making a CV: offer to keep the matching career profile up
@@ -112,6 +113,8 @@ export function ProfileSyncStep({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
+  // The profile it was just saved to — Moxie files it away, then on to the editor.
+  const [savedTo, setSavedTo] = useState<string | null>(null);
 
   const data = suggestion.data?.found;
   const applied = suggestion.data?.autoApplied ?? null;
@@ -131,7 +134,7 @@ export function ProfileSyncStep({
       const result = await syncCvIntoProfile({ cvDocumentId, factsOnly, ...input });
       invalidateProfiles(result.profile.id);
       if (alwaysUpdate) updateAccount.mutate({ profileAutoSync: "always" });
-      onFinish();
+      setSavedTo(result.profile.title);
     } catch (err) {
       if (onProRequired(err)) return;
       if (err instanceof ApiError && err.code === "PROFILE_ROLE_EXISTS" && typeof err.details.existingProfileId === "string") {
@@ -161,7 +164,7 @@ export function ProfileSyncStep({
   const header = (title: string, body?: React.ReactNode) => (
     <div className="text-center mb-5">
       <span className="w-11 h-11 rounded-xl mx-auto mb-3 flex items-center justify-center bg-gradient-to-b from-violet-500 to-violet-600 border border-violet-600 text-white">
-        <UserCheck className="w-5 h-5" />
+        <User className="w-5 h-5" />
       </span>
       <h2 className="text-xl font-bold tracking-tight text-neutral-950">{title}</h2>
       {body && <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">{body}</p>}
@@ -182,6 +185,11 @@ export function ProfileSyncStep({
     </>
   );
 
+  // ---- just saved: Moxie files it away (profiles are Pro, so she wears her crown), then on to the editor
+  if (savedTo !== null) {
+    return <MoxieMoment animation="saved" message={`Saved to your ${savedTo} profile`} crowned durationMs={2400} onDone={onFinish} />;
+  }
+
   // ---- a CV written from a profile, with nothing new to give back
   if (sourceProfile && !hasNewDetails) {
     return (
@@ -189,7 +197,7 @@ export function ProfileSyncStep({
         {header("Your CV is ready")}
         {children}
         <button type="button" onClick={onFinish} className={BUTTON_PRIMARY}>
-          Open editor
+          Continue
         </button>
       </div>
     );
@@ -215,7 +223,7 @@ export function ProfileSyncStep({
         {footer}
         <div className="space-y-2">
           <button type="button" disabled={busy} onClick={onFinish} className={BUTTON_PRIMARY}>
-            <Check className="w-4 h-4" /> Open editor
+            <Check className="w-4 h-4" /> Continue
           </button>
           {applied.changeId && (
             <button type="button" disabled={busy} onClick={undo} className={`${BUTTON_SECONDARY} flex items-center justify-center gap-1.5`}>
@@ -236,7 +244,7 @@ export function ProfileSyncStep({
         {children}
         <p className="text-xs text-neutral-500 text-center mb-3">We couldn&apos;t check your career profiles right now.</p>
         <button type="button" onClick={onFinish} className={BUTTON_PRIMARY}>
-          Open editor
+          Continue
         </button>
       </div>
     );
@@ -252,7 +260,7 @@ export function ProfileSyncStep({
           Profile updates are off, so your {data.match.title} profile wasn&apos;t changed. You can turn them on in Account Settings.
         </p>
         <button type="button" onClick={onFinish} className={BUTTON_PRIMARY}>
-          Open editor
+          Continue
         </button>
       </div>
     );
@@ -268,11 +276,9 @@ export function ProfileSyncStep({
           nothingNew ? "Your CV is ready" : `Update your ${target.title} profile?`,
           nothingNew
             ? `Your ${target.title} profile already has everything in this CV.`
-            : sourceProfile
-              ? "Add the new details you gave us to the profile, so your next CV has them too."
-              : counts
-                ? `This CV adds ${counts}.`
-                : undefined
+            : counts && !sourceProfile
+              ? `This CV adds ${counts}.`
+              : undefined
         )}
 
         {target.preview && !nothingNew && (
@@ -284,11 +290,6 @@ export function ProfileSyncStep({
             {showDetails && <SummaryDetails summary={target.preview} />}
           </div>
         )}
-        {tailored && !nothingNew && (
-          <p className="text-xs text-neutral-500 mb-4 leading-relaxed">
-            This CV was tailored to a job, so only its facts (roles, dates, skills, education) are saved, not the job-specific wording.
-          </p>
-        )}
 
         {children}
         {footer}
@@ -296,13 +297,13 @@ export function ProfileSyncStep({
         <div className="space-y-2">
           {nothingNew ? (
             <button type="button" disabled={busy} onClick={() => apply({ profileId: target.profileId })} className={BUTTON_PRIMARY}>
-              {busy ? "Opening..." : "Open editor"}
+              {busy ? "Opening..." : "Continue"}
             </button>
           ) : (
             <>
               <button type="button" disabled={busy} onClick={() => apply({ profileId: target.profileId })} className={BUTTON_PRIMARY}>
                 <BookmarkPlus className="w-4 h-4" />
-                {busy ? "Saving..." : "Update profile & open editor"}
+                {busy ? "Saving..." : "Update profile and Continue"}
               </button>
               <button type="button" disabled={busy} onClick={onFinish} className={BUTTON_SECONDARY}>
                 Not now
@@ -322,21 +323,14 @@ export function ProfileSyncStep({
 
   // ---- no matching profile: offer a new one (always asks)
   const related = data?.related ?? [];
-  const newCounts = data ? describeChangeCounts(data.newProfilePreview) : "";
   return (
     <div>
-      {header("Save this as a career profile?", "A profile keeps your experience and skills for one role, so your next CV for it starts from everything you've told us.")}
+      {header("Save this as a career profile?", "Your next CV for this role can start from it.")}
 
       <div className="rounded-xl border-2 border-dashed border-neutral-300 p-4 bg-neutral-50/70 mb-4 space-y-2">
         <label className="block text-xs font-bold text-neutral-700">Role</label>
         <ProfessionInput value={newTitle} onChange={setNewTitle} placeholder="e.g. Backend Developer" />
-        {newCounts && <p className="text-xs text-neutral-500">The profile starts with {newCounts.replace(/\+/g, "")}.</p>}
       </div>
-      {tailored && (
-        <p className="text-xs text-neutral-500 mb-4 leading-relaxed">
-          This CV was tailored to a job, so only its facts are saved, not the job-specific wording.
-        </p>
-      )}
 
       {children}
       {footer}
@@ -344,7 +338,7 @@ export function ProfileSyncStep({
       <div className="space-y-2">
         <button type="button" disabled={busy || !newTitle.trim()} onClick={() => apply({ title: newTitle.trim() })} className={BUTTON_PRIMARY}>
           <BookmarkPlus className="w-4 h-4" />
-          {busy ? "Saving..." : "Create profile & open editor"}
+          {busy ? "Saving..." : "Create profile and Continue"}
         </button>
         {related.length > 0 && (
           <div className="rounded-xl border border-neutral-200 p-3">

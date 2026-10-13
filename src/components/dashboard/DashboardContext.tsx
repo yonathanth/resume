@@ -94,6 +94,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     const newDraft: ResumeDraft = {
       id,
       title: savedCv.title,
+      fullName: savedCv.personalInfo.fullName,
       targetRole: savedCv.targetRole,
       targetCompany: "General Application",
       atsScore: savedCv.atsScore,

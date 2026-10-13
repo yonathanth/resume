@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Loader2 } from "lucide-react";
 import { getSubscriptionStatus } from "@/lib/api";
 import { useRefreshSubscriptionStatus } from "@/hooks/use-subscription";
+import { PAYMENT_CONFIRMED_REDIRECT_MS, PaymentReturnView, type PaymentReturnState } from "@/components/PaymentReturnView";
 
 const POLL_INTERVAL_MS = 1500;
 const MAX_POLLS = 6; // ~9s before giving up and sending the user on anyway
@@ -18,7 +18,7 @@ const MAX_POLLS = 6; // ~9s before giving up and sending the user on anyway
 export default function PolarReturnPage() {
   const router = useRouter();
   const refreshStatus = useRefreshSubscriptionStatus();
-  const [state, setState] = useState<"pending" | "confirmed" | "timeout">("pending");
+  const [state, setState] = useState<PaymentReturnState>("pending");
 
   useEffect(() => {
     // No ref-based "already started" guard here — that would break React
@@ -45,7 +45,7 @@ export default function PolarReturnPage() {
             if (cancelled) return;
             setState("confirmed");
             refreshStatus();
-            goToDashboard(1200);
+            goToDashboard(PAYMENT_CONFIRMED_REDIRECT_MS);
             return;
           }
         } catch {
@@ -65,30 +65,5 @@ export default function PolarReturnPage() {
     };
   }, [router, refreshStatus]);
 
-  return (
-    <div className="h-screen w-full flex items-center justify-center bg-[#f5f5f7] px-4">
-      <div className="text-center max-w-sm">
-        {state === "confirmed" ? (
-          <>
-            <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-neutral-900">You&apos;re on FitCV Pro</p>
-            <p className="text-xs text-neutral-500 mt-1">Redirecting to your dashboard...</p>
-          </>
-        ) : state === "timeout" ? (
-          <>
-            <Loader2 className="w-6 h-6 text-neutral-400 mx-auto mb-3 animate-spin" />
-            <p className="text-sm font-semibold text-neutral-900">Still confirming your payment</p>
-            <p className="text-xs text-neutral-500 mt-1">
-              This can take a moment. We&apos;ll update your account as soon as it&apos;s confirmed.
-            </p>
-          </>
-        ) : (
-          <>
-            <Loader2 className="w-6 h-6 text-neutral-400 mx-auto mb-3 animate-spin" />
-            <p className="text-sm text-neutral-500">Confirming your subscription...</p>
-          </>
-        )}
-      </div>
-    </div>
-  );
+  return <PaymentReturnView state={state} />;
 }

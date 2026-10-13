@@ -1,9 +1,89 @@
 "use client";
 
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { ArrowRight, Loader2, X } from "lucide-react";
+import { MoxieLoader, type MoxieLoaderProps } from "@/components/moxie";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { TemplatePicker } from "./TemplatePicker";
 import { TemplateId, templateLabel } from "./types";
+
+/** The long AI waits in the create / tailor / enhance flows. */
+export type AiWait = "read-file" | "read-story" | "read-cv" | "write" | "improve" | "tailor";
+
+/**
+ * What Moxie does in each wait, and what she says while she does it — one
+ * line at a time above her, each a short sentence about the step she's on.
+ */
+const AI_WAITS: Record<AiWait, Omit<MoxieLoaderProps, "done">> = {
+  "read-file": {
+    animation: "read",
+    messages: ["Reading your CV…", "Finding your jobs and dates…", "Picking out your skills…", "Sorting it all into sections…"],
+  },
+  "read-story": {
+    animation: "read",
+    messages: ["Reading your story…", "Picking out your roles…", "Spotting the numbers that matter…", "Sorting it into sections…"],
+  },
+  "read-cv": {
+    animation: "read",
+    messages: ["Getting your resume ready…", "Pulling in your details…", "Lining it up with your template…"],
+  },
+  write: {
+    animation: "write",
+    messages: ["Writing your CV…", "Choosing strong action verbs…", "Turning duties into results…", "Fitting it to your template…"],
+    doneMessage: "Your CV is ready!",
+  },
+  improve: {
+    animation: "polish",
+    messages: ["Improving your CV…", "Tightening every bullet…", "Bringing your results forward…", "Cutting the filler…"],
+    doneMessage: "Your CV is sharper!",
+  },
+  tailor: {
+    animation: "tailor",
+    messages: ["Reading the job post…", "Matching your experience to it…", "Cutting what doesn't fit…", "Keeping it all true to you…"],
+    doneMessage: "Tailored to the job!",
+  },
+};
+
+/**
+ * Moxie at work while the AI runs: on her own over the whole screen (the
+ * flow's card steps aside — see FlowModal), one line of text above her.
+ */
+export function AiWaitLoader({
+  wait,
+  fileName,
+  done = false,
+}: {
+  wait: AiWait;
+  /** The uploaded file, named in the first line while it's read. */
+  fileName?: string | null;
+  /** The work finished — Moxie's ta-da (see useAiDone). */
+  done?: boolean;
+}) {
+  const crowned = useSubscriptionStatus().data?.isPro ?? false;
+  const config = AI_WAITS[wait];
+  const messages =
+    wait === "read-file" && fileName ? [`Reading ${fileName}…`, ...config.messages.slice(1)] : config.messages;
+  return <MoxieLoader {...config} messages={messages} done={done} crowned={crowned} />;
+}
+
+/** Long enough for her celebration jump to land, short enough not to feel like another wait. */
+const AI_DONE_MS = 1200;
+
+/**
+ * Moxie's ta-da when the AI finishes the CV. A flow awaits `celebrate(wait)`
+ * after a successful final AI step and before moving on (or closing); while
+ * it runs, `done` is that wait, so the loader stays up in its done state.
+ * Only call it on success — a failed call should drop straight back to the step.
+ */
+export function useAiDone() {
+  const [done, setDone] = useState<AiWait | null>(null);
+  const celebrate = useCallback(async (wait: AiWait) => {
+    setDone(wait);
+    await new Promise((resolve) => setTimeout(resolve, AI_DONE_MS));
+    setDone(null);
+  }, []);
+  return { done, celebrate };
+}
 
 /**
  * The shared frame for the create / tailor / enhance flows: never taller than
@@ -17,6 +97,7 @@ export function FlowModal({
   onClose,
   children,
   outside,
+  loader,
 }: {
   stepKey: string;
   wide?: boolean;
@@ -25,11 +106,20 @@ export function FlowModal({
   children: React.ReactNode;
   /** Rendered over the frame (nested dialogs), outside the card. */
   outside?: React.ReactNode;
+  /** Shown instead of the step while something long runs (see AiWaitLoader). */
+  loader?: React.ReactNode;
 }) {
+  if (loader) wide = false;
+  const waiting = Boolean(loader);
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200 transition-colors ${
+        waiting ? "bg-transparent" : "bg-neutral-950/60 backdrop-blur-sm"
+      }`}
+    >
       <div
-        className={`relative w-full ${
+        inert={waiting}
+        className={`relative w-full ${waiting ? "invisible" : ""} ${
           wide ? "max-w-xl" : "max-w-lg"
         } max-h-[calc(100dvh-2rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col bg-white rounded-2xl border border-neutral-200/90 shadow-2xl overflow-hidden transition-[max-width] duration-300 animate-in zoom-in-95`}
       >
@@ -44,7 +134,9 @@ export function FlowModal({
           </button>
         )}
         <div className="flex-1 min-h-0 overflow-y-auto p-7 sm:p-9">
-          <FlowStep stepKey={stepKey}>{children}</FlowStep>
+          <FlowStepWithLoader stepKey={stepKey} loader={loader}>
+            {children}
+          </FlowStepWithLoader>
         </div>
       </div>
       {outside}
@@ -58,6 +150,29 @@ export function FlowStep({ stepKey, children }: { stepKey: string; children: Rea
     <div key={stepKey} className="animate-in fade-in slide-in-from-right-4 duration-300 ease-out">
       {children}
     </div>
+  );
+}
+
+/**
+ * A step that a loader can cover. The step stays mounted (just hidden) while
+ * the loader shows, so anything typed into it survives a failed AI call.
+ */
+export function FlowStepWithLoader({
+  stepKey,
+  loader,
+  children,
+}: {
+  stepKey: string;
+  loader?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      {loader && <FlowStep stepKey="loading">{loader}</FlowStep>}
+      <div hidden={Boolean(loader)}>
+        <FlowStep stepKey={stepKey}>{children}</FlowStep>
+      </div>
+    </>
   );
 }
 

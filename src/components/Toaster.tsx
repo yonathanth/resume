@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
+import { Moxie, type MoxieAnimation } from "@/components/moxie";
 
 /**
  * App-wide toasts: short feedback ("Saved", "Your PDF is ready", "Couldn't
@@ -23,6 +24,10 @@ interface ToastOptions {
   action?: ToastAction;
   /** Milliseconds before it hides itself; errors stay until dismissed unless set. */
   duration?: number;
+  /** Moxie, acting out the moment (e.g. "downloaded"), in place of the icon. */
+  moxie?: MoxieAnimation;
+  /** Where it shows: at the bottom (default), or dropping in at the top centre. */
+  placement?: "bottom" | "top";
 }
 
 interface ToastItem extends ToastOptions {
@@ -84,21 +89,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={api}>
       {children}
+      {(["bottom", "top"] as const).map((placement) => (
       <div
+        key={placement}
         aria-live="polite"
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none"
+        className={`fixed ${placement === "top" ? "top-6" : "bottom-6"} left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none`}
       >
-        {toasts.map((toast) => {
+        {toasts.filter((toast) => (toast.placement ?? "bottom") === placement).map((toast) => {
           const { icon: Icon, tile } = TONE_STYLES[toast.tone];
           return (
             <div
               key={toast.id}
               role={toast.tone === "error" ? "alert" : "status"}
-              className="toast-enter pointer-events-auto w-full flex items-start gap-3 rounded-lg border border-neutral-300 bg-white px-4 py-3 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.25)]"
+              className={`${placement === "top" ? "toast-enter-top" : "toast-enter"} pointer-events-auto w-full flex items-start gap-3 rounded-lg border border-neutral-300 bg-white px-4 py-3 shadow-[0_12px_32px_-12px_rgba(0,0,0,0.25)]`}
             >
-              <span className={`mt-0.5 w-7 h-7 rounded-lg shrink-0 flex items-center justify-center border ${tile}`}>
-                <Icon className="w-4 h-4" />
-              </span>
+              {toast.moxie ? (
+                <Moxie animation={toast.moxie} size={44} decorative shadow={false} className="-my-1.5 -ml-1" />
+              ) : (
+                <span className={`mt-0.5 w-7 h-7 rounded-lg shrink-0 flex items-center justify-center border ${tile}`}>
+                  <Icon className="w-4 h-4" />
+                </span>
+              )}
               <div className="flex-1 min-w-0 pt-1">
                 <p className="text-sm font-semibold text-neutral-950 leading-snug">{toast.title}</p>
                 {toast.description && <p className="mt-0.5 text-sm text-neutral-500 leading-snug">{toast.description}</p>}
@@ -127,6 +138,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           );
         })}
       </div>
+      ))}
     </ToastContext.Provider>
   );
 }

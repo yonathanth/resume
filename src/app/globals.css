@@ -122,6 +122,69 @@ body {
   animation: toast-enter 180ms ease-out;
 }
 
+/* …or drop in from above, for toasts at the top. */
+@keyframes toast-enter-top {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-enter-top {
+  animation: toast-enter-top 220ms ease-out;
+}
+
+/* Moxie's full-screen wait (components/moxie/MoxieLoader.tsx): the frosted backdrop
+   fades in; each line above her arrives word by word (every word blurs in and rises,
+   a beat after the one before) while the line it replaces drifts up and fades away;
+   a soft glow breathes behind her. */
+@keyframes moxie-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.moxie-overlay-in {
+  animation: moxie-overlay-in 0.35s ease-out both;
+}
+
+@keyframes moxie-word-in {
+  from { opacity: 0; transform: translateY(4px); filter: blur(4px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.moxie-word-in {
+  display: inline-block;
+  animation: moxie-word-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes moxie-line-out {
+  from { opacity: 1; transform: translateY(0); filter: blur(0); }
+  to { opacity: 0; transform: translateY(-4px); filter: blur(4px); }
+}
+
+.moxie-line-out {
+  animation: moxie-line-out 0.45s ease-in both;
+}
+
+@keyframes moxie-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.06); }
+}
+
+.moxie-glow {
+  animation: moxie-glow 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .moxie-overlay-in,
+  .moxie-word-in,
+  .moxie-glow {
+    animation: none;
+  }
+
+  .moxie-line-out {
+    display: none;
+  }
+}
+
 /* Thin indeterminate bar for work in progress (e.g. the editor preview re-rendering). */
 @keyframes progress-slide {
   from { transform: translateX(-100%); }

@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Crown, FilePlus, FileText, History, Loader2, RotateCcw, Trash2, UserCheck } from "lucide-react";
-import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO, canUseCareerProfiles } from "@/lib/api";
+import { ArrowLeft, Crown, FilePlus, FileText, History, Loader2, RotateCcw, Trash2, User } from "lucide-react";
+import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO } from "@/lib/api";
 import { useDeleteProfile, useProfile, useRevertProfileChange, useUpdateProfile } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { ICON_TONES } from "@/components/dashboard/create-flow/OptionCard";
+import { DashboardMoxie } from "@/components/dashboard/DashboardMoxie";
 import { ChipListEditor, INPUT_CLASS, LABEL_CLASS, ProfileSectionEditor } from "./ProfileSectionEditor";
 import { ItemRecord, PROFILE_SECTIONS, describeChangeCounts, missingRequired, tempId, toSavePayload } from "./profile-sections";
 
@@ -40,7 +41,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
   const router = useRouter();
   const { handleCreateCvFromProfile } = useDashboard();
   const { data: profile, isLoading, error, refetch } = useProfile(profileId);
-  const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
+  const isPro = useSubscriptionStatus().data?.isPro ?? false;
   const update = useUpdateProfile(profileId);
   const revert = useRevertProfileChange(profileId);
   const remove = useDeleteProfile();
@@ -60,7 +61,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
 
   const savedKey = useMemo(() => (profile ? draftKey(toDraft(profile)) : ""), [profile]);
   const isDirty = Boolean(draft && profile && draftKey(draft) !== savedKey);
-  const readOnly = !canUseProfiles;
+  const readOnly = !isPro;
 
   // Take the server's copy on first load and whenever a newer version
   // arrives — but never overwrite unsaved edits because of a background
@@ -167,7 +168,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
         <div className="flex items-start gap-3.5 min-w-0">
           <span className={`w-11 h-11 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.violet}`}>
-            <UserCheck className="w-5 h-5" />
+            <User className="w-5 h-5" />
           </span>
           <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight text-neutral-950 truncate">{profile.title}</h1>
@@ -191,7 +192,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
             type="button"
             disabled={isDirty}
             title={isDirty ? "Save your changes first" : undefined}
-            onClick={() => (canUseProfiles ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
+            onClick={() => (isPro ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FilePlus className="w-4 h-4 text-accent-light" /> Create a CV
@@ -220,7 +221,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
       {/* Tabs */}
       <div className="flex gap-1 border-b border-neutral-200 mb-6" role="tablist">
         {([
-          ["profile", "Profile", UserCheck],
+          ["profile", "Profile", User],
           ["resumes", `CVs (${profile.documents.length})`, FileText],
           ["history", "History", History],
         ] as const).map(([key, label, Icon]) => (
@@ -343,9 +344,9 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
       {tab === "resumes" && (
         <div className="rounded-lg border border-neutral-300 bg-white">
           {profile.documents.length === 0 ? (
-            <div className="py-12 text-center">
+            <div className="py-10 text-center">
+              <DashboardMoxie animation="emptyFolder" size={100} className="mx-auto mb-1" />
               <p className="text-sm font-semibold text-neutral-800">No CVs linked yet</p>
-              <p className="mt-1 text-xs text-neutral-500">CVs you create from this profile, or save to it, show up here.</p>
             </div>
           ) : (
             <ul className="divide-y divide-neutral-200">

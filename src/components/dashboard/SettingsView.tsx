@@ -1012,7 +1012,7 @@ export function SettingsView() {
           {active === "career-profiles" && (
             <Section
               id="career-profiles"
-              icon={UserCheck}
+              icon={User}
               tone="emerald"
               title="Career profiles"
               description="How new CVs keep your role profiles up to date."
