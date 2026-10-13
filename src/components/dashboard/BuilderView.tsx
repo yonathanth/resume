@@ -6,7 +6,6 @@ import {
   Target,
   PenLine,
   ArrowRight,
-  FileText,
   ChevronRight,
 } from "lucide-react";
 import { CreateCvModal } from "./create-flow/CreateCvModal";
@@ -15,6 +14,7 @@ import { EnhanceCvModal } from "./create-flow/EnhanceCvModal";
 import { CvEditorWorkspace } from "./create-flow/CvEditorWorkspace";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ResumeCard } from "./ResumeCard";
+import { DashboardMoxie } from "./DashboardMoxie";
 import {
   CvData,
   PastProjectOption,
@@ -312,12 +312,9 @@ export function BuilderView({
 
       {/* RESUMES WORKSPACE GRID */}
       {drafts.length === 0 ? (
-        <div className="p-12 text-center rounded-3xl bg-neutral-50 border border-neutral-200/80">
-          <FileText className="w-8 h-8 text-neutral-400 mx-auto mb-3" />
-          <h3 className="text-sm font-bold text-neutral-950">No resumes found</h3>
-          <p className="text-xs text-neutral-500 mt-1">
-            Create a new resume above to get started.
-          </p>
+        <div className="px-6 py-12 text-center rounded-3xl bg-neutral-50 border border-neutral-200/80">
+          <DashboardMoxie animation="emptyFolder" size={120} className="mx-auto -mt-4 mb-2" />
+          <h3 className="text-sm font-bold text-neutral-950">No resumes yet</h3>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Check, Crown, Loader2 } from "lucide-react";
 import { useStartProCheckout, useSubscriptionStatus } from "@/hooks/use-subscription";
 import type { CheckoutProvider } from "@/lib/api";
+import { Moxie } from "@/components/moxie";
 import { SOFT_TONES } from "./create-flow/OptionCard";
 
 // Mirrors the backend: free accounts get one free use of each dashboard tab,
@@ -88,16 +89,19 @@ export function UpgradeView() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-8 pb-16 pt-8 sm:px-14 lg:px-20">
-      {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-neutral-950 sm:text-3xl">
-          {subscription.isExpired ? "Renew Resumate Pro" : "Upgrade to Resumate Pro"}
-        </h2>
-        <p className="mt-2 text-sm text-neutral-500">
-          {subscription.isExpired
-            ? "Your Pro plan has ended. Renew to keep unlimited AI generations."
-            : "Unlimited AI writing, tailoring and improvements for your whole job search."}
-        </p>
+      {/* Header — Moxie beside it, jumping for the Pro crown just out of reach. */}
+      <div className="flex items-end justify-between gap-6">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-neutral-950 sm:text-3xl">
+            {subscription.isExpired ? "Renew Resumate Pro" : "Upgrade to Resumate Pro"}
+          </h2>
+          <p className="mt-2 text-sm text-neutral-500">
+            {subscription.isExpired
+              ? "Your Pro plan has ended. Renew to keep unlimited AI generations."
+              : "Unlimited AI writing, tailoring and improvements for your whole job search."}
+          </p>
+        </div>
+        <Moxie animation="upgrade" size={96} decorative ticklish shadow={false} className="-mb-3 -mt-4 hidden shrink-0 sm:block" />
       </div>
 
       {/* Free usage */}
@@ -178,7 +182,10 @@ export function UpgradeView() {
 
       <p className="mt-6 text-xs text-neutral-400">
         Secure checkout with Polar or Chapa. Questions? See the{" "}
-        <Link href="/dashboard/help" className="font-medium text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-900">
+        <Link
+          href="/dashboard/help"
+          className="font-medium text-neutral-600 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-900"
+        >
           Help center
         </Link>
         .

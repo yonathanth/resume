@@ -1,8 +1,11 @@
 import { gsap } from "gsap";
 import {
+  armPath,
+  BIG_ARM,
   bridgePath,
   CROWN,
   CROWN_BASE,
+  CROWN_FLOAT,
   DEPTH,
   INK_STYLE,
   lensCorner,
@@ -15,8 +18,11 @@ import {
   polylineLength,
   PUPIL_REACH,
   PUPIL_REST,
+  PENCIL,
   READ_HOLD,
   SHOULDER,
+  SIDE_BLINK,
+  SIT,
   SPARKLE_BURST,
   SPARKLE_ORIGIN,
   STALK_REACH,
@@ -50,7 +56,8 @@ function transformLayers(p: MoxieParts) {
     p.root, p.legs, ...p.legList, p.smallClaw, p.smallPincer, p.body, p.bellyShade, p.bigClaw, p.bigPincer,
     p.stalkL, p.stalkR, p.stalkLineL, p.stalkLineR, p.eyeL, p.eyeR, p.pupilL, p.pupilR, p.glintL, p.glintR,
     p.lidL, p.lidR, p.face, p.pdfFile, p.coin, p.coinFace, p.crown, p.paperBack, p.paperSheet, p.groundPost, p.glassesL, p.glassesR,
-    p.bladeA, p.bladeB,
+    p.bladeA, p.bladeB, p.pencilTip, p.mouthO, p.side, p.sideTurn, p.sideBody, ...p.sideLegs, ...p.sidePupils, ...p.sideLids,
+    p.sideSweat, p.crownFloat,
   ];
 }
 
@@ -82,7 +89,7 @@ function resetPaper(tl: TL, p: MoxieParts, content: SheetContent, at: number) {
 /** A yellow pencil for writing, a red one for editing. */
 const PENCIL_COLORS = { write: "#FFC94A", edit: "#E04E24" } as const;
 function pencilColor(tl: TL, p: MoxieParts, kind: keyof typeof PENCIL_COLORS, at: number) {
-  tl.set(p.pencilBody, { attr: { fill: PENCIL_COLORS[kind] } }, at);
+  tl.set([p.pencilBody, p.pencilFront], { attr: { fill: PENCIL_COLORS[kind] } }, at);
 }
 
 // ─── Building blocks ──────────────────────────────────────────────────────────
@@ -92,7 +99,12 @@ export function toNeutral(p: MoxieParts, duration = 0.35, ease = "power2.inOut")
   const tl = gsap.timeline();
   tl.to(transformLayers(p), { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, duration, ease }, 0)
     .to(p.shadow, { x: 0, scaleX: 1, scaleY: 1, opacity: SHADOW_OPACITY, duration, ease }, 0)
-    .to([...p.sparkles, ...p.zs, p.lashL, p.lashR, ...propLayers(p)], { opacity: 0, duration: Math.min(duration, 0.25) }, 0);
+    .to([...p.sparkles, ...p.zs, p.side, p.sideSweat, p.crownFloat, p.lashL, p.lashR, ...propLayers(p)], { opacity: 0, duration: Math.min(duration, 0.25) }, 0)
+    // Back to her front view, if she was seen from the side.
+    .to(p.root, { opacity: 1, duration: Math.min(duration, 0.25) }, 0)
+    // A snapped pencil is whole again (hidden with it) for next time.
+    .set(p.pencilTip, { opacity: 1 }, Math.min(duration, 0.25))
+    .set(p.pencilSplinter, { opacity: 0 }, Math.min(duration, 0.25));
   mouth(tl, p, "smile", 0, Math.min(duration, 0.15));
   return tl;
 }
@@ -710,14 +722,13 @@ type Point = { x: number; y: number };
  * the rest of the way along that line.
  */
 function clawTo(tl: TL, p: MoxieParts, to: Point, at: number, duration: number, ease = "none", from: Point = PENCIL_TIP) {
-  const rest = Math.atan2(from.y - SHOULDER.y, from.x - SHOULDER.x);
   const restLength = Math.hypot(from.x - SHOULDER.x, from.y - SHOULDER.y);
   const angle = Math.atan2(to.y - SHOULDER.y, to.x - SHOULDER.x);
   const reach = Math.hypot(to.x - SHOULDER.x, to.y - SHOULDER.y) - restLength;
   tl.to(
     p.bigClaw,
     {
-      rotation: ((angle - rest) * 180) / Math.PI,
+      rotation: clawRotationTo(to, from),
       x: reach * Math.cos(angle),
       y: reach * Math.sin(angle),
       duration,
@@ -725,6 +736,12 @@ function clawTo(tl: TL, p: MoxieParts, to: Point, at: number, duration: number, 
     },
     at,
   );
+}
+
+/** The big claw's rotation (degrees) when clawTo puts `from` on `to`. */
+function clawRotationTo(to: Point, from: Point = PENCIL_TIP): number {
+  const rest = Math.atan2(from.y - SHOULDER.y, from.x - SHOULDER.x);
+  return ((Math.atan2(to.y - SHOULDER.y, to.x - SHOULDER.x) - rest) * 180) / Math.PI;
 }
 
 /** Pencil speed while writing, in drawing units per second (a scribble goes faster). */
@@ -846,6 +863,25 @@ function updateBridge(p: MoxieParts) {
   const a = new DOMPoint(lensCorner("L").x, lensCorner("L").y).matrixTransform(toRoot.multiply(left));
   const b = new DOMPoint(lensCorner("R").x, lensCorner("R").y).matrixTransform(toRoot.multiply(right));
   p.glassesBridge.setAttribute("d", bridgePath(a, b));
+}
+
+/**
+ * Redraws the big claw's arm to wherever its pincer is now: the wrist follows
+ * the pincer, and the elbow bends further the further the pincer is set down
+ * (from straight at rest to resting on the ledge when she sits).
+ */
+export function updateArm(p: MoxieParts) {
+  const get = gsap.getProperty(p.bigPincer) as (property: string) => number;
+  const dx = get("x");
+  const dy = get("y");
+  const bend = gsap.utils.clamp(0, 1, dy / SIT.bigPincerY);
+  const elbow = {
+    x: BIG_ARM.elbow.x + (SIT.bigElbow.x - BIG_ARM.elbow.x) * bend,
+    y: BIG_ARM.elbow.y + (SIT.bigElbow.y - BIG_ARM.elbow.y) * bend,
+  };
+  const d = armPath(elbow, { x: BIG_ARM.wrist.x + dx, y: BIG_ARM.wrist.y + dy });
+  if (p.bigArm[0]?.getAttribute("d") === d) return;
+  p.bigArm.forEach((arm) => arm.setAttribute("d", d));
 }
 
 /** Keeps the bridge attached for as long as this timeline plays. */
@@ -1570,6 +1606,7 @@ const CROWN_JEWEL = {
  */
 const paid: MoxiePreset = {
   mode: "loop",
+  ownsCrown: true,
   intro: (p) => {
     const tl = timeline();
     // Out of the sky, onto her shell — both eyes follow it down.
@@ -1856,6 +1893,488 @@ const emptyFolder: MoxiePreset = {
   },
 };
 
+// ─── Sitting on a ledge (the sidebar) ────────────────────────────────────────
+
+/** The big claw resting on the ledge beside her, bent at the elbow; the small one hooked over the edge. */
+function gripLedge(tl: TL, p: MoxieParts, at: number, duration: number, ease = "power2.inOut") {
+  tl.to(p.bigClaw, { rotation: SIT.bigClaw, x: SIT.bigClawX, y: SIT.bigClawY, duration, ease }, at)
+    .to(p.bigPincer, { rotation: SIT.bigPincer, x: SIT.bigPincerX, y: SIT.bigPincerY, duration, ease }, at)
+    .to(p.smallClaw, { rotation: SIT.smallClaw, duration, ease }, at)
+    .to(p.smallPincer, { rotation: SIT.smallPincer, duration, ease }, at);
+}
+
+/**
+ * Settled on the ledge: her body resting on it, her big claw set down on it
+ * beside her, the small one hooked over it, legs hanging too.
+ */
+function sitPose(tl: TL, p: MoxieParts, at: number, duration: number) {
+  tl.to(p.shadow, { opacity: 0, duration: Math.min(duration, 0.2) }, at).to(
+    p.legList,
+    { y: SIT.legDrop, scaleY: SIT.legHang, rotation: 0, duration, ease: "power2.inOut" },
+    at,
+  );
+  gripLedge(tl, p, at, duration);
+}
+
+/** One back-and-forth of a dangling leg, in seconds. */
+const LEG_SWING = 1.7;
+
+/**
+ * A wave from where she sits: the big claw lifts off the ledge (the arm
+ * straightening), a couple of waves, and sets it back down. Returns the end time.
+ */
+function sitWave(tl: TL, p: MoxieParts, at: number): number {
+  tl.to(p.bigClaw, { rotation: 16, x: 0, y: 0, duration: 0.45, ease: "back.out(1.6)" }, at)
+    .to(p.bigPincer, { rotation: -10, x: 0, y: 0, duration: 0.45, ease: "back.out(1.6)" }, at + 0.05)
+    .to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, at + 0.1);
+  look(tl, p, 1, 2, at, 0.3);
+  let t = at + 0.45;
+  for (let i = 0; i < 2; i++) {
+    tl.to(p.bigClaw, { rotation: -2, duration: 0.26 }, t)
+      .to(p.bigPincer, { rotation: 8, duration: 0.26 }, t + 0.05)
+      .to(p.bigClaw, { rotation: 16, duration: 0.26 }, t + 0.26)
+      .to(p.bigPincer, { rotation: -10, duration: 0.26 }, t + 0.31);
+    t += 0.52;
+  }
+  tl.to(p.bigClaw, { rotation: SIT.bigClaw, x: SIT.bigClawX, y: SIT.bigClawY, duration: 0.55, ease: "power2.inOut" }, t)
+    .to(p.bigPincer, { rotation: SIT.bigPincer, x: SIT.bigPincerX, y: SIT.bigPincerY, duration: 0.55, ease: "power2.inOut" }, t)
+    .to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, t + 0.2);
+  return t + 0.55;
+}
+
+/**
+ * Sitting on the edge of a ledge (the sidebar), body upright and resting on
+ * it, her big claw hanging over the edge, the small one hooked on it, legs
+ * hanging free and swinging gently back and forth (the hanging claw swaying
+ * with them). She breathes, looks about, glances down at her feet — and now
+ * and then swings her big claw up to wave. Tickled, she covers up without
+ * getting off it.
+ */
+const sitting: MoxiePreset = {
+  mode: "loop",
+  coversUpWhenTickled: true,
+  intro: (p) => {
+    const tl = timeline();
+    sitPose(tl, p, 0, 0.55);
+    look(tl, p, 1, 2, 0.2, 0.3);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = timeline();
+    const swings = 4;
+    const total = swings * LEG_SWING;
+    // Legs swinging: forward (toward us — so foreshortened, shorter) and back,
+    // the outer two together, the middle one a little behind.
+    p.legList.forEach((leg, i) => {
+      const lag = i === 1 ? 0.3 : 0;
+      const side = i === 0 ? -1 : i === 2 ? 1 : 0;
+      for (let k = 0; k < swings; k++) {
+        const t = k * LEG_SWING + lag;
+        tl.to(leg, { scaleY: SIT.legHang * 0.66, rotation: side * 7 + 5, duration: LEG_SWING / 2, ease: "sine.inOut" }, t).to(
+          leg,
+          { scaleY: SIT.legHang, rotation: side * 3 - 4, duration: LEG_SWING / 2, ease: "sine.inOut" },
+          t + LEG_SWING / 2,
+        );
+      }
+    });
+    // A slow breath, the body swelling a touch (she stays put on the ledge).
+    tl.to([p.body, p.face], { scaleY: 1.015, scaleX: 1.006, duration: total / 4 }, 0)
+      .to([p.body, p.face], { scaleY: 1, scaleX: 1, duration: total / 4 }, total / 4)
+      .to([p.body, p.face], { scaleY: 1.015, scaleX: 1.006, duration: total / 4 }, total / 2)
+      .to([p.body, p.face], { scaleY: 1, scaleX: 1, duration: total / 4 }, (total * 3) / 4);
+    // The stalks sway with the swinging.
+    const sway = random(1.5, 2.5);
+    tl.to(p.stalkL, { rotation: sway, duration: total / 2 }, 0)
+      .to(p.stalkL, { rotation: 0, duration: total / 2 }, total / 2)
+      .to(p.stalkR, { rotation: -sway * 0.8, duration: total / 2 - 0.3 }, 0.3)
+      .to(p.stalkR, { rotation: 0, duration: total / 2 }, total / 2);
+
+    if (chance(0.45)) {
+      // A wave to you.
+      const at = random(1.2, 2.4);
+      const end = sitWave(tl, p, at);
+      lookHome(tl, p, end + 0.2, 0.4);
+    } else {
+      // The resting claw rocks a touch on the ledge in time with the legs.
+      for (let k = 0; k < swings; k++) {
+        const t = k * LEG_SWING + 0.15;
+        tl.to(p.bigPincer, { rotation: SIT.bigPincer + 3, duration: LEG_SWING / 2 }, t)
+          .to(p.bigPincer, { rotation: SIT.bigPincer - 2, duration: LEG_SWING / 2 }, t + LEG_SWING / 2);
+      }
+      tl.to(p.bigPincer, { rotation: SIT.bigPincer, duration: 0.3 }, total + 0.15);
+      // A look about — sometimes down at her swinging feet.
+      const at = random(0.8, 2);
+      const [x, y] = chance(0.5) ? ([2, 11] as const) : pick([[-10, -3], [10, -4], [-7, 6]] as const);
+      look(tl, p, x, y, at, 0.35);
+      if (y > 8) tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.3 }, at + 0.2).to([p.lidL, p.lidR], { y: LID.open, duration: 0.3 }, at + 1.5);
+      lookHome(tl, p, at + random(1.4, 2), 0.45);
+    }
+    blink(tl, p, random(0.4, total - 1));
+    // A little squeeze of the small pincer on the edge.
+    if (chance(0.4)) {
+      const at = random(3.5, total - 1);
+      tl.to(p.smallPincer, { rotation: SIT.smallPincer + 12, duration: 0.12, ease: "power2.out" }, at)
+        .to(p.smallPincer, { rotation: SIT.smallPincer, duration: 0.3, ease: "back.out(3)" }, at + 0.12);
+    }
+    return tl;
+  },
+  reducedPose: poseOnly(sitPose),
+};
+
+// ─── The 404 page, an error, the paywall (tier 4) ────────────────────────────
+
+/** Pacing, seen from the side: how far a step takes her, how long it takes, and how far she goes each way. */
+const PACE = { stride: 10.5, step: 0.34, reach: 42 } as const;
+/** The near legs she steps with together, and the others (the side view's legs: far three, then near three). */
+const PACE_GAIT = [[1, 3, 5], [0, 2, 4]] as const;
+
+/**
+ * Pacing, seen from the side, from `fromX` to `toX`: alternate legs swing
+ * forward and push back, a bob on every step, leaning into the walk —
+ * then her legs settle, unless she's walking straight on (`settle` false).
+ * Returns the end time.
+ */
+function pace(tl: TL, p: MoxieParts, fromX: number, toX: number, at: number, settle = true): number {
+  const steps = Math.max(2, Math.round(Math.abs(toX - fromX) / PACE.stride));
+  const duration = steps * PACE.step;
+  tl.to([p.side, p.shadow], { x: toX, duration, ease: "none" }, at).to(p.sideBody, { rotation: 3, duration: 0.2 }, at);
+  for (let i = 0; i < steps; i++) {
+    const t = at + i * PACE.step;
+    const [lifted, planted] = i % 2 ? [PACE_GAIT[0], PACE_GAIT[1]] : [PACE_GAIT[1], PACE_GAIT[0]];
+    // (Forward is a negative turn: each leg hangs from its top, and she faces +x.)
+    tl.to(lifted.map((j) => p.sideLegs[j]), { rotation: -18, y: -5, duration: PACE.step / 2, ease: "power1.out" }, t)
+      .to(lifted.map((j) => p.sideLegs[j]), { y: 0, duration: PACE.step / 2, ease: "power1.in" }, t + PACE.step / 2)
+      .to(planted.map((j) => p.sideLegs[j]), { rotation: 14, duration: PACE.step, ease: "none" }, t)
+      .to(p.sideBody, { y: -3, duration: PACE.step / 2, ease: "sine.out" }, t)
+      .to(p.sideBody, { y: 0, duration: PACE.step / 2, ease: "sine.in" }, t + PACE.step / 2);
+  }
+  const end = at + duration;
+  if (settle) tl.to(p.sideLegs, { rotation: 0, y: 0, duration: 0.2 }, end).to(p.sideBody, { rotation: 0, duration: 0.25 }, end);
+  return end;
+}
+
+/**
+ * Turns around on the spot to face `facing`, all in her side view: she
+ * settles her weight, swings round (narrowing to edge-on and widening out
+ * the other way) with a little hop, her feet shuffling round under her,
+ * and the turn overshoots a touch before it settles. Returns the end time.
+ */
+function turnAround(tl: TL, p: MoxieParts, facing: 1 | -1, at: number): number {
+  const half = 0.2;
+  const mid = at + 0.12 + half;
+  // Weight settles before the turn…
+  tl.to(p.sideBody, { y: 3, scaleY: 0.97, duration: 0.12, ease: "power2.out" }, at)
+    // …she swings round to edge-on, lifting a little…
+    .to(p.sideTurn, { scaleX: -facing * 0.12, duration: half, ease: "power2.in" }, at + 0.12)
+    .to(p.sideBody, { y: -4, scaleY: 1.02, duration: half, ease: "power2.out" }, at + 0.12)
+    // …and on round the other way, landing.
+    .set(p.sideTurn, { scaleX: facing * 0.12 }, mid)
+    .to(p.sideTurn, { scaleX: facing, duration: 0.3, ease: "back.out(1.4)" }, mid)
+    .to(p.sideBody, { y: 0, scaleY: 1, duration: 0.3, ease: "power2.in" }, mid);
+  // Feet shuffle round under her as she turns.
+  p.sideLegs.forEach((leg, i) => {
+    const t = at + 0.12 + (i % 3) * 0.08 + (i < 3 ? 0.04 : 0);
+    tl.to(leg, { y: -5, rotation: -10, duration: 0.1, ease: "power1.out" }, t).to(leg, { y: 0, rotation: 0, duration: 0.12, ease: "power1.in" }, t + 0.1);
+  });
+  return mid + 0.3;
+}
+
+/** A bead of sweat, down the side of her head. */
+function sweat(tl: TL, p: MoxieParts, at: number) {
+  tl.set(p.sideSweat, { opacity: 0, y: -4, scale: 0.6 }, at)
+    .to(p.sideSweat, { opacity: 1, y: 0, scale: 1, duration: 0.2, ease: "back.out(2)" }, at)
+    .to(p.sideSweat, { y: 24, duration: 0.7, ease: "power2.in" }, at + 0.35)
+    .to(p.sideSweat, { opacity: 0, duration: 0.2 }, at + 0.85);
+}
+
+/** A blink (the lids drop shut from just above her eyes, and back up out of sight). */
+function sideBlink(tl: TL, p: MoxieParts, at: number) {
+  tl.to(p.sideLids, { y: SIDE_BLINK, duration: 0.08, ease: "power2.in" }, at).to(p.sideLids, { y: 0, duration: 0.15, ease: "power2.out" }, at + 0.1);
+}
+
+/**
+ * Lost (the 404 page): seen from the side the whole time, claws clasped
+ * behind her back, she paces — already on the move when the page opens —
+ * over to one side, a worried stop and a bead of sweat, turn, all the way
+ * over to the other, a sigh, turn, back through the middle — fretting.
+ */
+const lost: MoxiePreset = {
+  mode: "loop",
+  fromCurrentPose: true, // straight into the side view, walking: her front view never shows
+  intro: (p) => {
+    // Applied at once as well (not only on the timeline's first tick), so her front view never shows.
+    const sideOn = () => {
+      gsap.set(p.root, { opacity: 0 });
+      gsap.set(p.side, { opacity: 1 });
+      gsap.set(p.sideTurn, { scaleX: 1 });
+    };
+    sideOn();
+    const tl = timeline();
+    tl.add(toNeutral(p, 0), 0)
+      .set(p.sideCrown, { opacity: gsap.getProperty(p.crown, "opacity") as number }, 0)
+      .add(sideOn, 0);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = timeline();
+    // Over to the right…
+    let t = pace(tl, p, 0, PACE.reach, 0);
+    // …a worried stop, a bead of sweat. Turn.
+    sweat(tl, p, t + 0.1);
+    t = turnAround(tl, p, -1, t + 0.9);
+    // All the way over to the left…
+    t = pace(tl, p, PACE.reach, -PACE.reach, t);
+    // …a sigh, eyes down, a blink. Turn.
+    tl.to(p.sideBody, { scaleY: 0.96, y: 3, duration: 0.35, ease: "power2.out" }, t + 0.1)
+      .to(p.sideBody, { scaleY: 1, y: 0, duration: 0.45, ease: "power2.inOut" }, t + 0.55)
+      .to(p.sidePupils, { y: 7, duration: 0.3 }, t + 0.1)
+      .to(p.sidePupils, { y: 0, duration: 0.3 }, t + 0.8);
+    sideBlink(tl, p, t + 0.95);
+    t = turnAround(tl, p, 1, t + 1.2);
+    // …and back through the middle, walking straight on into the next round.
+    const back = t;
+    t = pace(tl, p, -PACE.reach, 0, back, false);
+    if (chance(0.5)) sideBlink(tl, p, random(back + 0.3, t - 0.3));
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set(p.sideCrown, { opacity: gsap.getProperty(p.crown, "opacity") as number }, 0)
+      .set(p.root, { opacity: 0 }, 0)
+      .set(p.side, { opacity: 1 }, 0);
+    return tl;
+  },
+};
+
+/** How far from the pencil's point it breaks (the front half and the point fly off). */
+const PENCIL_BREAK = PENCIL.length - (PENCIL.length - 13) / 2;
+/** Where the broken-off half flies, as she sees it: up and away, then down out of sight. */
+const SNAP_FLIGHT = [
+  { x: 70, y: -120, rotation: 520, duration: 0.42, ease: "power2.out" },
+  { x: 150, y: 230, rotation: 1100, duration: 0.85, ease: "power2.in" },
+] as const;
+
+/**
+ * Something broke (an error page, an AI or PDF failure): she's writing away
+ * and bears down on the next line — the pencil trembles — and it SNAPS in
+ * half. The front half spins off into the air in a burst; she jumps back,
+ * eyes huge, glasses knocked askew; holds up the splintered stub, trembling,
+ * stares at it, wilts with a sigh — then a sheepish look at you. Glasses
+ * straightened, new pencil, fresh sheet, and she starts again.
+ */
+const oops: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    raiseSheet(tl, p, "blank", "pencil");
+    tl.set(p.pencilTip, { x: 0, y: 0, rotation: 0, opacity: 1 }, 0).set(p.pencilSplinter, { opacity: 0 }, 0);
+    clawTo(tl, p, paperRowPoints(PAPER_ROWS[0])[0], 0.55, 0.55, "power2.inOut");
+    mouth(tl, p, "tongue", 0.8);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+    mouth(tl, p, "tongue", 0);
+    // Writing away at the first line — and partway along, mid-stroke…
+    const points = paperRowPoints(PAPER_ROWS[0]);
+    const upTo = Math.ceil(points.length * 0.55);
+    let t = 0.1;
+    for (let i = 1; i <= upTo; i++) {
+      const duration = Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) / WRITE_SPEED;
+      clawTo(tl, p, points[i], t, duration);
+      t += duration;
+    }
+    tl.to(p.paperInks[0], { strokeDashoffset: PAPER_INK_LENGTHS[0] - polylineLength(points.slice(0, upTo + 1)), duration: t - 0.1, ease: "none" }, 0.1);
+    look(tl, p, READ_GAZE.from.x, READ_GAZE.from.y, 0.1, 0.15, "power2.out");
+    look(tl, p, READ_GAZE.to.x, READ_GAZE.to.y, 0.25, t - 0.25, "none");
+    // …SNAP.
+    const start = points[upTo];
+    const snap = t;
+    const angle = ((PENCIL.angle + clawRotationTo(start)) * Math.PI) / 180;
+    const breakPoint = { x: start.x - PENCIL_BREAK * Math.cos(angle), y: start.y - PENCIL_BREAK * Math.sin(angle) };
+    // Off flies the front half, spinning (moved in the pencil's own turned frame, so it goes where she sees it go).
+    const local = (v: { x: number; y: number }) => ({
+      x: v.x * Math.cos(-angle) - v.y * Math.sin(-angle),
+      y: v.x * Math.sin(-angle) + v.y * Math.cos(-angle),
+    });
+    let at = snap;
+    for (const leg of SNAP_FLIGHT) {
+      tl.to(p.pencilTip, { ...local(leg), rotation: leg.rotation, duration: leg.duration, ease: leg.ease }, at);
+      at += leg.duration;
+    }
+    tl.to(p.pencilTip, { opacity: 0, duration: 0.2 }, at - 0.25).set(p.pencilSplinter, { opacity: 1 }, snap);
+    // A burst where it broke, and the sheet jolts.
+    sparkleAt(tl, p, 0, snap, breakPoint, 1.2);
+    sparkleAt(tl, p, 1, snap + 0.04, { x: breakPoint.x + 18, y: breakPoint.y - 14 }, 0.7);
+    sparkleAt(tl, p, 2, snap + 0.07, { x: breakPoint.x - 16, y: breakPoint.y - 10 }, 0.6);
+    holdPaper(tl, p, -10, snap, 0.08, "power2.out");
+    holdPaper(tl, p, 0, snap + 0.08, 0.5, "elastic.out(1, 0.4)");
+    // She jumps back — eyes huge, stalks shot up, glasses knocked up and left crooked — a big "OH!"
+    tl.to(p.root, { x: -12, y: -18, rotation: -6, duration: 0.14, ease: "power2.out" }, snap)
+      .to(p.root, { y: 0, duration: 0.2, ease: "power2.in" }, snap + 0.14)
+      .to(p.root, { x: -6, rotation: -2, duration: 0.4, ease: "back.out(2)" }, snap + 0.34)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.08 }, snap)
+      .to([p.eyeL, p.eyeR], { scale: 1.22, duration: 0.12, ease: "back.out(3)" }, snap)
+      .to([p.glassesL, p.glassesR], { y: -20, rotation: -14, duration: 0.14, ease: "power2.out" }, snap)
+      .to(p.glassesL, { y: 4, rotation: 9, duration: 0.3, ease: "bounce.out" }, snap + 0.14)
+      .to(p.glassesR, { y: 1, rotation: -4, duration: 0.3, ease: "bounce.out" }, snap + 0.14)
+      .to(p.mouthO, { scale: 1.6, duration: 0.1, ease: "back.out(3)" }, snap);
+    stretchStalks(tl, p, 1.25, snap, 0.14, "power2.out");
+    stretchStalks(tl, p, 1.05, snap + 0.3, 0.6, "elastic.out(1, 0.35)");
+    mouth(tl, p, "o", snap, 0.03);
+    // Her eyes follow it up… and down.
+    look(tl, p, 10, -11, snap + 0.05, 0.2);
+    look(tl, p, 10, 11, snap + 0.5, 0.55, "power2.in");
+    // She holds up the stub and stares at it, trembling.
+    const stare = snap + 1.25;
+    tl.to(p.bigClaw, { rotation: 6, x: 10, y: 6, duration: 0.45, ease: "power2.inOut" }, stare)
+      .to([p.eyeL, p.eyeR], { scale: 1.08, duration: 0.3 }, stare)
+      .to(p.mouthO, { scale: 1, duration: 0.3 }, stare);
+    for (let i = 0; i < 8; i++) tl.to(p.bigClaw, { rotation: i % 2 ? 4.5 : 7.5, duration: 0.05 }, stare + 0.5 + i * 0.05);
+    look(tl, p, -11, -6, stare, 0.3);
+    // …and wilts: stalks droop, a long sigh.
+    const wilt = stare + 1.2;
+    tl.to([p.eyeL, p.eyeR], { scale: 1, duration: 0.4 }, wilt)
+      .to(p.stalkL, { rotation: -14, duration: 0.6, ease: "power2.inOut" }, wilt)
+      .to(p.stalkR, { rotation: 12, duration: 0.6, ease: "power2.inOut" }, wilt + 0.05)
+      .to([p.lidL, p.lidR], { y: LID.heavy, duration: 0.4 }, wilt)
+      .to(p.root, { scaleY: 0.95, scaleX: 1.02, duration: 0.6, ease: "power2.out" }, wilt);
+    stretchStalks(tl, p, 0.88, wilt, 0.6, "power2.inOut");
+    mouth(tl, p, "flat", wilt + 0.1);
+    look(tl, p, -4, 9, wilt, 0.5, "sine.inOut");
+    // Then, stub lowered, a sheepish look at you over her crooked glasses: "heh."
+    const sheepish = wilt + 1.3;
+    tl.to(p.bigClaw, { rotation: -6, x: 0, y: 0, duration: 0.45, ease: "power2.inOut" }, sheepish - 0.15)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, sheepish + 0.1)
+      .to(p.root, { scaleY: 1, scaleX: 1, rotation: 2, duration: 0.4, ease: "back.out(1.6)" }, sheepish)
+      .to(p.stalkL, { rotation: -5, duration: 0.4 }, sheepish)
+      .to(p.stalkR, { rotation: 4, duration: 0.4 }, sheepish + 0.05);
+    stretchStalks(tl, p, 1, sheepish, 0.4, "back.out(1.6)");
+    look(tl, p, -1, -10, sheepish, 0.3, "power2.out");
+    mouth(tl, p, "smile", sheepish + 0.15);
+    // Glasses straightened, a fresh pencil and a fresh sheet; back to it.
+    const again = sheepish + 1.4;
+    tl.to([p.glassesL, p.glassesR], { y: 0, rotation: 0, duration: 0.3, ease: "back.out(2)" }, again)
+      .to(p.pencil, { opacity: 0, duration: 0.2 }, again)
+      .set(p.pencilTip, { x: 0, y: 0, rotation: 0, opacity: 1 }, again + 0.2)
+      .set(p.pencilSplinter, { opacity: 0 }, again + 0.2)
+      .to(p.pencil, { opacity: 1, duration: 0.25 }, again + 0.45)
+      .to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.4 }, again)
+      .to(p.root, { x: 0, rotation: -2.5, duration: 0.4 }, again);
+    stretchStalks(tl, p, 0.95, again, 0.4, "sine.inOut");
+    swapSheet(tl, p, again, "blank");
+    clawTo(tl, p, paperRowPoints(PAPER_ROWS[0])[0], again + 0.4, 0.45, "power2.inOut");
+    mouth(tl, p, "tongue", again + 0.6);
+    tl.to({}, { duration: 0 }, again + 0.9);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    tl.set([p.paperBack, p.pencil, p.glassesL, p.glassesR, p.glassesBridge, p.pencilSplinter], { opacity: 1 }, 0)
+      .set(p.paperBack, { rotation: -READ_HOLD }, 0)
+      .set(p.pencilTip, { opacity: 0 }, 0)
+      .set(p.glassesL, { y: 4, rotation: 9 }, 0);
+    resetPaper(tl, p, "blank", 0);
+    holdPaper(tl, p, 0, 0, 0.4);
+    clawTo(tl, p, paperRowPoints(PAPER_ROWS[0])[2], 0, 0.4, "power2.inOut");
+    look(tl, p, -1, -10, 0, 0.4);
+    mouth(tl, p, "o", 0);
+    return tl;
+  },
+};
+
+/** Between the big pincer's tips, at rest — what she reaches for the crown with. */
+const PINCER_TIPS = { x: 192, y: 200 } as const;
+/** Reaching up for it, standing — and the highest she gets on a jump (in her own drawing: she's lifted with it). */
+const REACH = { x: 190, y: 172 } as const;
+const REACH_HIGH = { x: 188, y: 166 } as const;
+
+/**
+ * The paywall: a Pro crown hangs in the air just above her big claw. She
+ * looks up at it, reaches — crouches, and jumps for it, claw stretched,
+ * pincer snapping shut on thin air just short of it. She lands, looks at you
+ * with a hopeful little "please?", and eyes it again. The crown never moves:
+ * it's out of reach, that's all. (It's its own crown, Pro or not.)
+ */
+const upgrade: MoxiePreset = {
+  mode: "loop",
+  ownsCrown: true,
+  intro: (p) => {
+    const tl = timeline();
+    tl.set(p.crown, { opacity: 0 }, 0)
+      .set(p.crownFloat, { opacity: 0, scale: 0.6 }, 0)
+      .to(p.crownFloat, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(2)" }, 0.1);
+    sparkleAt(tl, p, 0, 0.4, { x: CROWN_FLOAT.x + 22, y: CROWN_FLOAT.y - 30 }, 0.6);
+    look(tl, p, -8, -11, 0.1, 0.35);
+    stretchStalks(tl, p, 1.06, 0.1, 0.4, "back.out(1.6)");
+    mouth(tl, p, "o", 0.2);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = timeline();
+    // A glint; she reaches up for it, pincer open…
+    sparkleAt(tl, p, 0, 0.1, { x: CROWN_FLOAT.x - 20, y: CROWN_FLOAT.y - 24 }, 0.5);
+    clawTo(tl, p, REACH, 0, 0.45, "back.out(1.6)", PINCER_TIPS);
+    tl.to(p.bigPincer, { rotation: -14, duration: 0.3 }, 0.1);
+    look(tl, p, -9, -11, 0, 0.3);
+    mouth(tl, p, "o", 0.1);
+    // …not enough. A crouch…
+    const crouch = 0.75;
+    tl.to(p.root, { scaleY: 0.86, scaleX: 1.08, duration: 0.2, ease: "power2.in" }, crouch).to(p.shadow, { scaleX: 1.06, duration: 0.2 }, crouch);
+    stretchStalks(tl, p, 0.9, crouch, 0.2, "power2.in");
+    // …and a jump for it — just short.
+    const jump = crouch + 0.2;
+    const rise = 0.32;
+    tl.to(p.root, { y: -42, scaleY: 1.07, scaleX: 0.95, duration: rise, ease: "power2.out" }, jump)
+      .to(p.shadow, { scaleX: 0.6, opacity: SHADOW_OPACITY * 0.5, duration: rise, ease: "power2.out" }, jump)
+      .to(p.legList, { rotation: (i: number) => (i - 1) * 10, y: -4, duration: 0.25 }, jump);
+    clawTo(tl, p, REACH_HIGH, jump, rise, "power2.out", PINCER_TIPS);
+    stretchStalks(tl, p, 1.14, jump, rise, "back.out(2)");
+    look(tl, p, -7, -11, jump, 0.2);
+    // Snap! — on thin air.
+    const apex = jump + rise;
+    tl.to(p.bigPincer, { rotation: 8, duration: 0.07, ease: "power3.in" }, apex).to(p.bigPincer, { rotation: -6, duration: 0.2 }, apex + 0.12);
+    // Down she comes.
+    const fall = apex + 0.08;
+    tl.to(p.root, { y: 0, scaleY: 1.04, scaleX: 0.97, duration: 0.3, ease: "power2.in" }, fall)
+      .to(p.shadow, { scaleX: 1, opacity: SHADOW_OPACITY, duration: 0.3, ease: "power2.in" }, fall)
+      .to(p.legList, { rotation: 0, y: 0, duration: 0.15 }, fall + 0.15)
+      .to(p.root, { scaleY: 0.9, scaleX: 1.06, duration: 0.08, ease: "power2.out" }, fall + 0.3)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.45, ease: "back.out(2.2)" }, fall + 0.38);
+    clawTo(tl, p, REACH, fall, 0.3, "power2.in", PINCER_TIPS);
+    stretchStalks(tl, p, 1.04, fall + 0.3, 0.6, "elastic.out(1, 0.4)");
+    // Missed. A hopeful look at you: "please?"
+    const ask = fall + 0.95;
+    tl.to(p.bigClaw, { rotation: 0, x: 0, y: 0, duration: 0.5, ease: "power2.inOut" }, ask)
+      .to(p.bigPincer, { rotation: 0, duration: 0.4 }, ask)
+      .to([p.lidL, p.lidR], { y: LID.happy, duration: 0.25 }, ask + 0.25)
+      .to(p.smallClaw, { rotation: -22, duration: 0.35, ease: "back.out(2)" }, ask + 0.3)
+      .to(p.smallPincer, { rotation: -14, duration: 0.15 }, ask + 0.65)
+      .to(p.smallPincer, { rotation: 0, duration: 0.15 }, ask + 0.8)
+      .to(p.smallPincer, { rotation: -14, duration: 0.15 }, ask + 0.95)
+      .to(p.smallPincer, { rotation: 0, duration: 0.2 }, ask + 1.1)
+      .to(p.smallClaw, { rotation: 0, duration: 0.4 }, ask + 1.5)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, ask + 1.6);
+    stretchStalks(tl, p, 1, ask, 0.4, "power2.inOut");
+    look(tl, p, 1, 2, ask, 0.3);
+    mouth(tl, p, "smile", ask + 0.2);
+    // …and eyes it again.
+    look(tl, p, -8, -11, ask + 1.8, 0.4, "sine.inOut");
+    stretchStalks(tl, p, 1.06, ask + 1.8, 0.4, "sine.inOut");
+    mouth(tl, p, "o", ask + 2.0);
+    blink(tl, p, ask + 2.3);
+    tl.to({}, { duration: 0 }, ask + 2.6);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = timeline();
+    tl.set(p.crown, { opacity: 0 }, 0).set(p.crownFloat, { opacity: 1, scale: 1 }, 0);
+    clawTo(tl, p, REACH, 0, 0.4, "power2.inOut", PINCER_TIPS);
+    look(tl, p, -8, -11, 0, 0.4);
+    return tl;
+  },
+};
+
 // ─── Tickle ───────────────────────────────────────────────────────────────────
 
 /** How long the giggle lasts, start to "ahem". */
@@ -1868,7 +2387,7 @@ export const TICKLE_SECONDS = 1.75;
  * after, exactly as it was. Eyes squeezed shut, a big laugh, a fit of
  * wriggling giggles; then she pulls herself together — "ahem".
  */
-export function tickleGiggle(p: MoxieParts, reducedMotion: boolean): TL {
+export function tickleGiggle(p: MoxieParts, reducedMotion: boolean, coverUp = false): TL {
   const tl = gsap.timeline();
   const face = [p.laughL, p.laughR, p.mouthLaugh];
   tl.to(face, { opacity: 1, duration: 0.06, ease: "none" }, 0);
@@ -1891,12 +2410,39 @@ export function tickleGiggle(p: MoxieParts, reducedMotion: boolean): TL {
   }
   // "Ahem." The laugh fades, she straightens up with a little bob, and back to it.
   const ahem = 0.08 + wriggles * 0.09;
+  if (coverUp) coverUpLimbs(tl, p, ahem);
   tl.to(p.jiggle, { rotation: 0, x: 0, y: 0, scaleX: 1, scaleY: 1, duration: 0.2, ease: "power2.out" }, ahem)
     .to(face, { opacity: 0, duration: 0.12, ease: "none" }, ahem + 0.15)
     .to(p.jiggle, { scaleY: 1.025, scaleX: 0.99, duration: 0.14, ease: "power2.out" }, ahem + 0.3)
     .to(p.jiggle, { scaleY: 1, scaleX: 1, duration: 0.3, ease: "back.out(2)" }, ahem + 0.44);
   return tl;
 }
+
+/**
+ * Covering up while she giggles (when she can't wriggle away, e.g. sitting):
+ * the big claw swung down and round across her belly, the small one tucked
+ * in, legs kicking — then each put back exactly where it was by `until`, so
+ * whatever she was doing carries on from the same pose.
+ */
+function coverUpLimbs(tl: TL, p: MoxieParts, until: number) {
+  const limbs = [p.bigClaw, p.bigPincer, p.smallClaw, p.smallPincer, ...p.legList];
+  const was = limbs.map((el) => {
+    const get = gsap.getProperty(el) as (property: string) => number;
+    return { x: get("x"), y: get("y"), rotation: get("rotation"), scaleX: get("scaleX"), scaleY: get("scaleY") };
+  });
+  // Round the bottom (negative), not over her face.
+  tl.to(p.bigClaw, { rotation: COVER.rotation, x: COVER.x, y: COVER.y, duration: 0.18, ease: "power2.out" }, 0)
+    .to(p.bigPincer, { rotation: COVER.pincer, x: 0, y: 0, duration: 0.18, ease: "power2.out" }, 0.04)
+    .to(p.smallClaw, { rotation: -40, x: 0, duration: 0.18, ease: "power2.out" }, 0)
+    .to(p.smallPincer, { rotation: -12, duration: 0.18 }, 0.04);
+  for (let i = 0; i * 0.09 < until - 0.15; i++) {
+    tl.to(p.legList, { rotation: (j: number) => ((i + j) % 2 ? -10 : 10), scaleY: (j: number) => ((i + j) % 2 ? 0.95 : 1.3), duration: 0.09 }, 0.06 + i * 0.09);
+  }
+  limbs.forEach((el, i) => tl.to(el, { ...was[i], duration: 0.3, ease: "power2.inOut" }, until));
+}
+
+/** Where the big claw goes to cover her belly: swung round under her, pulled in close, pincer turned in. */
+const COVER = { rotation: -196, x: -14, y: -16, pincer: 18 } as const;
 
 /** Puts the tickle layers back to rest at once (when something else takes over mid-giggle). */
 export function endTickle(p: MoxieParts) {
@@ -1929,4 +2475,8 @@ export const MOXIE_PRESETS: Record<MoxieAnimation, MoxiePreset> = {
   saved,
   searching,
   emptyFolder,
+  sitting,
+  lost,
+  oops,
+  upgrade,
 };

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { notFound } from "next/navigation";
-import { Moxie, MOXIE_ANIMATIONS, type MoxieAnimation, type MoxieHandle } from "@/components/moxie";
+import { Moxie, MOXIE_ANIMATIONS, MOXIE_SEAT, type MoxieAnimation, type MoxieHandle } from "@/components/moxie";
 import { AiWaitLoader, type AiWait } from "@/components/dashboard/create-flow/FlowUI";
 
 const WAITS: AiWait[] = ["read-file", "read-story", "read-cv", "write", "improve", "tailor"];
@@ -22,6 +22,81 @@ const EMPTY_STATES: { name: MoxieAnimation; label: string }[] = [
   { name: "emptyFolder", label: "no resumes / profiles / CVs linked" },
 ];
 
+/** Tier 4, each with where it would go and the one quiet line under her there. */
+const TIER_FOUR: { name: MoxieAnimation; label: string; line: string }[] = [
+  { name: "lost", label: "404 page", line: "This page wandered off. Let's get you back." },
+  { name: "oops", label: "error page · AI or PDF failure", line: "Oops — that didn't work. Let's try that again." },
+  { name: "upgrade", label: "paywall", line: "Career profiles are part of Pro." },
+];
+
+const SIDEBAR_NAV = ["Dashboard", "Templates", "Past projects", "Career profiles"];
+
+/** Moxie sitting on the top edge of her positioned parent (placed along it with `style`). */
+function SittingMoxie({ size, crowned, style }: { size: number; crowned: boolean; style: React.CSSProperties }) {
+  return (
+    <Moxie
+      animation="sitting"
+      size={size}
+      crowned={crowned}
+      ticklish
+      shadow={false}
+      className="!absolute z-10"
+      style={{ marginTop: -MOXIE_SEAT.y * size, ...style }}
+    />
+  );
+}
+
+/**
+ * A stand-in for the dashboard sidebar, with Moxie sitting on a line in it:
+ * the header's bottom edge, top left (where she is now), or the line above
+ * the bottom section. Collapsed, it's the 72px-wide rail.
+ */
+function SidebarPreview({ crowned, spot, collapsed = false }: { crowned: boolean; spot: "top" | "bottom"; collapsed?: boolean }) {
+  return (
+    <aside
+      className={`flex h-[560px] shrink-0 flex-col overflow-visible rounded-xl border border-neutral-200 bg-neutral-50 ${collapsed ? "w-[72px]" : "w-64"}`}
+    >
+      <div
+        className={`relative flex h-16 shrink-0 items-center border-b border-neutral-200 text-[15px] font-bold text-neutral-950 ${
+          spot === "top" ? (collapsed ? "" : "pl-[76px]") : "px-4"
+        }`}
+      >
+        {spot === "top" && <SittingMoxie size={collapsed ? 52 : 58} crowned={crowned} style={{ top: "100%", left: collapsed ? 8 : 12 }} />}
+        {!collapsed && "Resumate"}
+      </div>
+      <nav className="flex-1 space-y-1 p-3">
+        {!collapsed && <div className="px-2 pb-2 text-xs font-semibold text-neutral-400">Workspace</div>}
+        {SIDEBAR_NAV.map((label, i) => (
+          <div
+            key={label}
+            className={`rounded-lg px-3 py-2 text-sm font-medium ${i === 0 ? "bg-white text-neutral-950 shadow-sm" : "text-neutral-500"}`}
+          >
+            {collapsed ? label[0] : label}
+          </div>
+        ))}
+      </nav>
+      <div className="relative shrink-0 space-y-3 border-t border-neutral-200 p-3">
+        {spot === "bottom" && <SittingMoxie size={84} crowned={crowned} style={{ top: 0, right: 18 }} />}
+        {!collapsed && (
+          <div className="rounded-lg border border-neutral-200 bg-white p-3">
+            <p className="text-sm font-semibold text-neutral-900">Upgrade to Pro</p>
+            <p className="mt-0.5 text-xs text-neutral-500">Tailored CVs, career profiles and more.</p>
+          </div>
+        )}
+        <div className="flex items-center gap-2 px-1">
+          <div className="h-8 w-8 rounded-full bg-neutral-200" />
+          {!collapsed && (
+            <div className="text-xs">
+              <p className="font-semibold text-neutral-800">Sam Rivera</p>
+              <p className="text-neutral-500">Free plan</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 /** Dev-only playground for Moxie's animations and the AI-wait loaders. */
 export default function MoxiePlayground() {
   if (process.env.NODE_ENV === "production") notFound();
@@ -31,6 +106,8 @@ export default function MoxiePlayground() {
   // Preview a Pro account: she wears the crown through everything.
   const [crowned, setCrowned] = useState(false);
   const momentRef = useRef<MoxieHandle>(null);
+  const [tierFour, setTierFour] = useState<MoxieAnimation>("lost");
+  const tierFourRef = useRef<MoxieHandle>(null);
   const [wait, setWait] = useState<AiWait>("tailor");
   // Remounting restarts the loader's timers, so its captions and impatience can be watched from the start.
   const [run, setRun] = useState(0);
@@ -128,6 +205,48 @@ export default function MoxiePlayground() {
         </div>
         <div className="mt-6 flex items-end justify-center rounded-2xl border border-neutral-200 bg-white p-10">
           <Moxie ref={momentRef} animation="idle" size={340} ticklish crowned={crowned} />
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold text-neutral-500">Sitting on the sidebar (preview)</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Top left on the header&apos;s bottom edge (where she is now) — expanded and collapsed — or on the line above the bottom section; and
+          bigger, on a plain ledge, to check the details. Tickle her (wiggle over her, or double-tap her): she covers up without getting off.
+        </p>
+        <div className="mt-4 flex flex-wrap items-start gap-10">
+          <SidebarPreview crowned={crowned} spot="top" />
+          <SidebarPreview crowned={crowned} spot="top" collapsed />
+          <SidebarPreview crowned={crowned} spot="bottom" />
+          <div className="relative mt-[300px] w-[420px] rounded-t-xl border-t-2 border-neutral-300 bg-white pb-32">
+            <SittingMoxie size={300} crowned={crowned} style={{ top: 0, left: 60 }} />
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold text-neutral-500">Errors, paywall &amp; signing in (tier 4 preview)</h2>
+        <p className="mt-1 text-sm text-neutral-500">Each button replays it, with the line that would sit under her there.</p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {TIER_FOUR.map(({ name, label }) => (
+            <button
+              key={name}
+              type="button"
+              onClick={() => {
+                setTierFour(name);
+                tierFourRef.current?.play(name);
+              }}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium cursor-pointer ${
+                tierFour === name ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-200 bg-white text-neutral-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="mt-6 flex flex-col items-center rounded-2xl border border-neutral-200 bg-white p-10">
+          <Moxie ref={tierFourRef} animation={tierFour} size={300} ticklish crowned={crowned} />
+          <p className="mt-3 text-sm text-neutral-500 sm:text-[15px]">{TIER_FOUR.find((t) => t.name === tierFour)?.line}</p>
         </div>
       </section>
 

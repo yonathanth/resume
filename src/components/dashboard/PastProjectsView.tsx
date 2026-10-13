@@ -164,9 +164,6 @@ export function PastProjectsView({
           {/* Searching with a magnifying glass when a search finds nothing; peering into an empty folder when there are none yet. */}
           <DashboardMoxie animation={hasDrafts ? "searching" : "emptyFolder"} size={120} className="mx-auto -mt-4 mb-2" />
           <h2 className="text-base font-bold text-neutral-950">{hasDrafts ? "No matching resumes" : "No resumes yet"}</h2>
-          <p className="mt-1 text-sm text-neutral-500">
-            {hasDrafts ? `Nothing matches “${searchQuery.trim()}”. Try a different search.` : "Every resume you create is saved here."}
-          </p>
           {hasDrafts ? (
             <button
               type="button"

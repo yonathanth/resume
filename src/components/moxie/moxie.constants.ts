@@ -272,6 +272,68 @@ export const SPARKLE_BURST = [
   { x: 62, y: -142, color: MOXIE_COLORS.blush, scale: 0.95 },
 ] as const;
 
+/**
+ * The big claw's arm: shoulder → elbow → wrist (where the pincer attaches).
+ * The elbow only shows once the pincer moves away from the shoulder.
+ */
+export const BIG_ARM = {
+  shoulder: SHOULDER,
+  elbow: { x: 224, y: 300 },
+  wrist: { x: 212, y: 288 },
+} as const;
+
+/** The big claw's arm, from the shoulder through `elbow` to `wrist`. */
+export function armPath(elbow: { x: number; y: number }, wrist: { x: number; y: number }) {
+  const { shoulder } = BIG_ARM;
+  return `M${shoulder.x} ${shoulder.y} L${elbow.x.toFixed(1)} ${elbow.y.toFixed(1)} L${wrist.x.toFixed(1)} ${wrist.y.toFixed(1)}`;
+}
+
+/**
+ * Sitting on a ledge (the sidebar): the ledge's top edge, in the drawing —
+ * just under her body, which rests on it — and her pose there: the big claw
+ * resting on the ledge beside her, pincer upright and the arm bent at the
+ * elbow; the small one hooked over it, legs lowered and lengthened to hang
+ * over it.
+ */
+export const SIT = {
+  ledgeY: 372,
+  bigClaw: 0,
+  bigClawX: 0,
+  bigClawY: 0,
+  bigPincer: -20,
+  /** The pincer set down on the ledge (moved from the wrist)… */
+  bigPincerX: -32,
+  bigPincerY: 66,
+  /** …and where the elbow bends to reach it, resting on the ledge too. */
+  bigElbow: { x: 226, y: 364 },
+  smallClaw: 46,
+  smallPincer: 170,
+  legDrop: 10,
+  legHang: 1.25,
+} as const;
+
+/**
+ * Where the ledge meets her, as a fraction of her box from its top-left
+ * (from MOXIE_VIEWBOX): put that point on a line to sit her on it.
+ */
+export const MOXIE_SEAT = { x: (305 - 131) / 320, y: (SIT.ledgeY - 96) / 320 } as const;
+
+/** Where the paywall's crown hangs (its bottom-centre): just above her big claw, out of its reach — and how much bigger than the one she wears. */
+export const CROWN_FLOAT = { x: 192, y: 112, scale: 1.35 } as const;
+
+/** How far the side view's lids drop to close (from resting just above the eye): enough for the bigger eye. */
+export const SIDE_BLINK = 90;
+
+/** Her legs seen from the side: the far three (set back, in shadow), then the near three. */
+export const SIDE_LEGS = [
+  { x: 280, y: 344, height: 40, far: true },
+  { x: 312, y: 344, height: 40, far: true },
+  { x: 344, y: 344, height: 40, far: true },
+  { x: 262, y: 350, height: 42, far: false },
+  { x: 296, y: 352, height: 40, far: false },
+  { x: 330, y: 350, height: 42, far: false },
+] as const;
+
 /** The sleep "z"s rise from just above her right eye. */
 export const ZZZ_ORIGIN = { x: 392, y: 132 } as const;
 export const ZZZ_COUNT = 3;

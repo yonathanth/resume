@@ -1,8 +1,8 @@
 import { gsap } from "gsap";
-import { LEG_PIVOTS, PIVOTS } from "./moxie.constants";
+import { LEG_PIVOTS, PIVOTS, SIDE_LEGS } from "./moxie.constants";
 import type { MoxieParts } from "./moxie.types";
 
-type SinglePart = Exclude<keyof MoxieParts, "legList" | "sparkles" | "zs" | "paperInks" | "confetti">;
+type SinglePart = Exclude<keyof MoxieParts, "legList" | "bigArm" | "sparkles" | "zs" | "paperInks" | "confetti" | "sideLegs" | "sidePupils" | "sideLids">;
 
 /** Finds every animatable layer inside a rendered <MoxieArt>. */
 export function queryParts(svg: SVGSVGElement): MoxieParts {
@@ -28,6 +28,7 @@ export function queryParts(svg: SVGSVGElement): MoxieParts {
     bellyShade: one("bellyShade"),
     bigClaw: one("bigClaw"),
     bigPincer: one("bigPincer"),
+    bigArm: all<SVGPathElement>("bigArm"),
     stalkL: one("stalkL"),
     stalkR: one("stalkR"),
     stalkLineL: one("stalkLineL"),
@@ -51,6 +52,9 @@ export function queryParts(svg: SVGSVGElement): MoxieParts {
     sparkles: all<SVGGElement>("sparkle"),
     zs: all<SVGGElement>("z"),
     pencil: one("pencil"),
+    pencilTip: one("pencilTip"),
+    pencilFront: one("pencilFront"),
+    pencilSplinter: one("pencilSplinter"),
     pencilBody: one("pencilBody"),
     paperBack: one("paperBack"),
     paperSheet: one("paperSheet"),
@@ -64,6 +68,15 @@ export function queryParts(svg: SVGSVGElement): MoxieParts {
     paperJob: one("paperJob"),
     groundPost: one("groundPost"),
     magnifier: one("magnifier"),
+    side: one("side"),
+    sideTurn: one("sideTurn"),
+    sideBody: one("sideBody"),
+    sideLegs: all<SVGRectElement>("sideLeg"),
+    sidePupils: all<SVGGElement>("sidePupil"),
+    sideLids: all<SVGGElement>("sideLid"),
+    sideSweat: one("sideSweat"),
+    sideCrown: one("sideCrown"),
+    crownFloat: one("crownFloat"),
     pdfFile: one("pdfFile"),
     coin: one("coin"),
     coinFace: one("coinFace"),
@@ -85,6 +98,12 @@ export function prepareParts(parts: MoxieParts): void {
   parts.legList.forEach((leg, i) => gsap.set(leg, { svgOrigin: LEG_PIVOTS[i] }));
   // Particles are drawn around (0, 0) inside a positioned wrapper.
   gsap.set([...parts.sparkles, ...parts.zs, ...parts.confetti], { svgOrigin: "0 0", scale: 0 });
+  gsap.set([parts.sideSweat, parts.crownFloat], { svgOrigin: "0 0" });
+  // Like the coin, the snapped-off half of the pencil rides in her moving claw, so it tumbles about its own middle.
+  gsap.set(parts.pencilTip, { transformOrigin: "50% 50%" });
+  // The side view turns around, and bobs and leans, from the ground under her; each leg swings from its top.
+  gsap.set([parts.sideTurn, parts.sideBody], { svgOrigin: "305 392" });
+  parts.sideLegs.forEach((leg, i) => gsap.set(leg, { svgOrigin: `${SIDE_LEGS[i].x + 10} ${SIDE_LEGS[i].y + 4}` }));
   // The coin flips over about its own middle (it rides in her moving claw).
   gsap.set(parts.coinFace, { transformOrigin: "50% 50%" });
   // The crown rides on her right eye; it wobbles and lands about its own bottom-centre.

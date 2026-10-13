@@ -1,6 +1,6 @@
 "use client";
 
-import React, { forwardRef, useEffect, useId, useImperativeHandle, useRef } from "react";
+import React, { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 import { cn } from "@/lib/utils";
 import { MoxieArt } from "./MoxieArt";
@@ -96,6 +96,8 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
   const crownedRef = useRef(crowned);
   const visibleRef = useRef(true);
   const reducedMotion = usePrefersReducedMotion();
+  // Seen from the side from the first paint when that's how she starts (only the first: GSAP owns it after).
+  const [startsSideOn] = useState(() => animation === "lost");
   // Clip-path ids must be unique per instance and safe inside url(#…).
   const idPrefix = `moxie-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
@@ -227,6 +229,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
         title={title}
         decorative={decorative}
         showShadow={shadow}
+        sideView={startsSideOn}
         className="pointer-events-none block h-full w-full"
       />
     </span>

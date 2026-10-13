@@ -1,5 +1,5 @@
 import { gsap } from "gsap";
-import { endTickle, MOXIE_PRESETS, tickleGiggle, toNeutral } from "./moxie.animations";
+import { endTickle, MOXIE_PRESETS, tickleGiggle, toNeutral, updateArm } from "./moxie.animations";
 import type { MoxieAnimation, MoxieParts, MoxieTimelineFactory } from "./moxie.types";
 
 /** Time to ease back to neutral before starting a new animation. */
@@ -28,16 +28,21 @@ export class MoxieController {
   /** The animation currently showing ("idle" again once a reaction has finished). */
   current: MoxieAnimation | null = null;
 
+  /** Keeps the big claw's arm joined to its pincer, whatever is moving it. */
+  private readonly syncArm = () => updateArm(this.parts);
+
   constructor(
     private readonly parts: MoxieParts,
     private readonly options: ControllerOptions,
-  ) {}
+  ) {
+    gsap.ticker.add(this.syncArm);
+  }
 
   play(animation: MoxieAnimation): void {
     this.stopGiggle(); // anything new takes over from a giggle at once
-    // The crown stays on (or off) whatever she does — except in the Pro moment, which drops it in itself.
-    if (animation !== "paid") gsap.set(this.parts.crown, { opacity: this.options.crowned ? 1 : 0 });
     const preset = MOXIE_PRESETS[animation];
+    // The crown stays on (or off) whatever she does — except where she shows it herself (the Pro moment, the paywall).
+    if (!preset.ownsCrown) gsap.set(this.parts.crown, { opacity: this.options.crowned ? 1 : 0 });
     const { parts } = this;
     const tl = gsap.timeline();
     this.current = animation;
@@ -72,7 +77,8 @@ export class MoxieController {
   tickle(): boolean {
     if (this.giggle || this.paused) return false;
     this.timeline?.pause();
-    const giggle = tickleGiggle(this.parts, this.options.reducedMotion);
+    const coverUp = this.current ? MOXIE_PRESETS[this.current].coversUpWhenTickled : false;
+    const giggle = tickleGiggle(this.parts, this.options.reducedMotion, coverUp);
     giggle.eventCallback("onComplete", () => {
       this.giggle = null;
       if (!this.paused) this.timeline?.resume();
@@ -84,7 +90,7 @@ export class MoxieController {
   /** Puts the Pro crown on, or takes it off. */
   setCrowned(crowned: boolean): void {
     this.options.crowned = crowned;
-    if (this.current !== "paid") gsap.set(this.parts.crown, { opacity: crowned ? 1 : 0 });
+    if (!this.current || !MOXIE_PRESETS[this.current].ownsCrown) gsap.set(this.parts.crown, { opacity: crowned ? 1 : 0 });
   }
 
   setPaused(paused: boolean): void {
@@ -100,6 +106,7 @@ export class MoxieController {
   }
 
   destroy(): void {
+    gsap.ticker.remove(this.syncArm);
     this.stopGiggle();
     this.timeline?.kill();
     this.timeline = null;

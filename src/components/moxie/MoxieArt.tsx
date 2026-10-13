@@ -1,5 +1,7 @@
 import React from "react";
 import {
+  armPath,
+  BIG_ARM,
   bridgePath,
   COIN,
   CONFETTI_COLORS,
@@ -7,6 +9,7 @@ import {
   CONFETTI_ORIGIN,
   CROWN,
   CROWN_BASE,
+  CROWN_FLOAT,
   EYE_L,
   EYE_R,
   EYE_RADIUS,
@@ -28,6 +31,8 @@ import {
   PENCIL_TIP,
   polylineLength,
   READ_PAPER,
+  SIDE_BLINK,
+  SIDE_LEGS,
   SPARKLE_BURST,
   SPARKLE_ORIGIN,
   ZZZ_COUNT,
@@ -51,6 +56,11 @@ import {
 
 const STAR = "M0 -10 C1.5 -2.5 2.5 -1.5 10 0 C2.5 1.5 1.5 2.5 0 10 C-1.5 2.5 -2.5 1.5 -10 0 C-2.5 -1.5 -1.5 -2.5 0 -10 Z";
 const ZED = "M-6 -6 H6 L-6 6 H6";
+/** The big and small pincers' outlines (pointing up, at rest). */
+const BIG_PINCER =
+  "M215 297 C165 302 143 257 158 214 C163 198 180 198 184 214 L194 246 L200 213 C205 192 232 196 234 224 C238 266 232 292 215 297 Z";
+const SMALL_PINCER = "M404 325 C392 322 386 303 395 292 C398 287 404 288 405 294 L408 305 L412 294 C415 286 425 288 426 297 C428 312 418 327 404 325 Z";
+const SWEAT = "M0 -9 C4 -3 6 1 6 4 A6 6 0 0 1 -6 4 C-6 1 -4 -3 0 -9 Z";
 
 /** A half-moon reading lens, worn low on the eye — she reads through it and peers over it. */
 function HalfMoonLens({ side, eye }: { side: "L" | "R"; eye: { cx: number; cy: number } }) {
@@ -158,36 +168,42 @@ function Coin() {
   );
 }
 
-/** The Pro crown: gold points tipped with coral, a jewel in front. Sits on top of her body. */
-function Crown() {
-  const { width: w, height: h, tilt } = CROWN;
-  // Drawn around its own bottom-centre (0, 0), then set on top of the eye, tilted.
-  const x = 0;
-  const y = 0;
-  const left = x - w / 2;
-  const right = x + w / 2;
-  const top = y - h;
+/** The Pro crown's drawing — gold points tipped with coral, a jewel in front — around its own bottom-centre (0, 0). */
+function CrownShape() {
+  const { width: w, height: h } = CROWN;
+  const left = -w / 2;
+  const right = w / 2;
+  const top = -h;
   const tips = [
     { x: left, y: top + 7 },
-    { x, y: top },
+    { x: 0, y: top },
     { x: right, y: top + 7 },
   ];
   return (
-    <g transform={`translate(${CROWN_BASE.x} ${CROWN_BASE.y}) rotate(${tilt})`}>
-    <g data-part="crown" style={{ opacity: 0 }}>
+    <>
       <path
-        d={`M${left} ${y} V${top + 7} L${left + w * 0.27} ${top + 15} L${x} ${top} L${right - w * 0.27} ${top + 15} L${right} ${top + 7} V${y} Z`}
+        d={`M${left} 0 V${top + 7} L${left + w * 0.27} ${top + 15} L0 ${top} L${right - w * 0.27} ${top + 15} L${right} ${top + 7} V0 Z`}
         fill={C.blush}
         stroke={C.ink}
         strokeWidth="3"
         strokeLinejoin="round"
       />
-      <path d={`M${left + 2} ${y - 6} H${right - 2}`} stroke={C.coralShade} strokeWidth="2" opacity="0.55" />
+      <path d={`M${left + 2} -6 H${right - 2}`} stroke={C.coralShade} strokeWidth="2" opacity="0.55" />
       {tips.map((tip) => (
         <circle key={tip.x} cx={tip.x} cy={tip.y} r="3" fill={C.coral} stroke={C.ink} strokeWidth="1.8" />
       ))}
-      <circle cx={x} cy={y - 11} r="3.6" fill={C.coral} stroke={C.ink} strokeWidth="1.8" />
-    </g>
+      <circle cx="0" cy="-11" r="3.6" fill={C.coral} stroke={C.ink} strokeWidth="1.8" />
+    </>
+  );
+}
+
+/** The Pro crown, sitting on top of her body, tilted with the curve of her shell. */
+function Crown() {
+  return (
+    <g transform={`translate(${CROWN_BASE.x} ${CROWN_BASE.y}) rotate(${CROWN.tilt})`}>
+      <g data-part="crown" style={{ opacity: 0 }}>
+        <CrownShape />
+      </g>
     </g>
   );
 }
@@ -210,12 +226,29 @@ function HeldTool({ part, children }: { part: string; children: React.ReactNode 
  */
 function Pencil() {
   const body = PENCIL.length - 13;
+  // Where it breaks, when it snaps: the barrel is drawn in two halves.
+  const half = body / 2;
   return (
     <HeldTool part="pencil">
       <rect x="-9" y="-4.5" width="11" height="9" rx="2.5" fill={C.coral} stroke={C.ink} strokeWidth="2.5" />
-      <rect data-part="pencilBody" x="0" y="-4.5" width={body} height="9" fill={C.blush} stroke={C.ink} strokeWidth="2.5" />
-      <path d={`M${body} -4.5 L${PENCIL.length} 0 L${body} 4.5 Z`} fill={C.cream} stroke={C.ink} strokeWidth="2.5" strokeLinejoin="round" />
-      <path d={`M${PENCIL.length - 4.5} -1.6 L${PENCIL.length} 0 L${PENCIL.length - 4.5} 1.6 Z`} fill={C.ink} />
+      <rect data-part="pencilBody" x="0" y="-4.5" width={half + 1} height="9" fill={C.blush} stroke={C.ink} strokeWidth="2.5" />
+      {/* The splintered end left on the stub — shown once the front half has snapped off. */}
+      <path
+        data-part="pencilSplinter"
+        d={`M${half} -4.5 L${half + 4} -2.6 L${half + 1.5} -0.8 L${half + 5} 1.2 L${half + 1} 2.6 L${half} 4.5`}
+        fill={C.cream}
+        stroke={C.ink}
+        strokeWidth="2"
+        strokeLinejoin="round"
+        style={{ opacity: 0 }}
+      />
+      <g data-part="pencilTip">
+        {/* Outlined top and bottom only, so the two halves join without a seam. */}
+        <rect data-part="pencilFront" x={half} y="-4.5" width={body - half} height="9" fill={C.blush} />
+        <path d={`M${half} -4.5 H${body} M${half} 4.5 H${body}`} stroke={C.ink} strokeWidth="2.5" />
+        <path d={`M${body} -4.5 L${PENCIL.length} 0 L${body} 4.5 Z`} fill={C.cream} stroke={C.ink} strokeWidth="2.5" strokeLinejoin="round" />
+        <path d={`M${PENCIL.length - 4.5} -1.6 L${PENCIL.length} 0 L${PENCIL.length - 4.5} 1.6 Z`} fill={C.ink} />
+      </g>
     </HeldTool>
   );
 }
@@ -477,17 +510,118 @@ function paperQuad(u0: number, u1: number, v0: number, v1: number) {
   return `M${corners.map((c) => `${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" L")} Z`;
 }
 
+/**
+ * An eye, seen from the side: the pupil toward the front. The lid rests
+ * just above the eye, out of sight, and only drops into view to blink.
+ */
+function SideEye({ cx, cy, r, clipId }: { cx: number; cy: number; r: number; clipId: string }) {
+  const edge = cy - r - 6;
+  return (
+    <g>
+      <clipPath id={clipId}>
+        <circle cx={cx} cy={cy} r={r} />
+      </clipPath>
+      <circle cx={cx} cy={cy} r={r} fill={C.cream} />
+      <g data-part="sidePupil">
+        <circle cx={cx + r * 0.32} cy={cy + r * 0.14} r={r * 0.56} fill={C.ink} />
+        <circle cx={cx + r * 0.5} cy={cy - r * 0.1} r={r * 0.17} fill={C.cream} />
+      </g>
+      <g clipPath={`url(#${clipId})`}>
+        <g data-part="sideLid">
+          <path d={`M${cx - r - 6} ${edge - SIDE_BLINK} H${cx + r + 6} V${edge} H${cx - r - 6} Z`} fill={C.coral} />
+          <path d={`M${cx + r + 6} ${edge} H${cx - r - 6}`} fill="none" stroke={C.ink} strokeWidth="5" strokeLinecap="round" />
+        </g>
+      </g>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.ink} strokeWidth="5" />
+    </g>
+  );
+}
+
+/** A stalk, ink under coral, as in the front view. */
+function SideStalk({ d }: { d: string }) {
+  return (
+    <>
+      <path d={d} fill="none" stroke={C.ink} strokeWidth="16" strokeLinecap="round" />
+      <path d={d} fill="none" stroke={C.coral} strokeWidth="8" strokeLinecap="round" />
+    </>
+  );
+}
+
+/**
+ * Moxie seen from the side, facing right (the 404 page's pacing): her claws
+ * clasped behind her back, crossed; the far stalk and legs set back; a
+ * worried mouth; a bead of sweat ready. Hidden until shown.
+ */
+function SideView({ idPrefix, shown }: { idPrefix: string; shown: boolean }) {
+  return (
+    <g data-part="side" style={{ opacity: shown ? 1 : 0 }}>
+      <g data-part="sideTurn">
+        {SIDE_LEGS.map((leg) => (
+          <rect
+            key={leg.x}
+            data-part="sideLeg"
+            x={leg.x}
+            y={leg.y}
+            width="20"
+            height={leg.height}
+            rx="10"
+            fill={leg.far ? C.coralShade : C.coral}
+            stroke={C.ink}
+            strokeWidth="4"
+          />
+        ))}
+        <g data-part="sideBody">
+          {/* Claws clasped behind her back, crossed. The far arm goes back behind her… */}
+          <path d="M268 318 L238 312" fill="none" stroke={C.ink} strokeWidth="15" strokeLinecap="round" />
+          <path d="M268 318 L238 312" fill="none" stroke={C.coral} strokeWidth="8" strokeLinecap="round" />
+          <g transform="translate(238 312) rotate(-138) scale(0.9) translate(-404 -325)">
+            <path d={SMALL_PINCER} fill={C.coral} stroke={C.ink} strokeWidth="4.5" strokeLinejoin="round" />
+          </g>
+          {/* (The far eye, mostly hidden behind the near one.) */}
+          <SideStalk d="M306 278 Q 314 232 324 198" />
+          <SideEye cx={330} cy={168} r={31} clipId={`${idPrefix}-side-far`} />
+          <ellipse cx="305" cy="322" rx="74" ry="54" fill={C.coral} stroke={C.ink} strokeWidth="5" />
+          <path d="M258 352 Q 300 372 348 356" fill="none" stroke={C.coralShade} strokeWidth="8" strokeLinecap="round" opacity="0.6" />
+          <ellipse cx="344" cy="324" rx="11" ry="7" fill={`url(#${idPrefix}-blush)`} />
+          {/* A small, worried mouth at the front. */}
+          <path d="M352 342 Q 359 335 367 341" fill="none" stroke={C.ink} strokeWidth="4.5" strokeLinecap="round" />
+          {/* …the near arm comes out of her side, toward us, and wraps round her back to the clasp. */}
+          <path d="M300 338 Q 268 356 238 352" fill="none" stroke={C.ink} strokeWidth="16" strokeLinecap="round" />
+          <path d="M300 338 Q 268 356 238 352" fill="none" stroke={C.coral} strokeWidth="9" strokeLinecap="round" />
+          <g transform="translate(236 352) rotate(-48) scale(0.5) translate(-215 -297)">
+            <path d={BIG_PINCER} fill={C.coral} stroke={C.ink} strokeWidth="9" strokeLinejoin="round" />
+          </g>
+          <g transform="translate(262 282) rotate(-30)">
+            <g data-part="sideCrown" style={{ opacity: 0 }}>
+              <CrownShape />
+            </g>
+          </g>
+          <SideStalk d="M328 280 Q 338 236 344 212" />
+          <SideEye cx={348} cy={180} r={36} clipId={`${idPrefix}-side-near`} />
+          <g transform="translate(388 148)">
+            <g data-part="sideSweat" style={{ opacity: 0 }}>
+              <path d={SWEAT} fill="#9CC9F5" stroke={C.ink} strokeWidth="2.2" strokeLinejoin="round" />
+            </g>
+          </g>
+        </g>
+      </g>
+    </g>
+  );
+}
+
 export interface MoxieArtProps {
   /** Unique per instance — used to scope the eyelid clip-path ids. */
   idPrefix: string;
   title?: string;
   decorative?: boolean;
   showShadow?: boolean;
+  /** Starts out seen from the side (the 404 page), so her front view never flashes up before the animation runs. */
+  sideView?: boolean;
   className?: string;
 }
 
 export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function MoxieArt(
-  { idPrefix, title = "Moxie the hermit crab", decorative = false, showShadow = true, className },
+  { idPrefix, title = "Moxie the hermit crab", decorative = false, showShadow = true, sideView = false, className },
   ref,
 ) {
   return (
@@ -515,7 +649,7 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
 
       {/* Only the tickle giggle moves this, so it can shake her without touching what she's doing. */}
       <g data-part="jiggle">
-      <g data-part="root">
+      <g data-part="root" style={sideView ? { opacity: 0 } : undefined}>
         <g data-part="legs" fill={C.coral} stroke={C.ink} strokeWidth="4">
           <rect data-part="leg" x="248" y="345" width="22" height="42" rx="11" />
           <rect data-part="leg" x="292" y="350" width="22" height="40" rx="11" />
@@ -527,7 +661,7 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
           <path d="M368 328 Q 392 330 404 318" fill="none" stroke={C.coral} strokeWidth="10" strokeLinecap="round" />
           <g data-part="smallPincer">
             <path
-              d="M404 325 C392 322 386 303 395 292 C398 287 404 288 405 294 L408 305 L412 294 C415 286 425 288 426 297 C428 312 418 327 404 325 Z"
+              d={SMALL_PINCER}
               fill={C.coral}
               stroke={C.ink}
               strokeWidth="4"
@@ -644,13 +778,13 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
         {/* In front of the stalks (it is the nearer layer), so a claw reaching across her
             body passes over them — and over her face. */}
         <g data-part="bigClaw">
-          <path d="M240 312 Q 222 300 212 288" fill="none" stroke={C.ink} strokeWidth="24" strokeLinecap="round" />
-          <path d="M240 312 Q 222 300 212 288" fill="none" stroke={C.coral} strokeWidth="15" strokeLinecap="round" />
+          <path data-part="bigArm" d={armPath(BIG_ARM.elbow, BIG_ARM.wrist)} fill="none" stroke={C.ink} strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" />
+          <path data-part="bigArm" d={armPath(BIG_ARM.elbow, BIG_ARM.wrist)} fill="none" stroke={C.coral} strokeWidth="15" strokeLinecap="round" strokeLinejoin="round" />
           <g data-part="bigPincer">
             <PdfFile />
             <Coin />
             <path
-              d="M215 297 C165 302 143 257 158 214 C163 198 180 198 184 214 L194 246 L200 213 C205 192 232 196 234 224 C238 266 232 292 215 297 Z"
+              d={BIG_PINCER}
               fill={C.coral}
               stroke={C.ink}
               strokeWidth="5"
@@ -665,6 +799,9 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
         </g>
 
       </g>
+
+      {/* Seen from the side (pacing, on the 404 page): hidden until shown in place of her front view. */}
+      <SideView idPrefix={idPrefix} shown={sideView} />
       </g>
 
       {/* In front of her, lying on the ground (not part of her, so it stays put while she moves). */}
@@ -672,6 +809,11 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
 
       {/* Effects — positioned by a static outer group, animated on the inner one. */}
       <g aria-hidden="true">
+        <g transform={`translate(${CROWN_FLOAT.x} ${CROWN_FLOAT.y}) scale(${CROWN_FLOAT.scale})`}>
+          <g data-part="crownFloat" style={{ opacity: 0 }}>
+            <CrownShape />
+          </g>
+        </g>
         {Array.from({ length: CONFETTI_COUNT }, (_, i) => (
           <g key={`confetti-${i}`} transform={`translate(${CONFETTI_ORIGIN.x} ${CONFETTI_ORIGIN.y})`}>
             <g data-part="confetti" style={{ opacity: 0 }}>
