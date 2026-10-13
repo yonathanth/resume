@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, Crown, X, Check } from "lucide-react";
 import { useStartProCheckout, useSubscriptionStatus } from "@/hooks/use-subscription";
-import type { CheckoutProvider } from "@/lib/api";
+import type { SubscriptionPlan } from "@/lib/api";
 
 interface ProUpgradeModalProps {
   isOpen: boolean;
@@ -16,23 +17,30 @@ interface ProUpgradeModalProps {
 // kept to real gated features, nothing invented.
 const PRO_FEATURES = ["Unlimited AI-tailored CV generations", "Reusable, editable career profiles"];
 
+const PLAN_OPTIONS: { plan: SubscriptionPlan; label: string; price: string; popular?: boolean }[] = [
+  { plan: "weekly", label: "Weekly", price: "$4.99" },
+  { plan: "monthly", label: "Monthly", price: "$9.99", popular: true },
+  { plan: "quarterly", label: "3 Months", price: "$24.99" },
+];
+
 // The paywall shown once a free user's one free use of a dashboard tab
 // (Create, Tailor or Improve) is already spent (backend rejects with
 // PRO_REQUIRED — see use-pro-gate.ts) or when they click an "Upgrade" entry
-// point directly. Same dialog shell as ConfirmDialog, but
-// using the app's actual Pro visual identity (the peach Crown badge + accent
-// gradient used in the sidebar/CareerProfilesView/UpgradeView) instead of
-// the generic amber that had drifted in here. Offers both payment providers:
-// Polar (real $5/month recurring subscription) and Chapa (local-market
-// alternative — no auto-renewal, so it sells a fixed 1-month period for 80
-// ETB per payment instead).
+// point directly. Same dialog shell as ConfirmDialog, but using the app's
+// actual Pro visual identity (the peach Crown badge + accent gradient used
+// in the sidebar/CareerProfilesView/UpgradeView). Offers a Polar plan picker
+// (weekly/monthly/3-month — each its own Polar product) plus Chapa (local-
+// market alternative — no auto-renewal, so it sells a fixed 1-month period
+// for 80 ETB per payment instead).
 export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProps) {
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("monthly");
   const checkout = useStartProCheckout();
   const { data: subscription } = useSubscriptionStatus();
 
   if (!isOpen) return null;
 
-  const startCheckout = (provider: CheckoutProvider) => checkout.mutate(provider);
+  const isPendingFor = (provider: "polar" | "chapa", plan?: SubscriptionPlan) =>
+    checkout.isPending && checkout.variables?.provider === provider && (!plan || checkout.variables.plan === plan);
 
   return (
     <div className="fixed inset-0 z-[80] text-center bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
@@ -78,36 +86,49 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
           </p>
         )}
 
+        {/* Plan picker — Polar's three billing cycles */}
+        <div className="grid grid-cols-3 gap-1.5 mb-3">
+          {PLAN_OPTIONS.map((opt) => (
+            <button
+              key={opt.plan}
+              type="button"
+              onClick={() => setSelectedPlan(opt.plan)}
+              disabled={checkout.isPending}
+              className={`relative rounded-xl border py-2.5 px-1.5 text-center transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                selectedPlan === opt.plan
+                  ? "border-accent bg-accent-soft/60"
+                  : "border-neutral-200 bg-white hover:border-neutral-300"
+              }`}
+            >
+              {opt.popular && (
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  Popular
+                </span>
+              )}
+              <div className="text-[11px] font-semibold text-neutral-800">{opt.label}</div>
+              <div className="text-xs font-bold text-neutral-950">{opt.price}</div>
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-2">
           <button
             type="button"
-            onClick={() => startCheckout("polar")}
+            onClick={() => checkout.mutate({ provider: "polar", plan: selectedPlan })}
             disabled={checkout.isPending}
             className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold hover:bg-accent-strong transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_8px_20px_-8px_rgba(255,94,31,0.6)] disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {checkout.isPending && checkout.variables === "polar" && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            )}
-            <span>
-              {checkout.isPending && checkout.variables === "polar"
-                ? "Redirecting..."
-                : "Pay with Polar · $5/month"}
-            </span>
+            {isPendingFor("polar", selectedPlan) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            <span>{isPendingFor("polar", selectedPlan) ? "Redirecting..." : "Pay with Polar"}</span>
           </button>
           <button
             type="button"
-            onClick={() => startCheckout("chapa")}
+            onClick={() => checkout.mutate({ provider: "chapa" })}
             disabled={checkout.isPending}
             className="w-full py-3 rounded-xl border border-neutral-200 bg-white text-neutral-800 text-sm font-bold hover:border-accent-border hover:bg-neutral-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
           >
-            {checkout.isPending && checkout.variables === "chapa" && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            )}
-            <span>
-              {checkout.isPending && checkout.variables === "chapa"
-                ? "Redirecting..."
-                : "Pay with Chapa (local) · 80 ETB / month"}
-            </span>
+            {isPendingFor("chapa") && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            <span>{isPendingFor("chapa") ? "Redirecting..." : "Pay with Chapa (local) · 80 ETB / month"}</span>
           </button>
         </div>
 

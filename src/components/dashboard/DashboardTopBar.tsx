@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Compass, Crown, HelpCircle, Loader2, LogOut, Menu, Settings } from "lucide-react";
 import { useLogout } from "@/hooks/use-auth";
 import { Moxie, type MoxieHandle } from "@/components/moxie";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 
 export interface TopBarNavItem {
   href: string;
@@ -74,6 +75,8 @@ export function DashboardTopBar({ title, onStartTour, mobileNavItems, activeHref
           Upgrade
         </Link>
       )}
+
+      <NotificationBell />
 
       <div ref={menuRef} className="relative" data-tour="menu">
         <button

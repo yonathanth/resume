@@ -11,6 +11,7 @@ import { OnboardingModal } from "@/components/dashboard/OnboardingModal";
 import { AuthGuard } from "@/components/AuthGuard";
 import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
 import { QuickTour } from "@/components/dashboard/QuickTour";
+import { PlatformBanner } from "@/components/dashboard/PlatformBanner";
 
 // The sidebar's pages, listed in the top bar's menu on small screens.
 const MOBILE_NAV_ITEMS: { href: string; label: string }[] = [
@@ -121,6 +122,7 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
           activeHref={TAB_HREFS[activeTab]}
           isPro={isPro}
         />
+        <PlatformBanner />
         {/* Main content scrolls on its own; the sidebar and top bar stay put. */}
         <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
       </div>

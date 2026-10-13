@@ -5,19 +5,19 @@ import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Reveal } from "@/components/Reveal";
-import { ArrowRight, Check, ChevronDown } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
+import { useHasMounted } from "@/hooks/use-has-mounted";
+import { getAccessToken, type SubscriptionPlan } from "@/lib/api";
+import { useStartCreditCheckout, useStartProCheckout } from "@/hooks/use-subscription";
 
 // Free accounts get one free AI generation per dashboard tab — Create,
 // Tailor, Improve — one-time-only, not a shared pool (see
 // entitlement.service.ts's FlowType). Pro is unlimited.
 //
-// The Weekly/Monthly/3-months cards below are a display-only pricing
-// preview — every "Get Pro" CTA still routes to /signup and the backend
-// still only knows a single Pro product ($5/month recurring through Polar,
-// or a fixed 1-month period for 80 ETB through Chapa, no auto-renewal; see
-// ProUpgradeModal and services/payment/products.ts). Wire real per-cycle
-// checkout before relying on these displayed prices being what users
-// actually get charged.
+// A signed-in visitor clicking "Get Pro"/a pay-per-use price starts real
+// checkout for that exact plan/product directly from this page (see
+// services/polar/plans.ts on the backend); a signed-out visitor goes to
+// /signup first, same as before — there's no anonymous checkout.
 
 const FREE_FEATURES = [
   "1 free use each of Create, Tailor and Improve",
@@ -36,8 +36,17 @@ const PRO_FEATURES = [
 ];
 
 // Billing-cycle options for Pro — same feature set, different commitment
-// lengths. "Monthly" mirrors what used to be the single Pro card.
-const SUBSCRIPTION_PLANS = [
+// lengths. "Monthly" mirrors what used to be the single Pro card. `id` is
+// this backend's SubscriptionPlan key (see services/polar/plans.ts) — each
+// cycle is a distinct Polar product.
+const SUBSCRIPTION_PLANS: {
+  id: SubscriptionPlan;
+  name: string;
+  price: string;
+  period: string;
+  blurb: string;
+  popular: boolean;
+}[] = [
   {
     id: "weekly",
     name: "Weekly",
@@ -55,7 +64,7 @@ const SUBSCRIPTION_PLANS = [
     popular: true,
   },
   {
-    id: "3-months",
+    id: "quarterly",
     name: "3 Months",
     price: "$24.99",
     period: "/ 3 months",
@@ -118,6 +127,12 @@ function FeatureList({ items, strong }: { items: string[]; strong?: boolean }) {
 
 export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const hasMounted = useHasMounted();
+  // hasMounted guards this (not a direct typeof window check) so the server
+  // render and the client's first hydration pass agree — see use-has-mounted.ts.
+  const isSignedIn = hasMounted && !!getAccessToken();
+  const checkout = useStartProCheckout();
+  const creditCheckout = useStartCreditCheckout();
 
   return (
     <div className="relative flex min-h-screen flex-col justify-between overflow-x-hidden bg-[#0a0a0a] font-sans text-white selection:bg-accent selection:text-white">
@@ -160,10 +175,45 @@ export default function PricingPage() {
               <p className="text-[12.5px] font-semibold text-neutral-300">
                 Need just one or two? Pay as you go:
               </p>
-              <ul className="mt-2 space-y-1 text-[13px] text-neutral-400">
-                <li>$1.99 per tailoring or enhancement</li>
-                <li>$3.99 per new CV</li>
+              <ul className="mt-2 space-y-1.5 text-[13px] text-neutral-400">
+                <li className="flex items-center justify-between gap-2">
+                  <span>$1.99 per tailoring or enhancement</span>
+                  {isSignedIn && (
+                    <button
+                      type="button"
+                      onClick={() => creditCheckout.mutate("tailoring")}
+                      disabled={creditCheckout.isPending}
+                      className="shrink-0 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] font-semibold text-neutral-200 transition-colors hover:border-neutral-500 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {creditCheckout.isPending && creditCheckout.variables === "tailoring" ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Buy"
+                      )}
+                    </button>
+                  )}
+                </li>
+                <li className="flex items-center justify-between gap-2">
+                  <span>$3.99 per new CV</span>
+                  {isSignedIn && (
+                    <button
+                      type="button"
+                      onClick={() => creditCheckout.mutate("new_cv")}
+                      disabled={creditCheckout.isPending}
+                      className="shrink-0 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] font-semibold text-neutral-200 transition-colors hover:border-neutral-500 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+                    >
+                      {creditCheckout.isPending && creditCheckout.variables === "new_cv" ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        "Buy"
+                      )}
+                    </button>
+                  )}
+                </li>
               </ul>
+              {creditCheckout.isError && (
+                <p className="mt-2 text-[12px] font-medium text-rose-400">Could not start checkout. Please try again.</p>
+              )}
             </div>
 
             <div className="mt-8 border-t border-neutral-800 pt-7">
@@ -195,20 +245,46 @@ export default function PricingPage() {
                   <span className="text-5xl font-bold tracking-tight text-white">{plan.price}</span>
                   <span className="text-[14px] text-neutral-500">{plan.period}</span>
                 </div>
-                <p className="mt-1.5 text-[13px] text-neutral-500">Billed in Ethiopia via Chapa, too</p>
-                <Link
-                  href="/signup"
-                  className={`mt-5 flex items-center justify-center gap-2 rounded-full px-8 py-4 text-[15.5px] font-semibold tracking-[-0.01em] text-white transition-colors active:scale-[0.98] ${
-                    plan.popular
-                      ? "group bg-accent hover:bg-accent-strong"
-                      : "border border-neutral-700 bg-[#1e1e21] hover:border-neutral-600 hover:bg-neutral-800"
-                  }`}
-                >
-                  Get Pro
-                  {plan.popular && (
-                    <ArrowRight className="h-4 w-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
-                  )}
-                </Link>
+                {isSignedIn ? (
+                  <button
+                    type="button"
+                    onClick={() => checkout.mutate({ provider: "polar", plan: plan.id })}
+                    disabled={checkout.isPending}
+                    className={`group mt-5 flex items-center justify-center gap-2 rounded-full px-8 py-4 text-[15.5px] font-semibold tracking-[-0.01em] text-white transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer ${
+                      plan.popular
+                        ? "bg-accent hover:bg-accent-strong"
+                        : "border border-neutral-700 bg-[#1e1e21] hover:border-neutral-600 hover:bg-neutral-800"
+                    }`}
+                  >
+                    {checkout.isPending && checkout.variables?.plan === plan.id ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Redirecting...
+                      </>
+                    ) : (
+                      <>
+                        Get Pro
+                        {plan.popular && (
+                          <ArrowRight className="h-4 w-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
+                        )}
+                      </>
+                    )}
+                  </button>
+                ) : (
+                  <Link
+                    href="/signup"
+                    className={`mt-5 flex items-center justify-center gap-2 rounded-full px-8 py-4 text-[15.5px] font-semibold tracking-[-0.01em] text-white transition-colors active:scale-[0.98] ${
+                      plan.popular
+                        ? "group bg-accent hover:bg-accent-strong"
+                        : "border border-neutral-700 bg-[#1e1e21] hover:border-neutral-600 hover:bg-neutral-800"
+                    }`}
+                  >
+                    Get Pro
+                    {plan.popular && (
+                      <ArrowRight className="h-4 w-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
+                    )}
+                  </Link>
+                )}
                 <div className="mt-8 border-t border-neutral-800 pt-7">
                   <FeatureList items={PRO_FEATURES} strong={plan.popular} />
                 </div>
@@ -216,6 +292,40 @@ export default function PricingPage() {
             </Reveal>
           ))}
         </div>
+
+        {checkout.isError && (
+          <p className="mx-auto mt-6 max-w-md text-center text-sm font-medium text-rose-400">
+            Could not start checkout. Please try again.
+          </p>
+        )}
+
+        {/* Chapa — local-market alternative, one fixed product (not tied to
+            any of the cycles above, so it gets its own single line rather
+            than appearing under every card). */}
+        <Reveal delay={500}>
+          <p className="mx-auto mt-8 max-w-xl text-center text-[13.5px] text-neutral-500">
+            In Ethiopia?{" "}
+            {isSignedIn ? (
+              <button
+                type="button"
+                onClick={() => checkout.mutate({ provider: "chapa" })}
+                disabled={checkout.isPending}
+                className="font-semibold text-accent-light underline decoration-accent/40 underline-offset-2 transition-colors hover:text-accent disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {checkout.isPending && checkout.variables?.provider === "chapa"
+                  ? "Redirecting..."
+                  : "Pay with Chapa — 80 ETB for one month"}
+              </button>
+            ) : (
+              <Link
+                href="/signup"
+                className="font-semibold text-accent-light underline decoration-accent/40 underline-offset-2 transition-colors hover:text-accent"
+              >
+                Pay with Chapa — 80 ETB for one month
+              </Link>
+            )}
+          </p>
+        </Reveal>
 
         {/* FAQ */}
         <Reveal className="mx-auto mt-24 max-w-3xl sm:mt-32">

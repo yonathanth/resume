@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Crown, FilePlus, FileText, History, Loader2, RotateCcw, Trash2, UserCheck } from "lucide-react";
-import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO } from "@/lib/api";
+import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO, canUseCareerProfiles } from "@/lib/api";
 import { useDeleteProfile, useProfile, useRevertProfileChange, useUpdateProfile } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -40,7 +40,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
   const router = useRouter();
   const { handleCreateCvFromProfile } = useDashboard();
   const { data: profile, isLoading, error, refetch } = useProfile(profileId);
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
   const update = useUpdateProfile(profileId);
   const revert = useRevertProfileChange(profileId);
   const remove = useDeleteProfile();
@@ -60,7 +60,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
 
   const savedKey = useMemo(() => (profile ? draftKey(toDraft(profile)) : ""), [profile]);
   const isDirty = Boolean(draft && profile && draftKey(draft) !== savedKey);
-  const readOnly = !isPro;
+  const readOnly = !canUseProfiles;
 
   // Take the server's copy on first load and whenever a newer version
   // arrives — but never overwrite unsaved edits because of a background
@@ -191,7 +191,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
             type="button"
             disabled={isDirty}
             title={isDirty ? "Save your changes first" : undefined}
-            onClick={() => (isPro ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
+            onClick={() => (canUseProfiles ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <FilePlus className="w-4 h-4 text-accent-light" /> Create a CV

@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Crown, FilePlus, Loader2, Plus, UserCheck, X } from "lucide-react";
-import { ApiCareerProfile, ApiError } from "@/lib/api";
+import { ApiCareerProfile, ApiError, canUseCareerProfiles } from "@/lib/api";
 import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ICON_TONES, OptionTone } from "./create-flow/OptionCard";
@@ -35,7 +35,7 @@ function profileFacts(profile: ApiCareerProfile): string[] {
 export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesViewProps) {
   const router = useRouter();
   const { data: profiles = [], isLoading } = useProfiles();
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
   const createProfile = useCreateProfile();
 
   const [isNewOpen, setIsNewOpen] = useState(false);
@@ -47,7 +47,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
   const [existing, setExisting] = useState<{ id: string; title: string } | null>(null);
 
   const openNew = () => {
-    if (!isPro) {
+    if (!canUseProfiles) {
       setPaywallOpen(true);
       return;
     }
@@ -101,12 +101,12 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
           onClick={openNew}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 transition-colors self-start sm:self-auto cursor-pointer"
         >
-          {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
+          {canUseProfiles ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
           New profile
         </button>
       </div>
 
-      {!isPro && profiles.length > 0 && (
+      {!canUseProfiles && profiles.length > 0 && (
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
           <p className="text-sm text-amber-900">Your profiles are read-only on the free plan. Upgrade to edit them and build CVs from them.</p>
           <button type="button" onClick={() => setPaywallOpen(true)} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-neutral-950 text-white text-xs font-semibold cursor-pointer">
@@ -126,7 +126,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
           </span>
           <h2 className="text-base font-bold text-neutral-950">No profiles yet</h2>
           <p className="mt-1 text-sm text-neutral-500 max-w-md mx-auto leading-relaxed">
-            {isPro
+            {canUseProfiles
               ? "Create one for a role you're targeting, or save the next CV you make to a profile."
               : "Career profiles are part of FitCV Pro. Keep everything for a role in one place and build tailored CVs from it."}
           </p>
@@ -135,8 +135,8 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
             onClick={openNew}
             className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 cursor-pointer"
           >
-            {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
-            {isPro ? "Create a profile" : "Upgrade to Pro"}
+            {canUseProfiles ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
+            {canUseProfiles ? "Create a profile" : "Upgrade to Pro"}
           </button>
         </div>
       ) : (
@@ -176,7 +176,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
                   </span>
                   <button
                     type="button"
-                    onClick={() => (isPro ? onCreateCvFromProfile?.(profile.id) : setPaywallOpen(true))}
+                    onClick={() => (canUseProfiles ? onCreateCvFromProfile?.(profile.id) : setPaywallOpen(true))}
                     className="relative z-10 inline-flex items-center gap-1.5 text-xs font-semibold text-accent-strong hover:text-accent cursor-pointer"
                   >
                     <FilePlus className="w-3.5 h-3.5" />
@@ -188,7 +188,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
             );
           })}
 
-          {isPro && (
+          {canUseProfiles && (
             <button
               type="button"
               onClick={openNew}

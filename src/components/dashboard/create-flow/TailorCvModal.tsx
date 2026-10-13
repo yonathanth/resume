@@ -32,7 +32,7 @@ import {
   getQuestionFormState,
   useQuestionPages,
 } from "./ClarifyingQuestionsForm";
-import { ClarificationQuestion, CVContentDTO, updateCvContent } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, updateCvContent } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -141,7 +141,7 @@ export function TailorCvModal({
   const { data: careerProfiles = [] } = useProfiles();
   // The profile this CV is being tailored from, if any — facts go back to it.
   const [sourceProfileId, setSourceProfileId] = useState<string | null>(null);
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
 
   if (!isOpen) return null;
 
@@ -478,12 +478,12 @@ export function TailorCvModal({
                 tone="violet"
                 title="Start from a career profile"
                 description={
-                  isPro
+                  canUseProfiles
                     ? "Tailor everything a role profile holds to this job."
                     : "A FitCV Pro feature: build from your saved role profiles."
                 }
                 onClick={() => {
-                  if (!isPro) {
+                  if (!canUseProfiles) {
                     proGate.openPaywall();
                     return;
                   }
@@ -872,7 +872,7 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 5: READY → KEEP A PROFILE UP TO DATE ================= */}
-        {step === "select-template" && isPro && cvDocumentId && (
+        {step === "select-template" && canUseProfiles && cvDocumentId && (
           <ProfileSyncStep
             key={cvDocumentId}
             cvDocumentId={cvDocumentId}
@@ -898,7 +898,7 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 5: READY (free plan) ================= */}
-        {step === "select-template" && !(isPro && cvDocumentId) && (
+        {step === "select-template" && !(canUseProfiles && cvDocumentId) && (
           <div>
             <div className="text-center mb-5">
               <h2 className="text-xl font-bold tracking-tight text-neutral-950">Your tailored CV is ready</h2>

@@ -31,7 +31,7 @@ import {
   splitClarificationAnswers,
 } from "@/hooks/use-cv-generation";
 import { applyCvContent, createBlankCv } from "@/lib/cv-mapper";
-import { ApiError, ClarificationQuestion, CVContentDTO } from "@/lib/api";
+import { ApiError, ClarificationQuestion, CVContentDTO, canUseCareerProfiles } from "@/lib/api";
 import {
   ClarifyingQuestionsForm,
   getQuestionFormState,
@@ -106,7 +106,7 @@ export function CreateCvModal({
   // Career profiles are Pro-only: free users see the option with a Pro
   // badge, and the end-of-flow "save to a profile" step is skipped for them.
   const { data: availableProfiles = [] } = useProfiles();
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
 
   const [selectedProfileId, setSelectedProfileId] = useState<string>("");
   // True when this CV is being generated from a profile — it's already
@@ -413,7 +413,7 @@ export function CreateCvModal({
   // ProfileSyncStep). Skipped for free users and for a CV made from a profile
   // with nothing new to add — unless there are job gaps worth reading first.
   const goToProfileStep = (content: CVContentDTO | undefined, keepStep = false, docId: string | null = cvDocumentId) => {
-    const nothingToOffer = !isPro || !docId || (fromProfile && !hasNewDetails);
+    const nothingToOffer = !canUseProfiles || !docId || (fromProfile && !hasNewDetails);
     if (nothingToOffer && !keepStep) {
       handleFinish(content, docId);
       return;
@@ -589,12 +589,12 @@ export function CreateCvModal({
                 tone="violet"
                 title="Start from career profile"
                 description={
-                  isPro
+                  canUseProfiles
                     ? "Build from the experience and skills saved in one of your role profiles."
                     : "A FitCV Pro feature: build from your saved role profiles."
                 }
                 onClick={() => {
-                  if (!isPro) {
+                  if (!canUseProfiles) {
                     proGate.openPaywall();
                     return;
                   }
@@ -1150,7 +1150,7 @@ export function CreateCvModal({
 
         {/* ================= STEP 4: KEEP A CAREER PROFILE UP TO DATE ================= */}
         {step === "save-profile-prompt" &&
-          (isPro && cvDocumentId ? (
+          (canUseProfiles && cvDocumentId ? (
             <ProfileSyncStep
               key={cvDocumentId}
               cvDocumentId={cvDocumentId}

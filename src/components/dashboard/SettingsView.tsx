@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState, useSyncExternalStore } from "react";
+import React, { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell } from "lucide-react";
 import {
   useSubscriptionStatus,
-  useStartProCheckout,
   useCancelSubscription,
   useResumeSubscription,
 } from "@/hooks/use-subscription";
@@ -17,7 +17,23 @@ import {
   useChangePassword,
   useDeleteAccount,
 } from "@/hooks/use-auth";
-import { ApiError, ApiUser, ProfileAutoSync } from "@/lib/api";
+import {
+  ApiError,
+  ApiUser,
+  ProfileAutoSync,
+  SubscriptionPlan,
+  canUseCareerProfiles,
+  getNotificationPreferences,
+  updateNotificationPreferences,
+} from "@/lib/api";
+import {
+  PushPermissionDeniedError,
+  currentPushSubscription,
+  disablePush,
+  enablePush,
+  pushSupport,
+  type PushSupport,
+} from "@/lib/push";
 import { CancelPlanModal } from "@/components/dashboard/CancelPlanModal";
 import { ICON_TONES, OptionTone } from "@/components/dashboard/create-flow/OptionCard";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
@@ -31,10 +47,18 @@ const PRIMARY_BUTTON =
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-800 hover:border-neutral-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 
+const PLAN_LABEL: Record<SubscriptionPlan, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "3 Months" };
+const PLAN_PRICE_LABEL: Record<SubscriptionPlan, string> = {
+  weekly: "$4.99/week",
+  monthly: "$9.99/month",
+  quarterly: "$24.99/3 months",
+};
+
 const SECTIONS = [
   { id: "profile", label: "Profile" },
   { id: "security", label: "Sign-in & security" },
   { id: "plan", label: "Plan & usage" },
+  { id: "notifications", label: "Notifications" },
   { id: "career-profiles", label: "Career profiles" },
   { id: "danger", label: "Delete account" },
 ] as const;
@@ -460,7 +484,6 @@ function SecuritySection({ me }: { me: ApiUser }) {
 
 function PlanSection() {
   const { data: subscription, isLoading } = useSubscriptionStatus();
-  const checkout = useStartProCheckout();
   const cancelSubscription = useCancelSubscription();
   const resumeSubscription = useResumeSubscription();
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -471,11 +494,14 @@ function PlanSection() {
   }
 
   const isChapa = subscription.subscriptionProvider === "CHAPA";
-  const freeTabs: { key: "freeCreateUsed" | "freeTailorUsed" | "freeImproveUsed"; label: string }[] = [
-    { key: "freeCreateUsed", label: "Create" },
-    { key: "freeTailorUsed", label: "Tailor" },
-    { key: "freeImproveUsed", label: "Improve" },
+  // Pro given by the FitCV team rather than paid for — nothing to cancel or renew.
+  const isGrant = subscription.isPro && subscription.proSource === "grant";
+  const freeTabs: { key: "freeCreateUsed" | "freeTailorUsed" | "freeImproveUsed"; flow: "create" | "tailor" | "improve"; label: string }[] = [
+    { key: "freeCreateUsed", flow: "create", label: "Create" },
+    { key: "freeTailorUsed", flow: "tailor", label: "Tailor" },
+    { key: "freeImproveUsed", flow: "improve", label: "Improve" },
   ];
+  const freeLimitsAreDefault = freeTabs.every(({ flow }) => (subscription.freeUses?.[flow]?.limit ?? 1) === 1);
 
   const handleConfirmCancel = async () => {
     setCancelError(null);
@@ -503,14 +529,18 @@ function PlanSection() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-lg font-bold text-neutral-950 tracking-tight">
-              {subscription.isPro ? "Pro" : subscription.isExpired ? "Pro (expired)" : "Free"}
+              {subscription.isPro
+                ? `Pro${subscription.plan ? ` (${PLAN_LABEL[subscription.plan]})` : ""}`
+                : subscription.isExpired
+                  ? "Pro (expired)"
+                  : "Free"}
             </span>
             {subscription.isPro && (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent text-white">
-                {subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active"}
+                {isGrant ? "Complimentary" : subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active"}
               </span>
             )}
-            {subscription.isPro && isChapa && (
+            {subscription.isPro && !isGrant && isChapa && (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-neutral-300 text-neutral-600">
                 via Chapa
               </span>
@@ -518,12 +548,16 @@ function PlanSection() {
           </div>
 
           <p className="mt-1 text-sm text-neutral-500 max-w-xl">
-            {subscription.isPro
+            {isGrant
+              ? `Pro access from the Resumate team${
+                  subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""
+                }. You aren't being charged for it.`
+              : subscription.isPro
               ? isChapa
                 ? `80 ETB for one month. Active until ${formatDate(subscription.currentPeriodEnd)}. Chapa doesn't auto-renew, so pay again after that to keep Pro.`
                 : subscription.cancelAtPeriodEnd
-                  ? `$5/month. Cancels on ${formatDate(subscription.currentPeriodEnd)}. You keep Pro until then.`
-                  : `$5/month. ${subscription.currentPeriodEnd ? `Renews on ${formatDate(subscription.currentPeriodEnd)}.` : ""}`
+                  ? `${PLAN_PRICE_LABEL[subscription.plan ?? "monthly"]}. Cancels on ${formatDate(subscription.currentPeriodEnd)}. You keep Pro until then.`
+                  : `${PLAN_PRICE_LABEL[subscription.plan ?? "monthly"]}. ${subscription.currentPeriodEnd ? `Renews on ${formatDate(subscription.currentPeriodEnd)}.` : ""}`
               : subscription.isExpired
                 ? "Your Pro plan has ended. Renew to get unlimited AI tailoring back."
                 : "Pro makes AI generations and tailoring unlimited."}
@@ -531,10 +565,11 @@ function PlanSection() {
 
           {!subscription.isPro && (
             <div className="mt-5 max-w-sm">
-              <div className="text-xs text-neutral-600 mb-1.5">Free tab usage — one use each</div>
+              <div className="text-xs text-neutral-600 mb-1.5">Free tab usage{freeLimitsAreDefault ? " — one use each" : ""}</div>
               <div className="flex gap-2">
-                {freeTabs.map(({ key, label }) => {
+                {freeTabs.map(({ key, flow, label }) => {
                   const used = subscription[key];
+                  const remaining = subscription.freeUses?.[flow]?.remaining;
                   return (
                     <span
                       key={key}
@@ -543,7 +578,9 @@ function PlanSection() {
                       }`}
                     >
                       {label}
-                      <span className="block text-[10px] font-normal">{used ? "Used" : "Available"}</span>
+                      <span className="block text-[10px] font-normal">
+                        {used ? "Used" : !freeLimitsAreDefault && typeof remaining === "number" ? `${remaining} left` : "Available"}
+                      </span>
                     </span>
                   );
                 })}
@@ -554,7 +591,8 @@ function PlanSection() {
 
         <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 md:w-60">
           {subscription.isPro ? (
-            !isChapa && (
+            !isChapa &&
+            !isGrant && (
               <button
                 type="button"
                 onClick={() => setShowCancelModal(true)}
@@ -568,35 +606,16 @@ function PlanSection() {
               </button>
             )
           ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => checkout.mutate("polar")}
-                disabled={checkout.isPending}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-strong transition-colors cursor-pointer disabled:opacity-60"
-              >
-                {checkout.isPending && checkout.variables === "polar" && <Loader2 className="w-4 h-4 animate-spin" />}
-                {checkout.isPending && checkout.variables === "polar"
-                  ? "Redirecting..."
-                  : `${subscription.isExpired ? "Renew" : "Upgrade"} · $5/mo`}
-              </button>
-              <button
-                type="button"
-                onClick={() => checkout.mutate("chapa")}
-                disabled={checkout.isPending}
-                className={SECONDARY_BUTTON}
-              >
-                {checkout.isPending && checkout.variables === "chapa" && <Loader2 className="w-4 h-4 animate-spin" />}
-                {checkout.isPending && checkout.variables === "chapa" ? "Redirecting..." : "Pay with Chapa · 80 ETB"}
-              </button>
-            </>
+            <Link
+              href="/dashboard/upgrade"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-strong transition-colors cursor-pointer"
+            >
+              {subscription.isExpired ? "Renew Pro" : "Upgrade to Pro"}
+            </Link>
           )}
           <Link href="/pricing" className="text-center text-xs font-semibold text-neutral-500 hover:text-neutral-900 py-1">
             Compare plans
           </Link>
-          {checkout.isError && (
-            <p className="text-xs text-red-600">{errorMessage(checkout.error, "Could not start checkout. Please try again.")}</p>
-          )}
         </div>
       </div>
 
@@ -738,7 +757,7 @@ const AUTO_SYNC_OPTIONS: { value: ProfileAutoSync; label: string; hint: string }
 function CareerProfilesSection({ me }: { me: ApiUser }) {
   const updateProfile = useUpdateProfile();
   const toast = useToast();
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const isPro = canUseCareerProfiles(useSubscriptionStatus().data);
   const [error, setError] = useState<string | null>(null);
 
   const choose = async (value: ProfileAutoSync) => {
@@ -799,6 +818,133 @@ function CareerProfilesSection({ me }: { me: ApiUser }) {
   );
 }
 
+/* ---------------- Notifications ---------------- */
+
+const PUSH_BLOCKED_MESSAGES: Record<Exclude<PushSupport, "supported">, string> = {
+  unsupported: "This browser doesn't support push notifications. You'll still see messages in the bell at the top of the dashboard.",
+  insecure: "Browser notifications need a secure (https) connection.",
+};
+
+function NotificationsSection() {
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const prefs = useQuery({ queryKey: ["notification-preferences"], queryFn: getNotificationPreferences });
+  // Settings only renders in the browser (behind AuthGuard), so these can be
+  // read straight away.
+  const [support] = useState<PushSupport>(() => pushSupport());
+  const [permission, setPermission] = useState<NotificationPermission | null>(() =>
+    support === "supported" ? Notification.permission : null
+  );
+  const [subscribedHere, setSubscribedHere] = useState(false);
+  const [busy, setBusy] = useState<"email" | "push" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (support !== "supported") return;
+    currentPushSubscription()
+      .then((sub) => setSubscribedHere(Boolean(sub)))
+      .catch(() => setSubscribedHere(false));
+  }, [support]);
+
+  const toggleEmail = async (enabled: boolean) => {
+    setBusy("email");
+    setError(null);
+    try {
+      await updateNotificationPreferences({ emailAnnouncements: enabled });
+      await queryClient.invalidateQueries({ queryKey: ["notification-preferences"] });
+      toast.success(enabled ? "You'll get product announcements by email" : "Unsubscribed from announcement emails");
+    } catch (err) {
+      setError(errorMessage(err, "Could not save your preference."));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const togglePush = async () => {
+    const publicKey = prefs.data?.push.publicKey;
+    setBusy("push");
+    setError(null);
+    try {
+      if (subscribedHere) {
+        await disablePush();
+        setSubscribedHere(false);
+        toast.success("Browser notifications turned off on this device");
+      } else {
+        if (!publicKey) throw new Error("Browser notifications aren't available right now.");
+        await enablePush(publicKey);
+        setSubscribedHere(true);
+        toast.success("Browser notifications turned on for this device");
+      }
+      setPermission(Notification.permission);
+      await queryClient.invalidateQueries({ queryKey: ["notification-preferences"] });
+    } catch (err) {
+      setPermission(typeof Notification !== "undefined" ? Notification.permission : null);
+      setError(err instanceof PushPermissionDeniedError || err instanceof Error ? err.message : "Could not change browser notifications.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (prefs.isLoading) return <div className="h-32 rounded-lg bg-neutral-100 animate-pulse" />;
+  if (prefs.isError || !prefs.data) return <StatusMessage error="Could not load your notification settings." />;
+
+  const pushAvailable = prefs.data.push.available;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-neutral-900">Product announcements by email</div>
+          <p className="mt-0.5 text-xs text-neutral-500 max-w-md">
+            New features and occasional news. Account, security and billing emails are always sent.
+          </p>
+        </div>
+        <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={prefs.data.emailAnnouncements}
+            disabled={busy !== null}
+            onChange={(e) => toggleEmail(e.target.checked)}
+            className="w-4 h-4 accent-neutral-900"
+          />
+          <span className="text-sm font-medium text-neutral-700">{prefs.data.emailAnnouncements ? "On" : "Off"}</span>
+        </label>
+      </div>
+
+      <div className="flex items-start justify-between gap-4 border-t border-neutral-200 pt-5">
+        <div>
+          <div className="text-sm font-semibold text-neutral-900">Browser notifications on this device</div>
+          <p className="mt-0.5 text-xs text-neutral-500 max-w-md">
+            {!pushAvailable
+              ? "Not available right now. Messages from the team still appear in the bell at the top of the dashboard."
+              : support !== "supported"
+                ? PUSH_BLOCKED_MESSAGES[support]
+                : permission === "denied"
+                  ? "Notifications are blocked for this site. Allow them in your browser's site settings, then try again."
+                  : "Get important updates even when Resumate isn't open. You can turn this off any time."}
+          </p>
+          {prefs.data.push.subscribedDevices > 0 && (
+            <p className="mt-1 text-xs text-neutral-400">
+              On for {prefs.data.push.subscribedDevices} device{prefs.data.push.subscribedDevices === 1 ? "" : "s"}.
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={togglePush}
+          disabled={busy !== null || !pushAvailable || support !== "supported" || (permission === "denied" && !subscribedHere)}
+          className={subscribedHere ? SECONDARY_BUTTON : PRIMARY_BUTTON}
+        >
+          {busy === "push" && <Loader2 className="w-4 h-4 animate-spin" />}
+          {subscribedHere ? "Turn off" : "Turn on"}
+        </button>
+      </div>
+
+      <StatusMessage error={error} />
+    </div>
+  );
+}
+
 /* ---------------- Page ---------------- */
 
 export function SettingsView() {
@@ -854,6 +1000,12 @@ export function SettingsView() {
           {active === "plan" && (
             <Section id="plan" icon={CreditCard} tone="violet" title="Plan & usage" description="Your subscription and free generations.">
               <PlanSection />
+            </Section>
+          )}
+
+          {active === "notifications" && (
+            <Section id="notifications" icon={Bell} tone="sky" title="Notifications" description="Announcement emails and browser notifications.">
+              <NotificationsSection />
             </Section>
           )}
 

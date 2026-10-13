@@ -4,10 +4,14 @@ import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelSubscription,
+  createCreditCheckout,
   createSubscriptionCheckout,
   getAccessToken,
   getSubscriptionStatus,
   resumeSubscription,
+  type CheckoutProvider,
+  type CreditProduct,
+  type SubscriptionPlan,
 } from "@/lib/api";
 import { useHasMounted } from "./use-has-mounted";
 import { saveLastChapaPaymentId } from "@/lib/payment-session";
@@ -44,19 +48,36 @@ export function useRefreshSubscriptionStatus() {
   );
 }
 
-// Starts a checkout with the chosen provider (Polar's $5/month recurring
-// subscription, or Chapa's 80 ETB / 1-month one-time local alternative) and
+export interface StartProCheckoutInput {
+  provider: CheckoutProvider;
+  /** Polar only — which tier (weekly $4.99 / monthly $9.99 / quarterly $24.99). Ignored for Chapa. */
+  plan?: SubscriptionPlan;
+}
+
+// Starts a checkout with the chosen provider/plan (a Polar subscription
+// tier, or Chapa's 80 ETB / 1-month one-time local alternative) and
 // redirects the browser there. The actual subscription state only updates
 // once the payment is confirmed (Polar's webhook, or Chapa's webhook /
 // the Chapa return page's re-verify call) — this mutation only gets the
 // user to the checkout page.
 export function useStartProCheckout() {
   return useMutation({
-    mutationFn: createSubscriptionCheckout,
+    mutationFn: ({ provider, plan }: StartProCheckoutInput) => createSubscriptionCheckout(provider, plan),
     onSuccess: ({ checkoutUrl, paymentId }) => {
       if (paymentId) {
         saveLastChapaPaymentId(paymentId);
       }
+      window.location.href = checkoutUrl;
+    },
+  });
+}
+
+// Starts a one-time checkout for a pay-per-use credit (one extra Create or
+// Tailor generation). Always Polar — see createCreditCheckout.
+export function useStartCreditCheckout() {
+  return useMutation({
+    mutationFn: (product: CreditProduct) => createCreditCheckout(product),
+    onSuccess: ({ checkoutUrl }) => {
       window.location.href = checkoutUrl;
     },
   });
