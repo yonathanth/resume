@@ -1,16 +1,17 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React from "react";
 import { ArrowRight, Check, Download, FileText, Loader2, MousePointer2, PenLine, UploadCloud, UserRound } from "lucide-react";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { Reveal } from "@/components/Reveal";
 import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
-import { Moxie, type MoxieAnimation } from "@/components/moxie";
+import { Moxie } from "@/components/moxie";
 
 // The create flow, in the order the dashboard runs it (CreateCvModal):
 // the user's info, an optional job post, then the editor (CvEditorWorkspace).
-// Each card's illustration loops a tiny replay of that step, with Moxie
-// doing the AI's part in it.
+// Each card replays its step as a few quick scenes in one panel — the click,
+// the work being done, then a tick — on a shared 7.5s loop (globals.css,
+// "How it works").
 
 function Thumb({ index, className = "" }: { index: number; className?: string }) {
   const { data: templates } = useCvTemplates();
@@ -25,12 +26,15 @@ function Thumb({ index, className = "" }: { index: number; className?: string })
   );
 }
 
-// Each visual is a small fixed-size stage (280×200) so the cursor can be
-// steered to exact spots. Everything loops on one 10s clock (globals.css,
-// "How it works"); keep LOOP_MS in step with it.
-const LOOP_MS = 10_000;
-
-const panel = "rounded-xl border border-neutral-200 bg-white shadow-[0_10px_22px_-14px_rgba(15,17,21,0.3)]";
+// Each visual is a fixed-size panel (280×200) so the cursor can be steered to
+// exact spots; its scenes are stacked inside and crossfade.
+function Stage({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative h-[200px] w-[280px] rounded-xl border border-neutral-200 bg-white shadow-[0_10px_22px_-14px_rgba(15,17,21,0.3)]">
+      {children}
+    </div>
+  );
+}
 
 function Cursor({ className }: { className: string }) {
   return (
@@ -40,35 +44,27 @@ function Cursor({ className }: { className: string }) {
   );
 }
 
-/**
- * Moxie on a stage, switching scenes at set moments of the loop. `cues` are
- * [percent of the loop, scene] pairs, starting at 0. An invisible element
- * runs the same CSS clock as the rest of the stage; she reads where that
- * clock is (rather than waiting for its events, which can fire before the
- * page hydrates), so she's always in step with the CSS motion.
- */
-function StageMoxie({ cues, size, className }: { cues: [number, MoxieAnimation][]; size: number; className: string }) {
-  const [animation, setAnimation] = useState<MoxieAnimation>(cues[0][1]);
-  const clock = useRef<HTMLSpanElement>(null);
-
-  useEffect(() => {
-    const tick = () => {
-      const time = clock.current?.getAnimations()[0]?.currentTime;
-      if (typeof time !== "number") return;
-      const pct = ((time % LOOP_MS) / LOOP_MS) * 100;
-      const cue = cues.reduce((current, c) => (c[0] <= pct ? c : current), cues[0]);
-      setAnimation(cue[1]);
-    };
-    tick();
-    const id = window.setInterval(tick, 100);
-    return () => window.clearInterval(id);
-  }, [cues]);
-
+/** "Doing it…" with three bouncing dots, over the working scene. */
+function WorkingCaption({ children }: { children: React.ReactNode }) {
   return (
-    <>
-      <span ref={clock} aria-hidden className="hiw-clock pointer-events-none absolute h-0 w-0" />
-      <Moxie animation={animation} size={size} decorative ticklish className={`absolute ${className}`} />
-    </>
+    <div className="hiw-caption absolute inset-x-0 top-[26px] flex items-end justify-center gap-[3px] text-[12.5px] font-semibold text-neutral-700">
+      {children}
+      {[0, 1, 2].map((d) => (
+        <span key={d} className="hiw-dot mb-[3px] h-[3px] w-[3px] rounded-full bg-accent" style={{ animationDelay: `${d * 0.15}s` }} />
+      ))}
+    </div>
+  );
+}
+
+/** The last scene of every card: a tick pops in and a short line fades up. */
+function Done({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="hiw-done absolute inset-0 flex flex-col items-center justify-center gap-2">
+      <span className="hiw-done-tick flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-[0_6px_14px_-6px_var(--accent)]">
+        <Check className="h-4 w-4 stroke-[3]" />
+      </span>
+      <span className="hiw-done-text text-[13.5px] font-bold tracking-tight text-neutral-950">{children}</span>
+    </div>
   );
 }
 
@@ -81,13 +77,9 @@ const START_OPTIONS = [
   { label: "Career profile", hint: "Reuse saved info", Icon: UserRound },
 ];
 
-const SOURCE_CUES: [number, MoxieAnimation][] = [
-  [0, "read"],
-];
-
 export function SourceVisual() {
   return (
-    <div className={`relative h-[200px] w-[280px] ${panel}`}>
+    <Stage>
       {/* A: "How do you want to start?" */}
       <div className="hiw1-scene-a absolute inset-0 p-3">
         <div className="h-[14px] text-[10.5px] font-bold text-neutral-900">How do you want to start?</div>
@@ -118,134 +110,105 @@ export function SourceVisual() {
         </div>
       </div>
 
-      {/* M: Moxie reads it */}
-      <div className="hiw1-scene-m absolute inset-0">
-        <StageMoxie cues={SOURCE_CUES} size={100} className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+      {/* M: Moxie reads it — worded to fit all three starts */}
+      <div className="hiw-work absolute inset-0">
+        <WorkingCaption>Reading your details</WorkingCaption>
+        <Moxie animation="read" size={100} decorative ticklish className="absolute left-1/2 top-[64px] -translate-x-1/2" />
       </div>
 
-      {/* C: sorted */}
-      <div className="hiw1-scene-c absolute inset-0 flex flex-col items-center justify-center gap-2">
-        <span className="hiw1-tick flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-[0_6px_14px_-6px_var(--accent)]">
-          <Check className="h-4 w-4 stroke-[3]" />
-        </span>
-        <span className="hiw1-sorted text-[13.5px] font-bold tracking-tight text-neutral-950">Sorted into your resume</span>
-      </div>
-
+      <Done>Sorted into your resume</Done>
       <Cursor className="hiw1-cursor" />
-    </div>
+    </Stage>
   );
 }
 
-// 2 — paste the job post, press "Tailor my CV", and Moxie rewrites a bullet
-// around the role's keywords; what the CV can't back up is flagged (JobGaps),
-// never invented.
+// 2 — paste the job post (its keywords light up), press "Tailor my CV", a
+// bullet is rewritten around those keywords, and it's tailored.
 function Kw({ i, children }: { i: number; children: React.ReactNode }) {
   return (
-    <span className="hiw2-kw rounded-[3px] px-0.5" style={{ animationDelay: `${i * 0.45}s` }}>
+    <span className="hiw2-kw rounded-[3px] px-0.5" style={{ animationDelay: `${i * 0.3}s` }}>
       {children}
     </span>
   );
 }
 
-const JOB_CUES: [number, MoxieAnimation][] = [
-  [0, "idle"],
-  [33, "tailor"],
-  [90, "idle"],
-];
-
 export function JobVisual() {
   return (
-    <div className="relative w-[280px]">
-      {/* The pasted job description */}
-      <div className={`relative overflow-hidden p-2.5 ${panel}`}>
-        <div className="text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Job description</div>
-        <p className="mt-1 text-[10px] leading-[1.55] text-neutral-600">
-          Senior Accountant. You&apos;ll own <Kw i={0}>month-end close</Kw> and reporting under <Kw i={1}>IFRS</Kw>, working
-          daily in <Kw i={2}>SAP</Kw>.
-        </p>
-        <div className="hiw2-scan pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-transparent via-accent/15 to-transparent" />
-      </div>
-
-      {/* Tailor my CV */}
-      <div className="mt-2 flex w-[190px] justify-center">
-        <span className="hiw2-btn grid rounded-lg bg-neutral-950 px-3 py-1.5 text-[10.5px] font-semibold text-white">
-          <span className="hiw2-label-idle col-start-1 row-start-1 flex items-center justify-center gap-1">
-            Tailor my CV <ArrowRight className="h-3 w-3" />
-          </span>
-          <span className="hiw2-label-busy col-start-1 row-start-1 flex items-center justify-center gap-1">
-            <Loader2 className="h-3 w-3 animate-spin" /> Tailoring…
-          </span>
+    <Stage>
+      {/* A: the pasted job description */}
+      <div className="hiw2-scene-a absolute inset-0 flex flex-col p-3">
+        <div className="h-[14px] text-[10.5px] font-bold text-neutral-900">Paste the job description</div>
+        <div className="mt-2 h-[104px] rounded-lg border border-neutral-200 bg-neutral-50/60 p-2.5 text-[10px] leading-[1.6] text-neutral-600">
+          Senior Accountant. You&apos;ll own <Kw i={0}>month-end close</Kw> and reporting under <Kw i={1}>IFRS</Kw>, and
+          reconcile accounts across our <Kw i={2}>branch network</Kw>.
+        </div>
+        <span className="hiw2-btn mt-2.5 flex h-[30px] items-center justify-center gap-1 rounded-lg bg-neutral-950 text-[10.5px] font-semibold text-white">
+          Tailor my CV <ArrowRight className="h-3 w-3" />
         </span>
       </div>
 
-      {/* A bullet on the CV, before and after — Moxie at work beside it */}
-      <div className={`mt-2 w-[190px] p-2.5 ${panel}`}>
-        <div className="text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Experience · Awash Bank</div>
-        <div className="relative mt-1 h-[45px] text-[10px] leading-[1.5]">
-          <p className="hiw2-before absolute inset-0 text-neutral-400">• Did reconciliations for branch accounts.</p>
-          <p className="hiw2-after absolute inset-0 text-neutral-800">
-            • Ran <b className="font-semibold text-accent-strong">IFRS</b> reconciliations for 40+ branches; cut{" "}
-            <b className="font-semibold text-accent-strong">month-end close</b> from 6 to 4 days.
-          </p>
-        </div>
-        <div className="hiw2-gap mt-1 flex items-center gap-1 text-[9.5px] text-neutral-500">
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Not in your CV yet:{" "}
-          <span className="font-semibold text-neutral-700">SAP</span>
+      {/* B: a bullet is rewritten around them */}
+      <div className="hiw-work absolute inset-0">
+        <WorkingCaption>Tailoring to the job</WorkingCaption>
+        <div className="absolute inset-x-4 top-[62px] rounded-lg border border-neutral-200 bg-neutral-50/60 p-2.5">
+          <div className="text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Experience · Awash Bank</div>
+          <div className="relative mt-1 h-[48px] text-[10.5px] leading-[1.5]">
+            <p className="hiw2-before absolute inset-0 text-neutral-400">• Did reconciliations for branch accounts.</p>
+            <p className="hiw2-after absolute inset-0 text-neutral-800">
+              • Ran <b className="font-semibold text-accent-strong">IFRS</b> reconciliations across 40+ branches; cut{" "}
+              <b className="font-semibold text-accent-strong">month-end close</b> from 6 to 4 days.
+            </p>
+          </div>
         </div>
       </div>
 
-      <StageMoxie cues={JOB_CUES} size={96} className="-right-3 bottom-0" />
-    </div>
+      <Done>Tailored to the job</Done>
+      <Cursor className="hiw2-cursor" />
+    </Stage>
   );
 }
 
-// 3 — the editor's preview flags what's missing as a clickable gap; it opens
-// the field, gets filled in, Download PDF is pressed, and Moxie catches the
-// finished PDF and holds it up for you.
-const EDITOR_CUES: [number, MoxieAnimation][] = [
-  [0, "idle"],
-  [69, "downloaded"],
-];
-
+// 3 — the editor's preview flags a missing detail; click it, type it in,
+// press Download PDF, and it's ready.
 export function EditorVisual() {
   return (
-    <div className="relative h-[200px] w-[280px]">
-      {/* The live preview, with a missing detail flagged on it */}
-      <div className="absolute left-0 top-[14px] w-[108px]">
-        <Thumb index={3} />
-      </div>
-      <div className="absolute left-[6px] top-[52px] h-[17px] w-[96px]">
-        <span className="hiw3-gap absolute inset-0 flex items-center justify-center rounded-[4px] border border-dashed border-accent bg-accent-soft text-[9px] font-semibold text-accent-strong">
-          + Add phone number
-        </span>
-        <span className="hiw3-filled absolute inset-0 flex items-center justify-center rounded-[4px] border border-emerald-200 bg-emerald-50 font-mono text-[8.5px] font-medium text-emerald-700">
-          +251 91 234 5678
-        </span>
-      </div>
-
-      {/* The field it opens in the form */}
-      <div className="hiw3-field absolute left-[122px] top-[10px] w-[158px] rounded-lg border border-neutral-200 bg-white p-2 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)]">
-        <div className="text-[9px] font-semibold text-neutral-500">Phone</div>
-        <div className="mt-1 flex h-[22px] items-center rounded-md border border-accent px-1.5 ring-2 ring-accent/15">
-          <span className="hiw3-type inline-block overflow-hidden whitespace-nowrap font-mono text-[9px] text-neutral-900">+251 91 234 5678</span>
-          <span className="hiw3-caret ml-px h-3 w-px bg-neutral-900" />
+    <Stage>
+      {/* A: the editor */}
+      <div className="hiw3-scene-a absolute inset-0">
+        <div className="absolute left-[14px] top-[15px] w-[120px]">
+          <Thumb index={3} />
         </div>
+        <div className="absolute left-[20px] top-[52px] h-[17px] w-[104px]">
+          <span className="hiw3-gap absolute inset-0 flex items-center justify-center rounded-[4px] border border-dashed border-accent bg-accent-soft text-[9px] font-semibold text-accent-strong">
+            + Add phone number
+          </span>
+          <span className="hiw3-filled absolute inset-0 flex items-center justify-center rounded-[4px] border border-emerald-200 bg-emerald-50 font-mono text-[8.5px] font-medium text-emerald-700">
+            +251 91 234 5678
+          </span>
+        </div>
+
+        {/* The field the gap opens */}
+        <div className="hiw3-field absolute left-[146px] top-[20px] w-[120px] rounded-lg border border-neutral-200 bg-white p-2 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)]">
+          <div className="text-[9px] font-semibold text-neutral-500">Phone</div>
+          <div className="mt-1 flex h-[22px] items-center rounded-md border border-accent px-1.5 ring-2 ring-accent/15">
+            <span className="hiw3-type inline-block overflow-hidden whitespace-nowrap font-mono text-[9px] text-neutral-900">+251 91 234 5678</span>
+            <span className="hiw3-caret ml-px h-3 w-px bg-neutral-900" />
+          </div>
+        </div>
+
+        <span className="hiw3-btn absolute left-[146px] top-[150px] grid h-[30px] w-[120px] rounded-lg bg-neutral-950 text-[10.5px] font-semibold text-white">
+          <span className="hiw3-label-idle col-start-1 row-start-1 flex items-center justify-center gap-1.5">
+            <Download className="h-3.5 w-3.5 text-accent-light" /> Download PDF
+          </span>
+          <span className="hiw3-label-busy col-start-1 row-start-1 flex items-center justify-center gap-1.5">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing…
+          </span>
+        </span>
       </div>
 
-      {/* Download PDF */}
-      <span className="hiw3-btn absolute left-[122px] top-[84px] grid h-[30px] w-[158px] rounded-lg bg-neutral-950 text-[10.5px] font-semibold text-white">
-        <span className="hiw3-label-idle col-start-1 row-start-1 flex items-center justify-center gap-1.5">
-          <Download className="h-3.5 w-3.5 text-accent-light" /> Download PDF
-        </span>
-        <span className="hiw3-label-busy col-start-1 row-start-1 flex items-center justify-center gap-1.5">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing…
-        </span>
-      </span>
-
-      {/* …and Moxie hands it over */}
-      <StageMoxie cues={EDITOR_CUES} size={88} className="bottom-[-4px] left-[160px]" />
+      <Done>Your PDF is ready</Done>
       <Cursor className="hiw3-cursor" />
-    </div>
+    </Stage>
   );
 }
 

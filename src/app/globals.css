@@ -240,178 +240,180 @@ body {
 }
 
 /* How it works (components/HowItWorks.tsx) — each card replays its step of the
-   create flow. Everything shares one 10s loop (LOOP_MS in the component, which
-   Moxie's scene changes follow .hiw-clock); percentages below are
-   moments in that loop. */
-.hiw-clock { animation: hiw-clock 10s linear infinite; }
-@keyframes hiw-clock {
-  from { opacity: 0; }
-  to { opacity: 0.01; }
+   create flow as quick scenes in one panel, all on a shared 7.5s loop;
+   percentages below are moments in that loop (1% = 75ms). */
+
+/* Shared: the "working" scene (cards 1 and 2) and the closing tick (all). */
+.hiw-work { animation: hiw-work 7.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes hiw-work {
+  0%, 38.7% { opacity: 0; transform: scale(0.96); }
+  42.7%, 61.3% { opacity: 1; transform: none; }
+  65.3%, 100% { opacity: 0; transform: none; }
 }
 
-/* 1 · Your details: pick "Upload old CV", the file drops in, Moxie reads it
-   straight away (she's in her "read" scene throughout), then it's sorted. */
-.hiw1-scene-a { animation: hiw1-scene-a 10s ease infinite; }
+.hiw-caption { animation: hiw-caption 7.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes hiw-caption {
+  0%, 40% { opacity: 0; transform: translateY(6px); }
+  45.3%, 100% { opacity: 1; transform: none; }
+}
+
+.hiw-dot { animation: hiw-dot 0.9s ease-in-out infinite; }
+@keyframes hiw-dot {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-3px); }
+}
+
+.hiw-done { animation: hiw-done 7.5s ease infinite; }
+@keyframes hiw-done {
+  0%, 64% { opacity: 0; transform: scale(1.03); }
+  68%, 93.3% { opacity: 1; transform: none; }
+  98.7%, 100% { opacity: 0; transform: none; }
+}
+
+.hiw-done-tick { animation: hiw-done-tick 7.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+@keyframes hiw-done-tick {
+  0%, 66.7% { transform: scale(0) rotate(-45deg); }
+  72%, 100% { transform: none; }
+}
+
+.hiw-done-text { animation: hiw-done-text 7.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes hiw-done-text {
+  0%, 69.3% { opacity: 0; transform: translateY(6px); }
+  74.7%, 100% { opacity: 1; transform: none; }
+}
+
+/* 1 · Your details: pick "Upload old CV", the file drops in, Moxie reads it. */
+.hiw1-scene-a { animation: hiw1-scene-a 7.5s ease infinite; }
 @keyframes hiw1-scene-a {
-  0%, 20% { opacity: 1; transform: none; }
-  23%, 96% { opacity: 0; transform: scale(0.97); }
+  0%, 26.7% { opacity: 1; transform: none; }
+  30.7%, 96% { opacity: 0; transform: scale(0.97); }
   100% { opacity: 1; transform: none; }
 }
 
-.hiw1-cursor { animation: hiw1-cursor 10s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.hiw1-cursor { animation: hiw1-cursor 7.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
 @keyframes hiw1-cursor {
   0% { transform: translate(230px, 190px); opacity: 0; }
-  3% { transform: translate(230px, 190px); opacity: 1; }
-  11% { transform: translate(150px, 102px) scale(1); }
-  14% { transform: translate(150px, 102px) scale(0.82); }
-  17%, 19% { transform: translate(150px, 102px) scale(1); opacity: 1; }
-  22%, 100% { transform: translate(150px, 102px); opacity: 0; }
+  4% { transform: translate(230px, 190px); opacity: 1; }
+  14.7% { transform: translate(150px, 102px) scale(1); }
+  18.7% { transform: translate(150px, 102px) scale(0.82); }
+  22.7%, 25.3% { transform: translate(150px, 102px) scale(1); opacity: 1; }
+  29.3%, 100% { transform: translate(150px, 102px); opacity: 0; }
 }
 
-.hiw1-pick { animation: hiw1-pick 10s ease infinite; }
+.hiw1-pick { animation: hiw1-pick 7.5s ease infinite; }
 @keyframes hiw1-pick {
-  0%, 11% { opacity: 0; }
-  14%, 21% { opacity: 1; }
-  24%, 100% { opacity: 0; }
+  0%, 14.7% { opacity: 0; }
+  18.7%, 28% { opacity: 1; }
+  32%, 100% { opacity: 0; }
 }
 
-.hiw1-scene-b { animation: hiw1-scene-b 10s ease infinite; }
+.hiw1-scene-b { animation: hiw1-scene-b 7.5s ease infinite; }
 @keyframes hiw1-scene-b {
-  0%, 21% { opacity: 0; transform: scale(1.03); }
-  23%, 29% { opacity: 1; transform: none; }
-  32%, 100% { opacity: 0; transform: scale(0.97); }
+  0%, 28% { opacity: 0; transform: scale(1.03); }
+  30.7%, 38.7% { opacity: 1; transform: none; }
+  42.7%, 100% { opacity: 0; transform: scale(0.97); }
 }
 
-.hiw1-file { animation: hiw1-file 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+.hiw1-file { animation: hiw1-file 7.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
 @keyframes hiw1-file {
-  0%, 23% { opacity: 0; transform: translateY(-26px) rotate(-4deg); }
-  27%, 100% { opacity: 1; transform: none; }
+  0%, 30.7% { opacity: 0; transform: translateY(-26px) rotate(-4deg); }
+  36%, 100% { opacity: 1; transform: none; }
 }
 
-.hiw1-scene-m { animation: hiw1-scene-m 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-@keyframes hiw1-scene-m {
-  0%, 29% { opacity: 0; transform: scale(0.96); }
-  32%, 60% { opacity: 1; transform: none; }
-  63%, 100% { opacity: 0; transform: none; }
+/* 2 · Tailor: keywords light up in the post, "Tailor my CV" is pressed, and a
+   bullet is rewritten around them. */
+.hiw2-scene-a { animation: hiw2-scene-a 7.5s ease infinite; }
+@keyframes hiw2-scene-a {
+  0%, 34.7% { opacity: 1; transform: none; }
+  38.7%, 96% { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: none; }
 }
 
-.hiw1-scene-c { animation: hiw1-scene-c 10s ease infinite; }
-@keyframes hiw1-scene-c {
-  0%, 62% { opacity: 0; transform: scale(1.03); }
-  65%, 95% { opacity: 1; transform: none; }
-  99%, 100% { opacity: 0; transform: none; }
-}
-
-.hiw1-tick { animation: hiw1-tick 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
-@keyframes hiw1-tick {
-  0%, 64% { transform: scale(0) rotate(-45deg); }
-  68%, 100% { transform: none; }
-}
-
-.hiw1-sorted { animation: hiw1-sorted 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
-@keyframes hiw1-sorted {
-  0%, 66% { opacity: 0; transform: translateY(6px); }
-  70%, 100% { opacity: 1; transform: none; }
-}
-
-/* 2 · Tailor: keywords light up in the post, "Tailor my CV" is pressed, Moxie
-   rewrites the bullet around them and the one it can't back up is flagged. */
-.hiw2-scan { animation: hiw2-scan 10s ease-in-out infinite; }
-@keyframes hiw2-scan {
-  0% { transform: translateY(-24px); }
-  25%, 100% { transform: translateY(96px); }
-}
-
-.hiw2-kw { animation: hiw2-kw 10s ease infinite both; }
+.hiw2-kw { animation: hiw2-kw 7.5s ease infinite both; }
 @keyframes hiw2-kw {
-  0%, 4% { background-color: transparent; color: inherit; }
-  8%, 92% { background-color: var(--accent-soft); color: var(--accent-strong); }
-  97%, 100% { background-color: transparent; color: inherit; }
+  0%, 6% { background-color: transparent; color: inherit; }
+  10%, 94% { background-color: var(--accent-soft); color: var(--accent-strong); }
+  98%, 100% { background-color: transparent; color: inherit; }
 }
 
-.hiw2-btn { animation: hiw2-btn 10s ease infinite; }
+.hiw2-cursor { animation: hiw2-cursor 7.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@keyframes hiw2-cursor {
+  0% { transform: translate(236px, 60px); opacity: 0; }
+  4% { transform: translate(236px, 60px); opacity: 1; }
+  18.7% { transform: translate(136px, 159px) scale(1); }
+  21.3% { transform: translate(136px, 159px) scale(0.82); }
+  24%, 28% { transform: translate(136px, 159px) scale(1); opacity: 1; }
+  32%, 100% { transform: translate(136px, 159px); opacity: 0; }
+}
+
+.hiw2-btn { animation: hiw2-btn 7.5s ease infinite; }
 @keyframes hiw2-btn {
-  0%, 29% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
-  32% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
-  36%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  0%, 19.3% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  21.3% { transform: scale(0.95); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  25.3%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
 }
 
-.hiw2-label-idle { animation: hiw2-label-idle 10s ease infinite; }
-@keyframes hiw2-label-idle {
-  0%, 32% { opacity: 1; }
-  34%, 58% { opacity: 0; }
-  61%, 100% { opacity: 1; }
-}
-
-.hiw2-label-busy { animation: hiw2-label-busy 10s ease infinite; }
-@keyframes hiw2-label-busy {
-  0%, 32% { opacity: 0; }
-  34%, 58% { opacity: 1; }
-  61%, 100% { opacity: 0; }
-}
-
-.hiw2-before { animation: hiw2-before 10s ease infinite; }
+.hiw2-before { animation: hiw2-before 7.5s ease infinite; }
 @keyframes hiw2-before {
-  0%, 58% { opacity: 1; filter: none; }
-  63%, 96% { opacity: 0; filter: blur(2px); }
-  100% { opacity: 1; filter: none; }
+  0%, 46.7% { opacity: 1; filter: none; }
+  50.7%, 90% { opacity: 0; filter: blur(2px); }
+  95%, 100% { opacity: 1; filter: none; }
 }
 
-.hiw2-after { animation: hiw2-after 10s ease infinite; }
+.hiw2-after { animation: hiw2-after 7.5s ease infinite; }
 @keyframes hiw2-after {
-  0%, 60% { opacity: 0; filter: blur(2px); }
-  66%, 93% { opacity: 1; filter: none; }
-  98%, 100% { opacity: 0; filter: none; }
+  0%, 49.3% { opacity: 0; filter: blur(2px); }
+  53.3%, 90% { opacity: 1; filter: none; }
+  95%, 100% { opacity: 0; filter: none; }
 }
 
-.hiw2-gap { animation: hiw2-gap 10s ease infinite; }
-@keyframes hiw2-gap {
-  0%, 72% { opacity: 0; transform: translateY(3px); }
-  77%, 93% { opacity: 1; transform: none; }
-  98%, 100% { opacity: 0; transform: none; }
+/* 3 · Editor: click the flagged gap, type it in, then Download PDF. */
+.hiw3-scene-a { animation: hiw3-scene-a 7.5s ease infinite; }
+@keyframes hiw3-scene-a {
+  0%, 61.3% { opacity: 1; transform: none; }
+  65.3%, 96% { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: none; }
 }
 
-/* 3 · Editor: click the flagged gap, type it in, Download PDF — then Moxie
-   catches the PDF. */
-.hiw3-cursor { animation: hiw3-cursor 10s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+.hiw3-cursor { animation: hiw3-cursor 7.5s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
 @keyframes hiw3-cursor {
-  0% { transform: translate(240px, 200px); opacity: 0; }
-  4% { transform: translate(240px, 200px); opacity: 1; }
-  13% { transform: translate(50px, 56px) scale(1); }
-  16% { transform: translate(50px, 56px) scale(0.82); }
-  19%, 46% { transform: translate(50px, 56px) scale(1); }
-  56% { transform: translate(196px, 94px) scale(1); }
-  59% { transform: translate(196px, 94px) scale(0.82); }
-  62%, 68% { transform: translate(196px, 94px) scale(1); opacity: 1; }
-  72%, 100% { transform: translate(196px, 94px); opacity: 0; }
+  0% { transform: translate(236px, 190px); opacity: 0; }
+  4% { transform: translate(236px, 190px); opacity: 1; }
+  12% { transform: translate(68px, 56px) scale(1); }
+  14.7% { transform: translate(68px, 56px) scale(0.82); }
+  17.3%, 38.7% { transform: translate(68px, 56px) scale(1); }
+  48% { transform: translate(202px, 161px) scale(1); }
+  50.7% { transform: translate(202px, 161px) scale(0.82); }
+  53.3%, 58.7% { transform: translate(202px, 161px) scale(1); opacity: 1; }
+  62.7%, 100% { transform: translate(202px, 161px); opacity: 0; }
 }
 
-.hiw3-gap { animation: hiw3-gap 10s ease infinite; }
+.hiw3-gap { animation: hiw3-gap 7.5s ease infinite; }
 @keyframes hiw3-gap {
-  0%, 15% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
-  18%, 46% { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
-  50%, 96% { opacity: 0; box-shadow: none; }
+  0%, 12% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
+  14.7%, 38.7% { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  41.3%, 96% { opacity: 0; box-shadow: none; }
   100% { opacity: 1; }
 }
 
-.hiw3-filled { animation: hiw3-filled 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+.hiw3-filled { animation: hiw3-filled 7.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
 @keyframes hiw3-filled {
-  0%, 47% { opacity: 0; transform: scale(0.85); }
-  52%, 94% { opacity: 1; transform: none; }
+  0%, 39% { opacity: 0; transform: scale(0.85); }
+  44%, 94% { opacity: 1; transform: none; }
   99%, 100% { opacity: 0; transform: none; }
 }
 
-.hiw3-field { animation: hiw3-field 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+.hiw3-field { animation: hiw3-field 7.5s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
 @keyframes hiw3-field {
-  0%, 18% { opacity: 0; transform: translateX(-8px) scale(0.96); }
-  22%, 48% { opacity: 1; transform: none; }
-  53%, 100% { opacity: 0; transform: translateY(-4px); }
+  0%, 16% { opacity: 0; transform: translateX(-8px) scale(0.96); }
+  20%, 42.7% { opacity: 1; transform: none; }
+  46.7%, 100% { opacity: 0; transform: translateY(-4px); }
 }
 
-.hiw3-type { animation: hiw3-type 10s infinite; }
+.hiw3-type { animation: hiw3-type 7.5s infinite; }
 @keyframes hiw3-type {
-  0%, 23% { width: 0; animation-timing-function: steps(16, end); }
-  40%, 100% { width: 16ch; }
+  0%, 20% { width: 0; animation-timing-function: steps(16, end); }
+  36%, 100% { width: 16ch; }
 }
 
 .hiw3-caret { animation: hiw3-caret 0.9s steps(1) infinite; }
@@ -420,34 +422,32 @@ body {
   51%, 100% { opacity: 0; }
 }
 
-.hiw3-btn { animation: hiw3-btn 10s ease infinite; }
+.hiw3-btn { animation: hiw3-btn 7.5s ease infinite; }
 @keyframes hiw3-btn {
-  0%, 58% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
-  61% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
-  65%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  0%, 48.7% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  50.7% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  54.7%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
 }
 
-.hiw3-label-idle { animation: hiw3-label-idle 10s ease infinite; }
+.hiw3-label-idle { animation: hiw3-label-idle 7.5s ease infinite; }
 @keyframes hiw3-label-idle {
-  0%, 61% { opacity: 1; }
-  63%, 69% { opacity: 0; }
-  72%, 100% { opacity: 1; }
+  0%, 50.7% { opacity: 1; }
+  52%, 70% { opacity: 0; }
+  74%, 100% { opacity: 1; }
 }
 
-.hiw3-label-busy { animation: hiw3-label-busy 10s ease infinite; }
+.hiw3-label-busy { animation: hiw3-label-busy 7.5s ease infinite; }
 @keyframes hiw3-label-busy {
-  0%, 61% { opacity: 0; }
-  63%, 69% { opacity: 1; }
-  72%, 100% { opacity: 0; }
+  0%, 50.7% { opacity: 0; }
+  52%, 70% { opacity: 1; }
+  74%, 100% { opacity: 0; }
 }
 
-/* Reduced motion: hold each card on its finished state (Moxie has her own). */
+/* Reduced motion: each card holds on its closing tick. */
 @media (prefers-reduced-motion: reduce) {
-  [class*="hiw1-"], [class*="hiw2-"], [class*="hiw3-"] { animation: none !important; }
-  .hiw1-scene-a, .hiw1-scene-b, .hiw1-scene-m, .hiw1-cursor, .hiw1-pick,
-  .hiw2-scan, .hiw2-label-busy, .hiw2-before,
-  .hiw3-cursor, .hiw3-gap, .hiw3-field, .hiw3-label-busy { opacity: 0; }
-  .hiw2-kw { background-color: var(--accent-soft); color: var(--accent-strong); }
+  [class*="hiw"] { animation: none !important; }
+  .hiw-work, .hiw1-scene-a, .hiw1-scene-b, .hiw1-cursor,
+  .hiw2-scene-a, .hiw2-cursor, .hiw3-scene-a, .hiw3-cursor { opacity: 0; }
 }
 
 /* Templates wall (components/TemplatesSection.tsx): columns drop gently into
