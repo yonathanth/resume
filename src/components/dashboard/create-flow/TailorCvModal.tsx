@@ -31,7 +31,7 @@ import {
   getQuestionFormState,
   useQuestionPages,
 } from "./ClarifyingQuestionsForm";
-import { ClarificationQuestion, CVContentDTO, updateCvContent } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, updateCvContent } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -219,7 +219,8 @@ export function TailorCvModal({
   const { data: careerProfiles = [] } = useProfiles();
   // The profile this CV is being tailored from, if any — facts go back to it.
   const [sourceProfileId, setSourceProfileId] = useState<string | null>(saved?.sourceProfileId ?? null);
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const subscriptionStatus = useSubscriptionStatus().data;
+  const canUseProfiles = canUseCareerProfiles(subscriptionStatus);
   // The quick save after the AI pass (adding confirmed gaps) — Moxie stays up through it.
   const [finishingUp, setFinishingUp] = useState(false);
   const { done: aiDone, celebrate } = useAiDone();
@@ -436,7 +437,7 @@ export function TailorCvModal({
   // Done tailoring: straight into the editor — or, on Pro, first the offer to
   // save it to a career profile (the only end step with a real choice in it).
   const toTheEnd = (content?: CVContentDTO) => {
-    if (isPro && cvDocumentId) setStep("select-template");
+    if (canUseProfiles && cvDocumentId) setStep("select-template");
     else handleFinish(content);
   };
 
@@ -612,12 +613,12 @@ export function TailorCvModal({
                   tone="violet"
                   title="Start from a career profile"
                   description={
-                    isPro
+                    canUseProfiles
                       ? "Tailor everything a role profile holds to this job."
                       : "A FitCV Pro feature: build from your saved role profiles."
                   }
                   onClick={() => {
-                    if (!isPro) {
+                    if (!canUseProfiles) {
                       proGate.openPaywall();
                       return;
                     }
@@ -987,7 +988,7 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 5: READY → KEEP A PROFILE UP TO DATE ================= */}
-        {step === "select-template" && isPro && cvDocumentId && (
+        {step === "select-template" && canUseProfiles && cvDocumentId && (
           <ProfileSyncStep
             key={cvDocumentId}
             cvDocumentId={cvDocumentId}

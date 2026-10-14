@@ -29,7 +29,7 @@ import {
   getQuestionFormState,
   useQuestionPages,
 } from "./ClarifyingQuestionsForm";
-import { ClarificationQuestion, CVContentDTO, WordingPreview, previewCvWording } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, WordingPreview, canUseCareerProfiles, previewCvWording } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useAccountGate } from "@/components/account-gate/AccountGate";
@@ -186,7 +186,7 @@ export function EnhanceCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const proGate = useProGate();
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
   // Improved wording that differs from the matching career profile — offered
   // on the last step when there is any (Pro only).
   const [wordingPreview, setWordingPreview] = useState<ProfileWordingPreview | null>(saved?.wordingPreview ?? null);
@@ -386,7 +386,7 @@ export function EnhanceCvModal({
   // Only offered when it's worth a step: Pro, and at least one entry the
   // profile has was reworded. Any failure just skips the offer.
   const loadWordingPreview = async (docId: string) => {
-    if (!isPro) return null;
+    if (!canUseProfiles) return null;
     try {
       const preview = await previewCvWording({
         cvDocumentId: docId,

@@ -58,7 +58,7 @@ export function CancelPlanModal({
             <h3 className="text-sm font-bold text-neutral-950 mb-1.5">Undo cancellation?</h3>
             <p className="text-xs text-neutral-500 leading-relaxed mb-2">
               Your FitCV Pro plan is set to cancel on {periodEndLabel}. Undo this to keep it renewing
-              automatically at $5/month.
+              automatically.
             </p>
           </>
         ) : (

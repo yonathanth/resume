@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { Loader2, X, Check } from "lucide-react";
 import { Moxie } from "@/components/moxie";
 import { useStartProCheckout, useSubscriptionStatus } from "@/hooks/use-subscription";
-import type { CheckoutProvider } from "@/lib/api";
+import type { SubscriptionPlan } from "@/lib/api";
 
 interface ProUpgradeModalProps {
   isOpen: boolean;
@@ -17,6 +18,12 @@ interface ProUpgradeModalProps {
 // kept to real gated features, nothing invented.
 const PRO_FEATURES = ["Unlimited AI-tailored CV generations", "Reusable, editable career profiles"];
 
+const PLAN_OPTIONS: { plan: SubscriptionPlan; label: string; price: string; popular?: boolean }[] = [
+  { plan: "weekly", label: "Weekly", price: "$4.99" },
+  { plan: "monthly", label: "Monthly", price: "$9.99", popular: true },
+  { plan: "quarterly", label: "3 Months", price: "$24.99" },
+];
+
 // The flow modals' button styles (see AccountGate, ProfileSyncStep).
 const BUTTON_PRIMARY =
   "w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed";
@@ -28,19 +35,19 @@ const BUTTON_SECONDARY =
 // PRO_REQUIRED — see use-pro-gate.ts) or when they click an "Upgrade" entry
 // point directly. Same shell, fields and buttons as the flow modals and the
 // sign-up pop-up (AccountGate), with Moxie jumping for the Pro crown just out
-// of reach — the upgrade page's scene. Offers both payment providers:
-// Polar (real $5/month recurring subscription) and Chapa (local-market
-// alternative — no auto-renewal, so it sells a fixed 1-month period for 80
-// ETB per payment instead).
+// of reach — the upgrade page's scene. Offers a Polar plan picker
+// (weekly/monthly/3-month — each its own Polar product) plus Chapa (local-
+// market alternative — no auto-renewal, so it sells a fixed 1-month period
+// for 80 ETB per payment instead).
 export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProps) {
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan>("monthly");
   const checkout = useStartProCheckout();
   const { data: subscription } = useSubscriptionStatus();
 
   if (!isOpen) return null;
 
-  const startCheckout = (provider: CheckoutProvider) => checkout.mutate(provider);
-
-  const pendingOn = (provider: CheckoutProvider) => checkout.isPending && checkout.variables === provider;
+  const isPendingFor = (provider: "polar" | "chapa", plan?: SubscriptionPlan) =>
+    checkout.isPending && checkout.variables?.provider === provider && (!plan || checkout.variables.plan === plan);
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6 bg-neutral-950/60 backdrop-blur-sm animate-in fade-in duration-200">
@@ -88,14 +95,47 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
           <p className="text-xs text-red-600 font-medium text-center mb-3">Could not start the checkout. Please try again.</p>
         )}
 
+        {/* Plan picker — Polar's three billing cycles */}
+        <div className="grid grid-cols-3 gap-1.5 mb-3">
+          {PLAN_OPTIONS.map((opt) => (
+            <button
+              key={opt.plan}
+              type="button"
+              onClick={() => setSelectedPlan(opt.plan)}
+              disabled={checkout.isPending}
+              className={`relative rounded-xl border py-2.5 px-1.5 text-center transition-colors cursor-pointer disabled:cursor-not-allowed ${
+                selectedPlan === opt.plan ? "border-accent bg-accent-soft/60" : "border-neutral-200 bg-white hover:border-neutral-300"
+              }`}
+            >
+              {opt.popular && (
+                <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-bold text-white">
+                  Popular
+                </span>
+              )}
+              <div className="text-[11px] font-semibold text-neutral-800">{opt.label}</div>
+              <div className="text-xs font-bold text-neutral-950">{opt.price}</div>
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-2.5">
-          <button type="button" onClick={() => startCheckout("polar")} disabled={checkout.isPending} className={BUTTON_PRIMARY}>
-            {pendingOn("polar") && <Loader2 className="w-4 h-4 animate-spin" />}
-            {pendingOn("polar") ? "Redirecting..." : "Pay with card · $5/month"}
+          <button
+            type="button"
+            onClick={() => checkout.mutate({ provider: "polar", plan: selectedPlan })}
+            disabled={checkout.isPending}
+            className={BUTTON_PRIMARY}
+          >
+            {isPendingFor("polar", selectedPlan) && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isPendingFor("polar", selectedPlan) ? "Redirecting..." : "Pay with card"}
           </button>
-          <button type="button" onClick={() => startCheckout("chapa")} disabled={checkout.isPending} className={BUTTON_SECONDARY}>
-            {pendingOn("chapa") && <Loader2 className="w-4 h-4 animate-spin" />}
-            {pendingOn("chapa") ? "Redirecting..." : "Pay with Chapa · 80 ETB/month"}
+          <button
+            type="button"
+            onClick={() => checkout.mutate({ provider: "chapa" })}
+            disabled={checkout.isPending}
+            className={BUTTON_SECONDARY}
+          >
+            {isPendingFor("chapa") && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isPendingFor("chapa") ? "Redirecting..." : "Pay with Chapa · 80 ETB/month"}
           </button>
           <button
             type="button"

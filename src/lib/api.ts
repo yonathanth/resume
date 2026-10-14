@@ -125,16 +125,148 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
 
   if (!res.ok || body?.error) {
     const { code = "UNKNOWN_ERROR", message = "Something went wrong", ...details } = body?.error ?? {};
+    // A suspended account is refused on every request — end the local
+    // session and explain why on the sign-in page.
+    if (code === "ACCOUNT_SUSPENDED" && token) {
+      clearAccessToken();
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?error=ACCOUNT_SUSPENDED";
+      }
+    }
     throw new ApiError(res.status, code, message, details);
   }
 
   return body.data as T;
 }
 
+// Password reset by email link — nobody, admins included, ever sees a password.
+export function forgotPassword(email: string) {
+  return apiFetch<{ sent: boolean }>("/api/v1/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export function resetPassword(token: string, password: string) {
+  return apiFetch<{ success: boolean }>("/api/v1/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token, password }),
+  });
+}
+
+// ---- Platform status (public): maintenance banner, sign-up availability
+
+export interface PlatformStatus {
+  registrationEnabled: boolean;
+  aiGenerationPaused: boolean;
+  banner: { message: string; tone: "info" | "warning" } | null;
+}
+
+export function getPlatformStatus() {
+  return apiFetch<PlatformStatus>("/api/v1/platform/status");
+}
+
+// ---- In-app notifications
+
+export interface ApiNotification {
+  id: string;
+  title: string;
+  body: string;
+  actionUrl: string | null;
+  createdAt: string;
+  readAt: string | null;
+}
+
+export function listNotifications() {
+  return apiFetch<{ unreadCount: number; items: ApiNotification[] }>("/api/v1/notifications");
+}
+
+export function markNotificationRead(id: string) {
+  return apiFetch<{ updated: number }>(`/api/v1/notifications/${encodeURIComponent(id)}/read`, { method: "POST" });
+}
+
+export function markAllNotificationsRead() {
+  return apiFetch<{ updated: number }>("/api/v1/notifications/read-all", { method: "POST" });
+}
+
+export function dismissNotification(id: string) {
+  return apiFetch<{ updated: number }>(`/api/v1/notifications/${encodeURIComponent(id)}/dismiss`, { method: "POST" });
+}
+
+export interface NotificationPreferences {
+  emailAnnouncements: boolean;
+  push: { available: boolean; publicKey: string | null; subscribedDevices: number };
+}
+
+export function getNotificationPreferences() {
+  return apiFetch<NotificationPreferences>("/api/v1/notifications/preferences");
+}
+
+export function updateNotificationPreferences(input: { emailAnnouncements: boolean }) {
+  return apiFetch<{ emailAnnouncements: boolean }>("/api/v1/notifications/preferences", {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
+export function savePushSubscription(subscription: PushSubscriptionJSON) {
+  return apiFetch<{ subscribed: boolean }>("/api/v1/notifications/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify(subscription),
+  });
+}
+
+export function removePushSubscription(endpoint: string) {
+  return apiFetch<{ subscribed: boolean }>("/api/v1/notifications/push/unsubscribe", {
+    method: "POST",
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
+/** The one-click link from announcement emails (works signed out). */
+export function unsubscribeFromAnnouncements(u: string, t: string) {
+  return apiFetch<{ unsubscribed: boolean }>("/api/v1/notifications/unsubscribe", {
+    method: "POST",
+    body: JSON.stringify({ u, t }),
+  });
+}
+
+// Sign-up starts no session: the user confirms their email first, and the
+// confirmation link signs them in (see verifyEmail).
+export interface RegisterResponse {
+  verificationRequired: true;
+  email: string;
+}
+
 export function register(email: string, password: string) {
-  return apiFetch<AuthResponse>("/api/v1/auth/register", {
+  return apiFetch<RegisterResponse>("/api/v1/auth/register", {
     method: "POST",
     body: JSON.stringify({ email, password }),
+  });
+}
+
+export function verifyEmail(token: string) {
+  return apiFetch<AuthResponse>("/api/v1/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+// The backend allows one confirmation email per address per minute (sign-up
+// counts as the first).
+export const RESEND_COOLDOWN_SECONDS = 60;
+
+/** Seconds to wait from a rate-limited resend error, else null. */
+export function resendRetryAfter(err: unknown): number | null {
+  if (!(err instanceof ApiError) || err.code !== "RATE_LIMITED") return null;
+  const seconds = Number(err.details.retryAfterSeconds);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : RESEND_COOLDOWN_SECONDS;
+}
+
+export function resendVerification(email: string) {
+  return apiFetch<{ sent: boolean }>("/api/v1/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify({ email }),
   });
 }
 
@@ -760,6 +892,12 @@ export type SubscriptionStatus =
 
 export type SubscriptionProvider = "POLAR" | "CHAPA" | null;
 
+// The three Polar subscription tiers — see createSubscriptionCheckout. Only
+// ever set when subscriptionProvider is "POLAR"; Chapa has one fixed product
+// (no tiers), and a pre-tier Polar subscriber (the retired single $5/month
+// product) reads as null too.
+export type SubscriptionPlan = "weekly" | "monthly" | "quarterly";
+
 export interface SubscriptionStatusResult {
   isPro: boolean;
   // One free use per dashboard tab, one-time-only — not a shared pool.
@@ -768,12 +906,26 @@ export interface SubscriptionStatusResult {
   freeImproveUsed: boolean;
   subscriptionStatus: SubscriptionStatus;
   subscriptionProvider: SubscriptionProvider;
+  plan?: SubscriptionPlan | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   // True once the user has been Pro before (either provider) but isn't
   // currently — shows a "your plan expired, renew" prompt instead of a
   // first-time upgrade pitch.
   isExpired: boolean;
+  // Where Pro comes from: the paid subscription, or a complimentary grant
+  // from the FitCV team (then the subscription fields above stay as billing
+  // left them). Optional so an older backend still type-checks.
+  proSource?: "subscription" | "grant" | null;
+  proGrantExpiresAt?: string | null;
+  // What this user may use right now — the backend enforces the same rules.
+  features?: { careerProfiles: boolean; polishSummary: boolean; cvImport: boolean };
+  freeUses?: Record<CvFlowType, { limit: number | null; used: number; remaining: number | null }>;
+}
+
+/** Career profiles are Pro, unless the user was given just this feature. */
+export function canUseCareerProfiles(status: SubscriptionStatusResult | undefined): boolean {
+  return status?.features?.careerProfiles ?? status?.isPro ?? false;
 }
 
 // The single source of truth for Pro access and free-generation usage —
@@ -792,15 +944,30 @@ export interface CheckoutResult {
   paymentId?: string;
 }
 
-// Starts a checkout with the chosen provider for FitCV Pro. Polar is a real
-// recurring $5/month subscription; Chapa (local-market alternative, no
-// auto-renewal) sells a fixed 1-month period for 80 ETB per payment. The
-// backend identifies the user from the auth token — never pass a user id
-// here.
-export function createSubscriptionCheckout(provider: CheckoutProvider) {
+// Starts a checkout with the chosen provider for FitCV Pro. `plan` only
+// matters for Polar (weekly $4.99 / monthly $9.99 / quarterly $24.99 — each
+// a distinct Polar product) and defaults to "monthly"; Chapa ignores it and
+// always sells its single fixed-period local product (80 ETB, no
+// auto-renewal). The backend identifies the user from the auth token — never
+// pass a user id here.
+export function createSubscriptionCheckout(provider: CheckoutProvider, plan: SubscriptionPlan = "monthly") {
   return apiFetch<CheckoutResult>("/api/v1/subscriptions/checkout", {
     method: "POST",
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider, plan }),
+  });
+}
+
+export type CreditProduct = "new_cv" | "tailoring";
+
+// Starts a one-time Polar checkout for a pay-per-use credit — one extra
+// Create ("new_cv", $3.99) or Tailor ("tailoring", $1.99) generation. Never
+// touches Pro status or the free per-tab counter; fulfillment (the +1 credit)
+// happens off the Polar webhook once payment is confirmed, same async
+// pattern as subscription checkout.
+export function createCreditCheckout(product: CreditProduct) {
+  return apiFetch<CheckoutResult>("/api/v1/purchases/checkout", {
+    method: "POST",
+    body: JSON.stringify({ product }),
   });
 }
 

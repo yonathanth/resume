@@ -15,6 +15,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { canUseCareerProfiles } from "@/lib/api";
 import { useMe } from "@/hooks/use-auth";
 import { getAvatarColor, getDisplayName, getInitials } from "@/lib/utils";
 import { Moxie, type MoxieHandle } from "@/components/moxie";
@@ -123,6 +124,8 @@ function SidebarMoxie({ crowned }: { crowned: boolean }) {
 export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: DashboardSidebarProps) {
   const { data: subscription } = useSubscriptionStatus();
   const isPro = subscription?.isPro ?? false;
+  // The only Pro-tagged item is Career Profiles, which a user can also be granted on its own.
+  const canUseProfiles = canUseCareerProfiles(subscription);
   const { data: me } = useMe();
   const displayName = getDisplayName(me?.fullName, me?.email);
   const initials = getInitials(me?.fullName, me?.email);
@@ -188,7 +191,7 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
               item={item}
               isActive={activeTab === item.id}
               isExpanded={isExpanded}
-              showProTag={Boolean(item.proOnly) && !isPro}
+              showProTag={Boolean(item.proOnly) && !canUseProfiles}
             />
           ))}
         </div>

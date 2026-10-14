@@ -8,8 +8,9 @@ import { Reveal } from "@/components/Reveal";
 
 // Mirrors what the app actually sells: free accounts get one free AI
 // generation per dashboard tab — Create, Tailor, Improve — one-time-only
-// (entitlement.service.ts's FlowType), Pro is unlimited — $5/month through
-// Polar, or 80 ETB/month through Chapa.
+// (entitlement.service.ts's FlowType). Pro is unlimited, from $4.99/week
+// through Polar (weekly/monthly/3-month tiers — see /pricing for all three),
+// or a fixed 80 ETB/month through Chapa (local market, no auto-renewal).
 
 const FREE_FEATURES = [
   "1 free use each of Create, Tailor and Improve",
@@ -90,10 +91,11 @@ export function PricingSection() {
             </div>
             <p className="mt-1 text-[14px] text-neutral-500">For an active job search.</p>
             <div className="mt-6 flex items-baseline gap-1.5">
-              <span className="text-5xl font-bold tracking-tight text-neutral-950">$5</span>
-              <span className="text-[14px] text-neutral-400">/ month</span>
+              <span className="text-[13px] text-neutral-400">from</span>
+              <span className="text-5xl font-bold tracking-tight text-neutral-950">$4.99</span>
+              <span className="text-[14px] text-neutral-400">/ week</span>
             </div>
-            <p className="mt-1.5 text-[13px] text-neutral-400">or 80 ETB / month in Ethiopia via Chapa</p>
+            <p className="mt-1.5 text-[13px] text-neutral-400">weekly, monthly or 3-month plans — or 80 ETB/month in Ethiopia via Chapa</p>
             <div className="mt-5">
               <CtaButton href="/signup" className="w-full">
                 Get Pro

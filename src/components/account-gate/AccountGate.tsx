@@ -113,6 +113,8 @@ function SignUpPopup({
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [waitingForGoogle, setWaitingForGoogle] = useState(false);
+  // Email sign-up needs the address confirmed before there's a session.
+  const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const googleWindow = useRef<Window | null>(null);
 
@@ -165,7 +167,15 @@ function SignUpPopup({
     setError(null);
     setBusy(true);
     try {
-      const { accessToken } = mode === "signup" ? await register(email, password) : await login(email, password);
+      if (mode === "signup") {
+        // No session until the email is confirmed: remember the flow so the
+        // dashboard picks it up again once they're in.
+        const { email: sentTo } = await register(email, password);
+        saveQuickIntent(fallbackIntent);
+        setSentToEmail(sentTo);
+        return;
+      }
+      const { accessToken } = await login(email, password);
       setAccessToken(accessToken);
       onSignedIn();
     } catch (err) {
@@ -195,74 +205,91 @@ function SignUpPopup({
           <X className="w-4 h-4" />
         </button>
 
-        <div className="text-center mb-6">
-          <h2 id="account-gate-title" className="text-xl font-bold tracking-tight text-neutral-950">
-            {mode === "signup" ? "Create your free account to continue" : "Log in to continue"}
-          </h2>
-        </div>
-
-        <button type="button" onClick={continueWithGoogle} disabled={disabled} className={BUTTON_SECONDARY}>
-          {waitingForGoogle ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
-          {waitingForGoogle ? "Finish in the Google window…" : "Continue with Google"}
-        </button>
-
-        <div className="my-5 flex items-center gap-3 text-xs font-medium text-neutral-400">
-          <span className="h-px flex-1 bg-neutral-200" />
-          or
-          <span className="h-px flex-1 bg-neutral-200" />
-        </div>
-
-        <form onSubmit={submit} className="space-y-3">
-          <input
-            type="email"
-            required
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="Email"
-            aria-label="Email"
-            className={FIELD}
-          />
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              required
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              aria-label="Password"
-              className={`${FIELD} pr-10`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-neutral-400 hover:text-neutral-800 cursor-pointer"
-            >
-              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        {sentToEmail ? (
+          <div className="text-center">
+            <h2 id="account-gate-title" className="text-xl font-bold tracking-tight text-neutral-950">
+              Check your email
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-neutral-500">
+              We sent a confirmation link to <span className="font-semibold text-neutral-800">{sentToEmail}</span>. Open it
+              to finish creating your account — you&apos;ll pick up right where you left off.
+            </p>
+            <button type="button" onClick={onClose} className={`${BUTTON_SECONDARY} mt-6`}>
+              Close
             </button>
           </div>
-          {error && <p className="text-xs text-red-600 font-medium text-center">{error}</p>}
-          <button type="submit" disabled={disabled} className={`${BUTTON_PRIMARY} mt-1`}>
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            {mode === "signup" ? "Create account and Continue" : "Log in and Continue"}
-          </button>
-        </form>
+        ) : (
+          <>
+          <div className="text-center mb-6">
+            <h2 id="account-gate-title" className="text-xl font-bold tracking-tight text-neutral-950">
+              {mode === "signup" ? "Create your free account to continue" : "Log in to continue"}
+            </h2>
+          </div>
 
-        <p className="mt-5 text-center text-xs text-neutral-500">
-          {mode === "signup" ? "Already have an account?" : "New here?"}{" "}
-          <button
-            type="button"
-            onClick={() => {
-              setMode(mode === "signup" ? "login" : "signup");
-              setError(null);
-            }}
-            className="font-semibold text-accent-strong hover:text-accent cursor-pointer"
-          >
-            {mode === "signup" ? "Log in" : "Create an account"}
+          <button type="button" onClick={continueWithGoogle} disabled={disabled} className={BUTTON_SECONDARY}>
+            {waitingForGoogle ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
+            {waitingForGoogle ? "Finish in the Google window…" : "Continue with Google"}
           </button>
-        </p>
+
+          <div className="my-5 flex items-center gap-3 text-xs font-medium text-neutral-400">
+            <span className="h-px flex-1 bg-neutral-200" />
+            or
+            <span className="h-px flex-1 bg-neutral-200" />
+          </div>
+
+          <form onSubmit={submit} className="space-y-3">
+            <input
+              type="email"
+              required
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
+              aria-label="Email"
+              className={FIELD}
+            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Password"
+                aria-label="Password"
+                className={`${FIELD} pr-10`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-neutral-400 hover:text-neutral-800 cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+            {error && <p className="text-xs text-red-600 font-medium text-center">{error}</p>}
+            <button type="submit" disabled={disabled} className={`${BUTTON_PRIMARY} mt-1`}>
+              {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {mode === "signup" ? "Create account and Continue" : "Log in and Continue"}
+            </button>
+          </form>
+
+          <p className="mt-5 text-center text-xs text-neutral-500">
+            {mode === "signup" ? "Already have an account?" : "New here?"}{" "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signup" ? "login" : "signup");
+                setError(null);
+              }}
+              className="font-semibold text-accent-strong hover:text-accent cursor-pointer"
+            >
+              {mode === "signup" ? "Log in" : "Create an account"}
+            </button>
+          </p>
+          </>
+        )}
       </div>
     </div>
   );

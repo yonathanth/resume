@@ -6,6 +6,8 @@ import {
   register,
   login,
   googleAuth,
+  verifyEmail,
+  resendVerification,
   logout,
   logoutAll,
   changePassword,
@@ -26,12 +28,26 @@ function onAuthSuccess(data: AuthResponse, router: ReturnType<typeof useRouter>)
   router.push("/dashboard");
 }
 
+// Creates the account and sends the confirmation email; no session until the
+// user confirms (useVerifyEmail).
 export function useRegister() {
-  const router = useRouter();
   return useMutation({
     mutationFn: ({ email, password }: { email: string; password: string }) =>
       register(email, password),
+  });
+}
+
+export function useVerifyEmail() {
+  const router = useRouter();
+  return useMutation({
+    mutationFn: (token: string) => verifyEmail(token),
     onSuccess: (data) => onAuthSuccess(data, router),
+  });
+}
+
+export function useResendVerification() {
+  return useMutation({
+    mutationFn: (email: string) => resendVerification(email),
   });
 }
 
