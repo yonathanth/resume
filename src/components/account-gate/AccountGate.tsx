@@ -4,7 +4,18 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Eye, EyeOff, Loader2, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GoogleIcon } from "@/components/AuthLayout";
-import { ApiError, getAccessToken, googleSignInUrl, login, refreshAccessToken, register, setAccessToken } from "@/lib/api";
+import { EmailCodeEntry } from "@/components/EmailCodeEntry";
+import {
+  ApiError,
+  getAccessToken,
+  googleSignInUrl,
+  login,
+  refreshAccessToken,
+  register,
+  resendRetryAfter,
+  resendVerification,
+  setAccessToken,
+} from "@/lib/api";
 import { GOOGLE_POPUP_MESSAGE, type GooglePopupMessage } from "@/lib/google-popup";
 import { saveQuickIntent, type QuickIntent } from "@/lib/quick-links";
 
@@ -113,9 +124,12 @@ function SignUpPopup({
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [waitingForGoogle, setWaitingForGoogle] = useState(false);
-  // Email sign-up needs the address confirmed before there's a session.
+  // Email sign-up needs the address confirmed before there's a session: once
+  // a code is emailed, the form gives way to the code boxes, right here.
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Logging in found the password right but the email unconfirmed.
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const googleWindow = useRef<Window | null>(null);
 
   // Google sign-in runs in its own small window and reports back here, so this page — and the flow — stay put.
@@ -165,13 +179,11 @@ function SignUpPopup({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setUnverifiedEmail(null);
     setBusy(true);
     try {
       if (mode === "signup") {
-        // No session until the email is confirmed: remember the flow so the
-        // dashboard picks it up again once they're in.
         const { email: sentTo } = await register(email, password);
-        saveQuickIntent(fallbackIntent);
         setSentToEmail(sentTo);
         return;
       }
@@ -179,10 +191,35 @@ function SignUpPopup({
       setAccessToken(accessToken);
       onSignedIn();
     } catch (err) {
+      if (err instanceof ApiError && err.code === "EMAIL_NOT_VERIFIED") setUnverifiedEmail(email);
       setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {
       setBusy(false);
     }
+  };
+
+  // Rate-limited means a code went out moments ago — that one still works.
+  const sendCodeTo = async (toEmail: string) => {
+    setBusy(true);
+    try {
+      await resendVerification(toEmail);
+    } catch (err) {
+      if (!resendRetryAfter(err)) {
+        setError(err instanceof ApiError ? err.message : "Couldn't send a code. Try again.");
+        return;
+      }
+    } finally {
+      setBusy(false);
+    }
+    setError(null);
+    setUnverifiedEmail(null);
+    setSentToEmail(toEmail);
+  };
+
+  // Code accepted: signed in, and the flow carries on from the step that asked.
+  const onVerified = ({ accessToken }: { accessToken: string }) => {
+    setAccessToken(accessToken);
+    onSignedIn();
   };
 
   const disabled = busy || waitingForGoogle;
@@ -206,18 +243,13 @@ function SignUpPopup({
         </button>
 
         {sentToEmail ? (
-          <div className="text-center">
-            <h2 id="account-gate-title" className="text-xl font-bold tracking-tight text-neutral-950">
-              Check your email
-            </h2>
-            <p className="mt-2 text-sm leading-relaxed text-neutral-500">
-              We sent a confirmation link to <span className="font-semibold text-neutral-800">{sentToEmail}</span>. Open it
-              to finish creating your account — you&apos;ll pick up right where you left off.
-            </p>
-            <button type="button" onClick={onClose} className={`${BUTTON_SECONDARY} mt-6`}>
-              Close
-            </button>
-          </div>
+          <EmailCodeEntry
+            email={sentToEmail}
+            theme="light"
+            titleId="account-gate-title"
+            onVerified={onVerified}
+            onChangeEmail={() => setSentToEmail(null)}
+          />
         ) : (
           <>
           <div className="text-center mb-6">
@@ -269,6 +301,16 @@ function SignUpPopup({
               </button>
             </div>
             {error && <p className="text-xs text-red-600 font-medium text-center">{error}</p>}
+            {unverifiedEmail && (
+              <button
+                type="button"
+                onClick={() => sendCodeTo(unverifiedEmail)}
+                disabled={disabled}
+                className="mx-auto block text-xs font-semibold text-accent-strong hover:text-accent cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                Email me a code to confirm it
+              </button>
+            )}
             <button type="submit" disabled={disabled} className={`${BUTTON_PRIMARY} mt-1`}>
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}
               {mode === "signup" ? "Create account and Continue" : "Log in and Continue"}

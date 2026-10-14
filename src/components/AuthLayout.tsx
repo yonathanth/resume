@@ -2,13 +2,14 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FileText, Eye, EyeOff } from "lucide-react";
 import { useRegister, useLogin, useResendVerification } from "@/hooks/use-auth";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
-import { ApiError, googleSignInUrl, RESEND_COOLDOWN_SECONDS, resendRetryAfter } from "@/lib/api";
-import { useCooldown } from "@/hooks/use-cooldown";
+import { ApiError, AuthResponse, googleSignInUrl, resendRetryAfter, setAccessToken } from "@/lib/api";
+import { EmailCodeEntry } from "@/components/EmailCodeEntry";
 import { describeQuickIntent, peekQuickIntent } from "@/lib/quick-links";
 import { isOwnPopup, reportToOpener } from "@/lib/google-popup";
 
@@ -171,23 +172,15 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
 
   const isSignup = mode === "signup";
 
+  const router = useRouter();
   const registerMutation = useRegister();
   const loginMutation = useLogin();
   const resendMutation = useResendVerification();
   const [isGoogleRedirecting, setIsGoogleRedirecting] = useState(false);
-  // Set after sign-up: the form gives way to "check your inbox".
+  // Set once a code has been emailed (sign-up, or logging in unconfirmed): the form gives way to the code boxes.
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   // Set when login finds the password right but the email unconfirmed.
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
-  const [resendNotice, setResendNotice] = useState<string | null>(null);
-  const resendCooldown = useCooldown();
-  const resendDisabled = resendMutation.isPending || resendCooldown.secondsLeft > 0;
-  const resendLabel = (idle: string) =>
-    resendMutation.isPending
-      ? "Sending…"
-      : resendCooldown.secondsLeft > 0
-        ? `${idle} in ${resendCooldown.secondsLeft}s`
-        : idle;
 
   const isPending = registerMutation.isPending || loginMutation.isPending || isGoogleRedirecting;
 
@@ -214,12 +207,10 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
     setFormError(null);
     setShowGoogleError(false);
     setUnverifiedEmail(null);
-    setResendNotice(null);
     try {
       if (isSignup) {
         const result = await registerMutation.mutateAsync({ email, password });
         setSentToEmail(result.email);
-        resendCooldown.start(RESEND_COOLDOWN_SECONDS);
       } else {
         await loginMutation.mutateAsync({ email, password });
       }
@@ -229,20 +220,26 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
     }
   };
 
-  const handleResend = async (toEmail: string) => {
-    setResendNotice(null);
+  // Logged in with an unconfirmed email: send a code and go to the code boxes.
+  // Rate-limited means a code went out moments ago — that one still works.
+  const sendCodeTo = async (toEmail: string) => {
     try {
       await resendMutation.mutateAsync(toEmail);
-      setResendNotice("A new confirmation email is on its way.");
-      resendCooldown.start(RESEND_COOLDOWN_SECONDS);
     } catch (err) {
-      const retryAfter = resendRetryAfter(err);
-      if (retryAfter) {
-        resendCooldown.start(retryAfter);
+      if (!resendRetryAfter(err)) {
+        setFormError(err instanceof ApiError ? err.message : "Couldn't send a code. Try again.");
         return;
       }
-      setResendNotice(err instanceof ApiError ? err.message : "Couldn't send the email. Try again.");
     }
+    setFormError(null);
+    setUnverifiedEmail(null);
+    setSentToEmail(toEmail);
+  };
+
+  // Code accepted: signed in, on to the dashboard (which opens any quick-link intent).
+  const handleVerified = (session: AuthResponse) => {
+    setAccessToken(session.accessToken);
+    router.push("/dashboard");
   };
 
   const handleGoogleClick = () => {
@@ -265,33 +262,12 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
             <FileText className="h-5 w-5 stroke-[2.2]" />
           </Link>
           {sentToEmail ? (
-            <div className="text-center">
-              <h1 className="text-[28px] font-bold leading-tight tracking-tight text-white sm:text-[32px]">Check your inbox</h1>
-              <p className="mt-4 text-[14.5px] leading-relaxed text-neutral-400">
-                We sent a confirmation link to <span className="font-semibold text-neutral-200">{sentToEmail}</span>. Open it
-                and click <span className="font-semibold text-neutral-200">Confirm email</span> to finish signing up. The link
-                expires in 24 hours.
-              </p>
-              <button
-                type="button"
-                onClick={() => handleResend(sentToEmail)}
-                disabled={resendDisabled}
-                className="mt-8 w-full cursor-pointer rounded-xl border border-white/[0.08] bg-[#333333] py-3.5 text-[15px] font-semibold text-white transition-colors hover:bg-[#3b3b3b] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {resendLabel("Resend email")}
-              </button>
-              {resendNotice && <p className="mt-3 text-[13.5px] font-medium text-neutral-300">{resendNotice}</p>}
-              <button
-                type="button"
-                onClick={() => {
-                  setSentToEmail(null);
-                  setResendNotice(null);
-                }}
-                className="mt-6 cursor-pointer text-[14px] font-semibold text-accent-light transition-colors hover:text-accent-mid"
-              >
-                Use a different email
-              </button>
-            </div>
+            <EmailCodeEntry
+              email={sentToEmail}
+              theme="dark"
+              onVerified={handleVerified}
+              onChangeEmail={() => setSentToEmail(null)}
+            />
           ) : (
           <>
           <h1 className="text-center text-[28px] font-bold leading-tight tracking-tight text-white sm:text-[32px]">
@@ -356,17 +332,14 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
 
             {displayedError && <p className="text-[13.5px] font-medium text-red-400">{displayedError}</p>}
             {unverifiedEmail && (
-              <div className="text-[13.5px] font-medium">
-                <button
-                  type="button"
-                  onClick={() => handleResend(unverifiedEmail)}
-                  disabled={resendDisabled}
-                  className="cursor-pointer text-accent-light transition-colors hover:text-accent-mid disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {resendLabel("Resend confirmation email")}
-                </button>
-                {resendNotice && <p className="mt-1 text-neutral-300">{resendNotice}</p>}
-              </div>
+              <button
+                type="button"
+                onClick={() => sendCodeTo(unverifiedEmail)}
+                disabled={resendMutation.isPending}
+                className="cursor-pointer self-start text-[13.5px] font-medium text-accent-light transition-colors hover:text-accent-mid disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {resendMutation.isPending ? "Sending…" : "Email me a code to confirm it"}
+              </button>
             )}
 
             <button
