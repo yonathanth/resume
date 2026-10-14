@@ -900,16 +900,14 @@ export function getCvThumbnail(cvId: string) {
   return apiFetch<{ html: string }>(`/api/v1/cv/${encodeURIComponent(cvId)}/thumbnail`);
 }
 
-// A template rendered with a fictional sample CV — for gallery thumbnails.
-// `persona` picks one of several sample people (the backend wraps it around).
+// A template rendered with its fictional sample CV — for gallery thumbnails.
+// Every template has exactly one sample person.
 export interface CvTemplateSample {
   html: string;
-  persona: number;
-  personaCount: number;
   /** The sample person's headline, e.g. "Data Analyst". */
   label: string;
 }
 
-export function getCvTemplateSample(templateId: string, persona = 0) {
-  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample?persona=${persona}`);
+export function getCvTemplateSample(templateId: string) {
+  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample`);
 }

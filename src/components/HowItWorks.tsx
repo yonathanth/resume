@@ -17,7 +17,6 @@ function Thumb({ index, className = "" }: { index: number; className?: string })
   return (
     <TemplateThumbnail
       templateId={template.id}
-      persona={index}
       title={`${template.name} template example`}
       className={`aspect-[210/297] rounded-[5px] border border-neutral-200 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)] ${className}`}
     />

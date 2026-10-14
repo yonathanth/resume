@@ -93,8 +93,9 @@ export function TemplatesView({ onUseTemplate }: TemplatesViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   const groups = templates ? groupTemplatesByCategory(templates) : [];
-  // One flat list in gallery order; the filter chips are the only grouping.
-  const ordered = groups.flatMap((g) => g.templates);
+  // One flat list in the backend's gallery order (the default, then the
+  // newest); the filter chips are the only grouping.
+  const ordered = templates ?? [];
   const query = searchQuery.trim().toLowerCase();
   const matchesSearchAndPhoto = (t: ApiCvTemplate) =>
     (!query || t.name.toLowerCase().includes(query) || t.description.toLowerCase().includes(query)) &&

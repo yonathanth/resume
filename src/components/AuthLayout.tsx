@@ -23,7 +23,25 @@ interface AuthLayoutProps {
 // gap ever opens at the ends.
 // ---------------------------------------------------------------------------
 
-const COLOURFUL_FIRST = ["accent", "bubble", "sidebar", "halo", "slate", "curve", "formal", "focus", "prose", "stack"];
+const COLOURFUL_FIRST = [
+  "midnight",
+  "capsule",
+  "timeline",
+  "crest",
+  "spark",
+  "campus",
+  "linen",
+  "accent",
+  "bubble",
+  "sidebar",
+  "halo",
+  "slate",
+  "curve",
+  "formal",
+  "focus",
+  "prose",
+  "stack",
+];
 
 type WallItem = { kind: "cv"; slot: number } | { kind: "tile"; tile: number };
 
@@ -78,7 +96,6 @@ function TemplateWall() {
               <TemplateThumbnail
                 key={i}
                 templateId={ids[item.slot % ids.length]}
-                persona={item.slot}
                 title="Resume template example"
                 className="aspect-[210/297] w-full rounded-lg"
               />

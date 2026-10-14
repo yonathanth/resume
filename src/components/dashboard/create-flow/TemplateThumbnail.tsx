@@ -7,8 +7,6 @@ import { CvPreviewFrame } from "./CvPreviewFrame";
 
 interface TemplateThumbnailProps {
   templateId: string;
-  /** Which fictional sample person to fill the template with. */
-  persona?: number;
   className?: string;
   title?: string;
 }
@@ -18,10 +16,10 @@ interface TemplateThumbnailProps {
  * fictional sample CV — every template list in the app uses this, so what a
  * gallery shows is exactly what the template produces.
  */
-export function TemplateThumbnail({ templateId, persona = 0, className = "", title }: TemplateThumbnailProps) {
+export function TemplateThumbnail({ templateId, className = "", title }: TemplateThumbnailProps) {
   const { data, isError } = useQuery({
-    queryKey: ["cv-template-sample", templateId, persona],
-    queryFn: () => getCvTemplateSample(templateId, persona),
+    queryKey: ["cv-template-sample", templateId],
+    queryFn: () => getCvTemplateSample(templateId),
     staleTime: Infinity,
   });
 
