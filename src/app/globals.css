@@ -215,15 +215,6 @@ body {
   animation: hero-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes hero-float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-
-.hero-float {
-  animation: hero-float 6s ease-in-out infinite;
-}
-
 @keyframes hero-glow {
   0%, 100% { opacity: 0.85; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.08); }
@@ -245,120 +236,218 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .hero-rise, .hero-float, .hero-glow, .hero-shimmer { animation: none; }
+  .hero-rise, .hero-glow, .hero-shimmer { animation: none; }
 }
 
-/* How it works (components/HowItWorks.tsx) — the preview window's quiet motion. */
-/* Editor: the cursor glides to a line on the preview and the line lights up. */
-@keyframes hiw-cursor {
-  0% { transform: translate(40px, 60px); opacity: 0; }
-  15% { opacity: 1; }
-  40%, 85% { transform: translate(0, 0); opacity: 1; }
-  100% { transform: translate(0, 0); opacity: 0; }
+/* How it works (components/HowItWorks.tsx) — each card replays its step of the
+   create flow. Everything shares one 10s loop (LOOP_MS in the component, which
+   Moxie's scene changes follow .hiw-clock); percentages below are
+   moments in that loop. */
+.hiw-clock { animation: hiw-clock 10s linear infinite; }
+@keyframes hiw-clock {
+  from { opacity: 0; }
+  to { opacity: 0.01; }
 }
 
-.hiw-cursor {
-  animation: hiw-cursor 3.2s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+/* 1 · Your details: pick "Upload old CV", the file drops in, Moxie reads it
+   straight away (she's in her "read" scene throughout), then it's sorted. */
+.hiw1-scene-a { animation: hiw1-scene-a 10s ease infinite; }
+@keyframes hiw1-scene-a {
+  0%, 20% { opacity: 1; transform: none; }
+  23%, 96% { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: none; }
 }
 
-@keyframes hiw-target {
-  0%, 38% { opacity: 0; }
-  45%, 88% { opacity: 1; }
-  100% { opacity: 0; }
+.hiw1-cursor { animation: hiw1-cursor 10s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@keyframes hiw1-cursor {
+  0% { transform: translate(230px, 190px); opacity: 0; }
+  3% { transform: translate(230px, 190px); opacity: 1; }
+  11% { transform: translate(150px, 102px) scale(1); }
+  14% { transform: translate(150px, 102px) scale(0.82); }
+  17%, 19% { transform: translate(150px, 102px) scale(1); opacity: 1; }
+  22%, 100% { transform: translate(150px, 102px); opacity: 0; }
 }
 
-.hiw-target {
-  animation: hiw-target 3.2s ease infinite;
+.hiw1-pick { animation: hiw1-pick 10s ease infinite; }
+@keyframes hiw1-pick {
+  0%, 11% { opacity: 0; }
+  14%, 21% { opacity: 1; }
+  24%, 100% { opacity: 0; }
 }
 
-/* 1 · Your details: a cursor hops across three cards; the ring and lift follow.
-   Each card runs the same loop shifted by a third (negative delays). */
-@keyframes hiw-tpl-ring {
-  0% { opacity: 0; }
-  6%, 30% { opacity: 1; }
-  34%, 100% { opacity: 0; }
+.hiw1-scene-b { animation: hiw1-scene-b 10s ease infinite; }
+@keyframes hiw1-scene-b {
+  0%, 21% { opacity: 0; transform: scale(1.03); }
+  23%, 29% { opacity: 1; transform: none; }
+  32%, 100% { opacity: 0; transform: scale(0.97); }
 }
 
-.hiw-tpl-ring {
-  animation: hiw-tpl-ring 4.8s ease infinite;
+.hiw1-file { animation: hiw1-file 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+@keyframes hiw1-file {
+  0%, 23% { opacity: 0; transform: translateY(-26px) rotate(-4deg); }
+  27%, 100% { opacity: 1; transform: none; }
 }
 
-@keyframes hiw-tpl-lift {
-  0% { transform: translateY(0); }
-  6%, 30% { transform: translateY(-6px); }
-  34%, 100% { transform: translateY(0); }
+.hiw1-scene-m { animation: hiw1-scene-m 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes hiw1-scene-m {
+  0%, 29% { opacity: 0; transform: scale(0.96); }
+  32%, 60% { opacity: 1; transform: none; }
+  63%, 100% { opacity: 0; transform: none; }
 }
 
-.hiw-tpl-lift {
-  position: relative;
-  animation: hiw-tpl-lift 4.8s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+.hiw1-scene-c { animation: hiw1-scene-c 10s ease infinite; }
+@keyframes hiw1-scene-c {
+  0%, 62% { opacity: 0; transform: scale(1.03); }
+  65%, 95% { opacity: 1; transform: none; }
+  99%, 100% { opacity: 0; transform: none; }
 }
 
-@keyframes hiw-tpl-cursor {
-  0%, 28% { transform: translateX(0); }
-  33%, 61% { transform: translateX(var(--hop, 84px)); }
-  66%, 94% { transform: translateX(calc(var(--hop, 84px) * 2)); }
-  100% { transform: translateX(0); }
+.hiw1-tick { animation: hiw1-tick 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+@keyframes hiw1-tick {
+  0%, 64% { transform: scale(0) rotate(-45deg); }
+  68%, 100% { transform: none; }
 }
 
-.hiw-tpl-cursor {
-  animation: hiw-tpl-cursor 4.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+.hiw1-sorted { animation: hiw1-sorted 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes hiw1-sorted {
+  0%, 66% { opacity: 0; transform: translateY(6px); }
+  70%, 100% { opacity: 1; transform: none; }
 }
 
-/* 1 · Info sources: upload arrow bobs, "typing" dots pulse. */
-@keyframes hiw-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-
-.hiw-bob {
-  animation: hiw-bob 1.4s ease-in-out infinite;
-}
-
-@keyframes hiw-dot {
-  0%, 60%, 100% { opacity: 0.35; transform: translateY(0); }
-  30% { opacity: 1; transform: translateY(-2px); }
-}
-
-.hiw-dot {
-  animation: hiw-dot 1.1s ease-in-out infinite;
-}
-
-/* 2 · Job post: a scan line sweeps, keywords pop out one by one. */
-@keyframes hiw-scan {
+/* 2 · Tailor: keywords light up in the post, "Tailor my CV" is pressed, Moxie
+   rewrites the bullet around them and the one it can't back up is flagged. */
+.hiw2-scan { animation: hiw2-scan 10s ease-in-out infinite; }
+@keyframes hiw2-scan {
   0% { transform: translateY(-24px); }
-  45%, 100% { transform: translateY(64px); }
+  25%, 100% { transform: translateY(96px); }
 }
 
-.hiw-scan {
-  animation: hiw-scan 3.6s ease-in-out infinite;
+.hiw2-kw { animation: hiw2-kw 10s ease infinite both; }
+@keyframes hiw2-kw {
+  0%, 4% { background-color: transparent; color: inherit; }
+  8%, 92% { background-color: var(--accent-soft); color: var(--accent-strong); }
+  97%, 100% { background-color: transparent; color: inherit; }
 }
 
-@keyframes hiw-chip {
-  0%, 12% { opacity: 0; transform: scale(0.7); }
-  22%, 85% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: scale(1); }
+.hiw2-btn { animation: hiw2-btn 10s ease infinite; }
+@keyframes hiw2-btn {
+  0%, 29% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  32% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  36%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
 }
 
-.hiw-chip {
-  animation: hiw-chip 3.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite both;
+.hiw2-label-idle { animation: hiw2-label-idle 10s ease infinite; }
+@keyframes hiw2-label-idle {
+  0%, 32% { opacity: 1; }
+  34%, 58% { opacity: 0; }
+  61%, 100% { opacity: 1; }
 }
 
-/* 3 · Editor: the download button gets pressed once the edit lands. */
-@keyframes hiw-press {
-  0%, 86% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
-  90% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
-  96%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+.hiw2-label-busy { animation: hiw2-label-busy 10s ease infinite; }
+@keyframes hiw2-label-busy {
+  0%, 32% { opacity: 0; }
+  34%, 58% { opacity: 1; }
+  61%, 100% { opacity: 0; }
 }
 
-.hiw-press {
-  animation: hiw-press 3.2s ease infinite;
+.hiw2-before { animation: hiw2-before 10s ease infinite; }
+@keyframes hiw2-before {
+  0%, 58% { opacity: 1; filter: none; }
+  63%, 96% { opacity: 0; filter: blur(2px); }
+  100% { opacity: 1; filter: none; }
 }
 
+.hiw2-after { animation: hiw2-after 10s ease infinite; }
+@keyframes hiw2-after {
+  0%, 60% { opacity: 0; filter: blur(2px); }
+  66%, 93% { opacity: 1; filter: none; }
+  98%, 100% { opacity: 0; filter: none; }
+}
+
+.hiw2-gap { animation: hiw2-gap 10s ease infinite; }
+@keyframes hiw2-gap {
+  0%, 72% { opacity: 0; transform: translateY(3px); }
+  77%, 93% { opacity: 1; transform: none; }
+  98%, 100% { opacity: 0; transform: none; }
+}
+
+/* 3 · Editor: click the flagged gap, type it in, Download PDF — then Moxie
+   catches the PDF. */
+.hiw3-cursor { animation: hiw3-cursor 10s cubic-bezier(0.65, 0, 0.35, 1) infinite; }
+@keyframes hiw3-cursor {
+  0% { transform: translate(240px, 200px); opacity: 0; }
+  4% { transform: translate(240px, 200px); opacity: 1; }
+  13% { transform: translate(50px, 56px) scale(1); }
+  16% { transform: translate(50px, 56px) scale(0.82); }
+  19%, 46% { transform: translate(50px, 56px) scale(1); }
+  56% { transform: translate(196px, 94px) scale(1); }
+  59% { transform: translate(196px, 94px) scale(0.82); }
+  62%, 68% { transform: translate(196px, 94px) scale(1); opacity: 1; }
+  72%, 100% { transform: translate(196px, 94px); opacity: 0; }
+}
+
+.hiw3-gap { animation: hiw3-gap 10s ease infinite; }
+@keyframes hiw3-gap {
+  0%, 15% { opacity: 1; box-shadow: 0 0 0 0 transparent; }
+  18%, 46% { opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent); }
+  50%, 96% { opacity: 0; box-shadow: none; }
+  100% { opacity: 1; }
+}
+
+.hiw3-filled { animation: hiw3-filled 10s cubic-bezier(0.34, 1.56, 0.64, 1) infinite; }
+@keyframes hiw3-filled {
+  0%, 47% { opacity: 0; transform: scale(0.85); }
+  52%, 94% { opacity: 1; transform: none; }
+  99%, 100% { opacity: 0; transform: none; }
+}
+
+.hiw3-field { animation: hiw3-field 10s cubic-bezier(0.22, 1, 0.36, 1) infinite; }
+@keyframes hiw3-field {
+  0%, 18% { opacity: 0; transform: translateX(-8px) scale(0.96); }
+  22%, 48% { opacity: 1; transform: none; }
+  53%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+.hiw3-type { animation: hiw3-type 10s infinite; }
+@keyframes hiw3-type {
+  0%, 23% { width: 0; animation-timing-function: steps(16, end); }
+  40%, 100% { width: 16ch; }
+}
+
+.hiw3-caret { animation: hiw3-caret 0.9s steps(1) infinite; }
+@keyframes hiw3-caret {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.hiw3-btn { animation: hiw3-btn 10s ease infinite; }
+@keyframes hiw3-btn {
+  0%, 58% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+  61% { transform: scale(0.94); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+  65%, 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; }
+}
+
+.hiw3-label-idle { animation: hiw3-label-idle 10s ease infinite; }
+@keyframes hiw3-label-idle {
+  0%, 61% { opacity: 1; }
+  63%, 69% { opacity: 0; }
+  72%, 100% { opacity: 1; }
+}
+
+.hiw3-label-busy { animation: hiw3-label-busy 10s ease infinite; }
+@keyframes hiw3-label-busy {
+  0%, 61% { opacity: 0; }
+  63%, 69% { opacity: 1; }
+  72%, 100% { opacity: 0; }
+}
+
+/* Reduced motion: hold each card on its finished state (Moxie has her own). */
 @media (prefers-reduced-motion: reduce) {
-  .hiw-cursor, .hiw-target,
-  .hiw-tpl-cursor, .hiw-tpl-lift, .hiw-bob, .hiw-dot, .hiw-scan, .hiw-chip, .hiw-press { animation: none; }
-  .hiw-tpl-ring { animation: none; opacity: 0; }
+  [class*="hiw1-"], [class*="hiw2-"], [class*="hiw3-"] { animation: none !important; }
+  .hiw1-scene-a, .hiw1-scene-b, .hiw1-scene-m, .hiw1-cursor, .hiw1-pick,
+  .hiw2-scan, .hiw2-label-busy, .hiw2-before,
+  .hiw3-cursor, .hiw3-gap, .hiw3-field, .hiw3-label-busy { opacity: 0; }
+  .hiw2-kw { background-color: var(--accent-soft); color: var(--accent-strong); }
 }
 
 /* Templates wall (components/TemplatesSection.tsx): columns drop gently into

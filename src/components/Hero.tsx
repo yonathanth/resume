@@ -17,10 +17,10 @@ function slotStyle(offset: number, size: number): { className: string; style: Re
     return { className: "z-30 opacity-100", style: { transform: "translateX(0) rotate(0deg) scale(1)" } };
   }
   if (offset === 1) {
-    return { className: "z-20 opacity-100", style: { transform: "translateX(64%) translateY(10px) rotate(7deg) scale(0.84)" } };
+    return { className: "z-20 opacity-100", style: { transform: "translateX(64%) translateY(0) rotate(0deg) scale(0.84)" } };
   }
   if (offset === size - 1) {
-    return { className: "z-20 opacity-100", style: { transform: "translateX(-64%) translateY(10px) rotate(-7deg) scale(0.84)" } };
+    return { className: "z-20 opacity-100", style: { transform: "translateX(-64%) translateY(0) rotate(0deg) scale(0.84)" } };
   }
   return { className: "z-10 opacity-0", style: { transform: "translateX(0) translateY(24px) scale(0.7)" } };
 }
@@ -50,8 +50,8 @@ export function Hero() {
         {/* Soft brand glow behind the stack */}
         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[172px] sm:w-[370px] sm:h-[210px] rounded-full bg-[radial-gradient(closest-side,rgba(255,122,46,0.22),rgba(255,155,96,0.08)_55%,transparent)] blur-2xl pointer-events-none hero-glow" />
 
-        {/* Cards drift gently; the fade below stays put */}
-        <div className="hero-float absolute inset-0 flex items-start justify-center">
+        {/* The card stack */}
+        <div className="absolute inset-0 flex items-start justify-center">
         {size === 0 &&
           [-1, 0, 1].map((pos) => (
             <div
@@ -60,7 +60,7 @@ export function Hero() {
                 pos === 0 ? "z-30" : "z-20 opacity-70"
               }`}
               style={{
-                transform: pos === 0 ? undefined : `translateX(${pos * 64}%) translateY(10px) rotate(${pos * 7}deg) scale(0.84)`,
+                transform: pos === 0 ? undefined : `translateX(${pos * 64}%) scale(0.84)`,
               }}
             >
               <div className="absolute inset-0 rounded-lg animate-pulse bg-neutral-100/80" />
@@ -123,7 +123,7 @@ export function Hero() {
       {/* CTA Buttons */}
       <div className="hero-rise [animation-delay:320ms] mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto justify-center">
         <CtaButton href="/signup" className="w-full sm:w-auto">Get started free</CtaButton>
-        <CtaButton href="#templates" variant="secondary" className="w-full sm:w-auto">Explore templates</CtaButton>
+        <CtaButton href="/how-it-works" variant="secondary" className="w-full sm:w-auto">How it works</CtaButton>
       </div>
     </section>
   );

@@ -1,14 +1,16 @@
 "use client";
 
-import React from "react";
-import { Check, Download, MousePointer2, UploadCloud, UserRound } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { ArrowRight, Check, Download, FileText, Loader2, MousePointer2, PenLine, UploadCloud, UserRound } from "lucide-react";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { Reveal } from "@/components/Reveal";
 import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
+import { Moxie, type MoxieAnimation } from "@/components/moxie";
 
 // The create flow, in the order the dashboard runs it (CreateCvModal):
-// the user's info, an optional job post, then the editor.
-// Each card's illustration loops a tiny animation of that step.
+// the user's info, an optional job post, then the editor (CvEditorWorkspace).
+// Each card's illustration loops a tiny replay of that step, with Moxie
+// doing the AI's part in it.
 
 function Thumb({ index, className = "" }: { index: number; className?: string }) {
   const { data: templates } = useCvTemplates();
@@ -23,143 +25,226 @@ function Thumb({ index, className = "" }: { index: number; className?: string })
   );
 }
 
-// Step 1's cursor hops across three choices, and the ring + lift follow it.
-// Each item runs the same 4.8s loop shifted by a third; `--hop` is the
-// distance between item centres.
-const hopDelay = (i: number) => `${-((3 - i) % 3) * 1.6}s`;
+// Each visual is a small fixed-size stage (280×200) so the cursor can be
+// steered to exact spots. Everything loops on one 10s clock (globals.css,
+// "How it works"); keep LOOP_MS in step with it.
+const LOOP_MS = 10_000;
 
-function Selectable({ index, children }: { index: number; children: React.ReactNode }) {
+const panel = "rounded-xl border border-neutral-200 bg-white shadow-[0_10px_22px_-14px_rgba(15,17,21,0.3)]";
+
+function Cursor({ className }: { className: string }) {
   return (
-    <div className="hiw-tpl-lift" style={{ animationDelay: hopDelay(index) }}>
-      {children}
-      <div
-        className="hiw-tpl-ring pointer-events-none absolute -inset-[5px] rounded-[10px] border-2 border-accent"
-        style={{ animationDelay: hopDelay(index) }}
-      >
-        <span className="absolute -right-2 -top-2 flex h-4 w-4 items-center justify-center rounded-full bg-accent text-white">
-          <Check className="h-2.5 w-2.5 stroke-[3]" />
-        </span>
-      </div>
-    </div>
+    <MousePointer2
+      className={`pointer-events-none absolute left-0 top-0 z-20 h-4 w-4 fill-neutral-950 text-white drop-shadow ${className}`}
+    />
   );
 }
 
-// 1 — the three ways to bring your details, each with a tiny motif of its own.
-function UploadMotif() {
+/**
+ * Moxie on a stage, switching scenes at set moments of the loop. `cues` are
+ * [percent of the loop, scene] pairs, starting at 0. An invisible element
+ * runs the same CSS clock as the rest of the stage; she reads where that
+ * clock is (rather than waiting for its events, which can fire before the
+ * page hydrates), so she's always in step with the CSS motion.
+ */
+function StageMoxie({ cues, size, className }: { cues: [number, MoxieAnimation][]; size: number; className: string }) {
+  const [animation, setAnimation] = useState<MoxieAnimation>(cues[0][1]);
+  const clock = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const tick = () => {
+      const time = clock.current?.getAnimations()[0]?.currentTime;
+      if (typeof time !== "number") return;
+      const pct = ((time % LOOP_MS) / LOOP_MS) * 100;
+      const cue = cues.reduce((current, c) => (c[0] <= pct ? c : current), cues[0]);
+      setAnimation(cue[1]);
+    };
+    tick();
+    const id = window.setInterval(tick, 100);
+    return () => window.clearInterval(id);
+  }, [cues]);
+
   return (
-    <div className="relative flex h-12 w-10 items-end justify-center rounded-[4px] border border-neutral-200 bg-white pb-1.5 shadow-sm">
-      <div className="w-6 space-y-1">
-        <div className="h-1 rounded-full bg-neutral-200" />
-        <div className="h-1 w-4/5 rounded-full bg-neutral-200" />
-      </div>
-      <span className="hiw-bob absolute -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white shadow-sm">
-        <UploadCloud className="h-3 w-3" />
-      </span>
-    </div>
+    <>
+      <span ref={clock} aria-hidden className="hiw-clock pointer-events-none absolute h-0 w-0" />
+      <Moxie animation={animation} size={size} decorative ticklish className={`absolute ${className}`} />
+    </>
   );
 }
 
-function ScratchMotif() {
-  return (
-    <div className="flex flex-col items-start gap-1.5">
-      <div className="rounded-lg rounded-bl-sm bg-white px-2 py-1 text-[9px] font-medium text-neutral-600 shadow-sm ring-1 ring-neutral-200">
-        Your last role?
-      </div>
-      <div className="flex gap-0.5 self-end rounded-lg rounded-br-sm bg-neutral-950 px-2 py-1.5">
-        {[0, 1, 2].map((d) => (
-          <span key={d} className="hiw-dot h-1 w-1 rounded-full bg-white" style={{ animationDelay: `${d * 0.15}s` }} />
-        ))}
-      </div>
-    </div>
-  );
-}
+// 1 — pick "Upload old CV" in the start dialog, the file drops in, Moxie
+// reads it (she stays in her reading scene the whole loop, so she's already
+// mid-read when she shows), and it's sorted into your resume.
+const START_OPTIONS = [
+  { label: "Start from scratch", hint: "Answer a few questions", Icon: PenLine },
+  { label: "Upload old CV", hint: "PDF or DOCX", Icon: UploadCloud },
+  { label: "Career profile", hint: "Reuse saved info", Icon: UserRound },
+];
 
-function ProfileMotif() {
-  return (
-    <div className="flex w-[78px] items-center gap-1.5 rounded-lg bg-white p-1.5 shadow-sm ring-1 ring-neutral-200">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
-        <UserRound className="h-3.5 w-3.5" />
-      </span>
-      <div className="w-full space-y-1">
-        <div className="h-1 rounded-full bg-neutral-300" />
-        <div className="h-1 w-2/3 rounded-full bg-neutral-200" />
-      </div>
-    </div>
-  );
-}
-
-const SOURCES = [
-  { label: "Upload old CV", hint: "PDF or DOCX", Motif: UploadMotif },
-  { label: "Start from scratch", hint: "A few questions", Motif: ScratchMotif },
-  { label: "Career profile", hint: "Reuse saved info", Motif: ProfileMotif },
+const SOURCE_CUES: [number, MoxieAnimation][] = [
+  [0, "read"],
 ];
 
 export function SourceVisual() {
   return (
-    <div className="relative flex items-center gap-3" style={{ "--hop": "112px" } as React.CSSProperties}>
-      {SOURCES.map(({ label, hint, Motif }, i) => (
-        <div key={label} className="relative w-[100px]">
-          <Selectable index={i}>
-            <div className="flex h-[132px] flex-col items-center justify-between rounded-[10px] border border-neutral-200 bg-white px-2 pb-3 pt-6 shadow-[0_10px_22px_-14px_rgba(15,17,21,0.3)]">
-              <div className="flex h-12 items-center">
-                <Motif />
+    <div className={`relative h-[200px] w-[280px] ${panel}`}>
+      {/* A: "How do you want to start?" */}
+      <div className="hiw1-scene-a absolute inset-0 p-3">
+        <div className="h-[14px] text-[10.5px] font-bold text-neutral-900">How do you want to start?</div>
+        <div className="mt-2 space-y-1.5">
+          {START_OPTIONS.map(({ label, hint, Icon }, i) => (
+            <div key={label} className="relative flex h-[44px] items-center gap-2.5 rounded-lg border border-neutral-200 px-2.5">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-neutral-100 text-neutral-600">
+                <Icon className="h-3.5 w-3.5" />
+              </span>
+              <div>
+                <div className="text-[10.5px] font-semibold leading-tight text-neutral-900">{label}</div>
+                <div className="text-[9.5px] text-neutral-400">{hint}</div>
               </div>
-              <div className="text-center">
-                <div className="text-[11px] font-semibold leading-tight text-neutral-900">{label}</div>
-                <div className="text-[10px] text-neutral-400">{hint}</div>
-              </div>
+              {i === 1 && <div className="hiw1-pick pointer-events-none absolute -inset-px rounded-lg border-2 border-accent bg-accent/5" />}
             </div>
-          </Selectable>
+          ))}
         </div>
-      ))}
-      <MousePointer2 className="hiw-tpl-cursor pointer-events-none absolute left-[58px] top-[72%] h-4 w-4 fill-neutral-950 text-white drop-shadow" />
+      </div>
+
+      {/* B: the file goes in */}
+      <div className="hiw1-scene-b absolute inset-0 flex flex-col p-3">
+        <div className="text-[10.5px] font-bold text-neutral-900">Upload old CV</div>
+        <div className="mt-2 flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50">
+          <span className="hiw1-file flex items-center gap-1.5 rounded-md border border-neutral-200 bg-white px-2.5 py-1.5 text-[10.5px] font-medium text-neutral-700 shadow-sm">
+            <FileText className="h-3.5 w-3.5 text-accent" /> my-cv.pdf
+          </span>
+          <span className="text-[9.5px] text-neutral-400">PDF or DOCX</span>
+        </div>
+      </div>
+
+      {/* M: Moxie reads it */}
+      <div className="hiw1-scene-m absolute inset-0">
+        <StageMoxie cues={SOURCE_CUES} size={100} className="left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
+      </div>
+
+      {/* C: sorted */}
+      <div className="hiw1-scene-c absolute inset-0 flex flex-col items-center justify-center gap-2">
+        <span className="hiw1-tick flex h-8 w-8 items-center justify-center rounded-full bg-accent text-white shadow-[0_6px_14px_-6px_var(--accent)]">
+          <Check className="h-4 w-4 stroke-[3]" />
+        </span>
+        <span className="hiw1-sorted text-[13.5px] font-bold tracking-tight text-neutral-950">Sorted into your resume</span>
+      </div>
+
+      <Cursor className="hiw1-cursor" />
     </div>
   );
 }
 
-// 2 — the job post is scanned and its keywords pop out one by one.
-const KEYWORDS = ["Product strategy", "SQL", "A/B testing", "Roadmaps"];
+// 2 — paste the job post, press "Tailor my CV", and Moxie rewrites a bullet
+// around the role's keywords; what the CV can't back up is flagged (JobGaps),
+// never invented.
+function Kw({ i, children }: { i: number; children: React.ReactNode }) {
+  return (
+    <span className="hiw2-kw rounded-[3px] px-0.5" style={{ animationDelay: `${i * 0.45}s` }}>
+      {children}
+    </span>
+  );
+}
+
+const JOB_CUES: [number, MoxieAnimation][] = [
+  [0, "idle"],
+  [33, "tailor"],
+  [90, "idle"],
+];
 
 export function JobVisual() {
   return (
-    <div className="flex w-[260px] flex-col gap-3">
-      <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-white p-2.5">
-        <div className="space-y-1.5">
-          <div className="h-1.5 w-full rounded-full bg-neutral-200" />
-          <div className="h-1.5 w-11/12 rounded-full bg-neutral-200" />
-          <div className="h-1.5 w-4/5 rounded-full bg-neutral-200" />
-          <div className="h-1.5 w-2/3 rounded-full bg-neutral-200" />
-        </div>
-        <div className="hiw-scan pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-transparent via-accent/20 to-transparent" />
+    <div className="relative w-[280px]">
+      {/* The pasted job description */}
+      <div className={`relative overflow-hidden p-2.5 ${panel}`}>
+        <div className="text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Job description</div>
+        <p className="mt-1 text-[10px] leading-[1.55] text-neutral-600">
+          Senior Accountant. You&apos;ll own <Kw i={0}>month-end close</Kw> and reporting under <Kw i={1}>IFRS</Kw>, working
+          daily in <Kw i={2}>SAP</Kw>.
+        </p>
+        <div className="hiw2-scan pointer-events-none absolute inset-x-0 top-0 h-6 bg-gradient-to-b from-transparent via-accent/15 to-transparent" />
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        {KEYWORDS.map((k, i) => (
-          <span
-            key={k}
-            className="hiw-chip flex items-center gap-1 rounded-full border border-accent-border bg-accent-soft px-2 py-0.5 text-[10.5px] font-medium text-accent-strong"
-            style={{ animationDelay: `${i * 0.35}s` }}
-          >
-            <Check className="h-2.5 w-2.5" />
-            {k}
+
+      {/* Tailor my CV */}
+      <div className="mt-2 flex w-[190px] justify-center">
+        <span className="hiw2-btn grid rounded-lg bg-neutral-950 px-3 py-1.5 text-[10.5px] font-semibold text-white">
+          <span className="hiw2-label-idle col-start-1 row-start-1 flex items-center justify-center gap-1">
+            Tailor my CV <ArrowRight className="h-3 w-3" />
           </span>
-        ))}
+          <span className="hiw2-label-busy col-start-1 row-start-1 flex items-center justify-center gap-1">
+            <Loader2 className="h-3 w-3 animate-spin" /> Tailoring…
+          </span>
+        </span>
       </div>
+
+      {/* A bullet on the CV, before and after — Moxie at work beside it */}
+      <div className={`mt-2 w-[190px] p-2.5 ${panel}`}>
+        <div className="text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Experience · Awash Bank</div>
+        <div className="relative mt-1 h-[45px] text-[10px] leading-[1.5]">
+          <p className="hiw2-before absolute inset-0 text-neutral-400">• Did reconciliations for branch accounts.</p>
+          <p className="hiw2-after absolute inset-0 text-neutral-800">
+            • Ran <b className="font-semibold text-accent-strong">IFRS</b> reconciliations for 40+ branches; cut{" "}
+            <b className="font-semibold text-accent-strong">month-end close</b> from 6 to 4 days.
+          </p>
+        </div>
+        <div className="hiw2-gap mt-1 flex items-center gap-1 text-[9.5px] text-neutral-500">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" /> Not in your CV yet:{" "}
+          <span className="font-semibold text-neutral-700">SAP</span>
+        </div>
+      </div>
+
+      <StageMoxie cues={JOB_CUES} size={96} className="-right-3 bottom-0" />
     </div>
   );
 }
 
-// 3 — click a line on the preview to edit it, then hit download.
+// 3 — the editor's preview flags what's missing as a clickable gap; it opens
+// the field, gets filled in, Download PDF is pressed, and Moxie catches the
+// finished PDF and holds it up for you.
+const EDITOR_CUES: [number, MoxieAnimation][] = [
+  [0, "idle"],
+  [69, "downloaded"],
+];
+
 export function EditorVisual() {
   return (
-    <div className="flex items-center gap-4">
-      <div className="relative w-[96px]">
+    <div className="relative h-[200px] w-[280px]">
+      {/* The live preview, with a missing detail flagged on it */}
+      <div className="absolute left-0 top-[14px] w-[108px]">
         <Thumb index={3} />
-        <div className="hiw-target pointer-events-none absolute left-[8%] top-[34%] h-[6%] w-[72%] rounded-[2px] border border-accent bg-accent/10" />
-        <MousePointer2 className="hiw-cursor pointer-events-none absolute left-[62%] top-[38%] h-4 w-4 fill-neutral-950 text-white drop-shadow" />
       </div>
-      <span className="hiw-press flex items-center gap-1.5 rounded-full bg-neutral-950 px-3 py-1.5 text-[11.5px] font-semibold text-white">
-        <Download className="h-3.5 w-3.5 text-accent-light" /> PDF
+      <div className="absolute left-[6px] top-[52px] h-[17px] w-[96px]">
+        <span className="hiw3-gap absolute inset-0 flex items-center justify-center rounded-[4px] border border-dashed border-accent bg-accent-soft text-[9px] font-semibold text-accent-strong">
+          + Add phone number
+        </span>
+        <span className="hiw3-filled absolute inset-0 flex items-center justify-center rounded-[4px] border border-emerald-200 bg-emerald-50 font-mono text-[8.5px] font-medium text-emerald-700">
+          +251 91 234 5678
+        </span>
+      </div>
+
+      {/* The field it opens in the form */}
+      <div className="hiw3-field absolute left-[122px] top-[10px] w-[158px] rounded-lg border border-neutral-200 bg-white p-2 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)]">
+        <div className="text-[9px] font-semibold text-neutral-500">Phone</div>
+        <div className="mt-1 flex h-[22px] items-center rounded-md border border-accent px-1.5 ring-2 ring-accent/15">
+          <span className="hiw3-type inline-block overflow-hidden whitespace-nowrap font-mono text-[9px] text-neutral-900">+251 91 234 5678</span>
+          <span className="hiw3-caret ml-px h-3 w-px bg-neutral-900" />
+        </div>
+      </div>
+
+      {/* Download PDF */}
+      <span className="hiw3-btn absolute left-[122px] top-[84px] grid h-[30px] w-[158px] rounded-lg bg-neutral-950 text-[10.5px] font-semibold text-white">
+        <span className="hiw3-label-idle col-start-1 row-start-1 flex items-center justify-center gap-1.5">
+          <Download className="h-3.5 w-3.5 text-accent-light" /> Download PDF
+        </span>
+        <span className="hiw3-label-busy col-start-1 row-start-1 flex items-center justify-center gap-1.5">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing…
+        </span>
       </span>
+
+      {/* …and Moxie hands it over */}
+      <StageMoxie cues={EDITOR_CUES} size={88} className="bottom-[-4px] left-[160px]" />
+      <Cursor className="hiw3-cursor" />
     </div>
   );
 }
@@ -167,7 +252,7 @@ export function EditorVisual() {
 const STEPS: { title: string; body: string; Visual: React.ComponentType }[] = [
   { title: "Share your details", body: "Upload an old CV, answer a few questions, or reuse a saved career profile.", Visual: SourceVisual },
   { title: "Tailor it to the job", body: "Add the job post and we work in the keywords recruiters scan for.", Visual: JobVisual },
-  { title: "Download and apply", body: "Click any line to tweak it, then export a PDF.", Visual: EditorVisual },
+  { title: "Download and apply", body: "Fill in any gaps it flags, tweak what you like, then download a PDF.", Visual: EditorVisual },
 ];
 
 export function HowItWorks() {
