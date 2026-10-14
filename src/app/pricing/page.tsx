@@ -7,7 +7,7 @@ import { Footer } from "@/components/Footer";
 import { Reveal } from "@/components/Reveal";
 import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
 import { useHasMounted } from "@/hooks/use-has-mounted";
-import { getAccessToken, type SubscriptionPlan } from "@/lib/api";
+import { hasSession, type SubscriptionPlan } from "@/lib/api";
 import { useStartCreditCheckout, useStartProCheckout } from "@/hooks/use-subscription";
 
 // Free accounts get one free AI generation per dashboard tab — Create,
@@ -130,7 +130,7 @@ export default function PricingPage() {
   const hasMounted = useHasMounted();
   // hasMounted guards this (not a direct typeof window check) so the server
   // render and the client's first hydration pass agree — see use-has-mounted.ts.
-  const isSignedIn = hasMounted && !!getAccessToken();
+  const isSignedIn = hasMounted && hasSession();
   const checkout = useStartProCheckout();
   const creditCheckout = useStartCreditCheckout();
 

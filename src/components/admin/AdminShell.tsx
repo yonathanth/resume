@@ -20,7 +20,7 @@ import {
   X,
   ArrowUpRight,
 } from "lucide-react";
-import { ApiError, clearAccessToken, getAccessToken, logout, refreshAccessToken } from "@/lib/api";
+import { ApiError, clearAccessToken, getAccessToken, logout, restoreSession } from "@/lib/api";
 import { getAdminMe, type AdminMe, type Permission } from "@/lib/admin-api";
 
 // Client-side shell for /admin. This only decides what to *render*: every
@@ -119,12 +119,17 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const token = getAccessToken() ?? (await refreshAccessToken());
+      if (getAccessToken()) {
+        setHasSession(true);
+        return;
+      }
+      const result = await restoreSession();
       if (cancelled) return;
-      if (!token) {
+      if (result.status === "signed_out") {
         router.replace("/admin/login");
         return;
       }
+      // Offline: carry on — the admin/me query below shows "Try again".
       setHasSession(true);
     })();
     return () => {
