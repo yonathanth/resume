@@ -4,10 +4,11 @@ import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelSubscription,
+  changeSubscriptionPlan,
   createCreditCheckout,
   createSubscriptionCheckout,
-  getAccessToken,
   getSubscriptionStatus,
+  hasSession,
   resumeSubscription,
   type CheckoutProvider,
   type CreditProduct,
@@ -30,7 +31,7 @@ export function useSubscriptionStatus() {
   return useQuery({
     queryKey: SUBSCRIPTION_STATUS_QUERY_KEY,
     queryFn: getSubscriptionStatus,
-    enabled: hasMounted && !!getAccessToken(),
+    enabled: hasMounted && hasSession(),
   });
 }
 
@@ -91,6 +92,17 @@ export function useCancelSubscription() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: cancelSubscription,
+    onSuccess: (status) => {
+      queryClient.setQueryData(SUBSCRIPTION_STATUS_QUERY_KEY, status);
+    },
+  });
+}
+
+// Moves the subscription to another tier in place (see changeSubscriptionPlan).
+export function useChangePlan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (plan: SubscriptionPlan) => changeSubscriptionPlan(plan),
     onSuccess: (status) => {
       queryClient.setQueryData(SUBSCRIPTION_STATUS_QUERY_KEY, status);
     },

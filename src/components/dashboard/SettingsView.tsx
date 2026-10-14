@@ -7,6 +7,7 @@ import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut,
 import {
   useSubscriptionStatus,
   useCancelSubscription,
+  useChangePlan,
   useResumeSubscription,
 } from "@/hooks/use-subscription";
 import {
@@ -40,6 +41,7 @@ import {
   type PushSupport,
 } from "@/lib/push";
 import { CancelPlanModal } from "@/components/dashboard/CancelPlanModal";
+import { ChangePlanModal } from "@/components/dashboard/ChangePlanModal";
 import { ICON_TONES, OptionTone } from "@/components/dashboard/create-flow/OptionCard";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { useToast } from "@/components/Toaster";
@@ -636,8 +638,12 @@ function PlanSection() {
   const { data: subscription, isLoading } = useSubscriptionStatus();
   const cancelSubscription = useCancelSubscription();
   const resumeSubscription = useResumeSubscription();
+  const changePlan = useChangePlan();
+  const toast = useToast();
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [showChangeModal, setShowChangeModal] = useState(false);
+  const [changeError, setChangeError] = useState<string | null>(null);
 
   if (isLoading || !subscription) {
     return <div className="h-24 rounded-lg bg-neutral-100 animate-pulse" />;
@@ -660,6 +666,17 @@ function PlanSection() {
       setShowCancelModal(false);
     } catch (err) {
       setCancelError(errorMessage(err, "Could not cancel your subscription. Please try again."));
+    }
+  };
+
+  const handleConfirmChange = async (plan: SubscriptionPlan) => {
+    setChangeError(null);
+    try {
+      await changePlan.mutateAsync(plan);
+      setShowChangeModal(false);
+      toast.success(`You're now on the ${PLAN_LABEL[plan]} plan`);
+    } catch (err) {
+      setChangeError(errorMessage(err, "Could not change your plan. Please try again."));
     }
   };
 
@@ -743,17 +760,22 @@ function PlanSection() {
           {subscription.isPro ? (
             !isChapa &&
             !isGrant && (
-              <button
-                type="button"
-                onClick={() => setShowCancelModal(true)}
-                className={
-                  subscription.cancelAtPeriodEnd
-                    ? SECONDARY_BUTTON
-                    : "inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                }
-              >
-                {subscription.cancelAtPeriodEnd ? "Keep my plan" : "Cancel plan"}
-              </button>
+              <>
+                <button type="button" onClick={() => setShowChangeModal(true)} className={SECONDARY_BUTTON}>
+                  Change plan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(true)}
+                  className={
+                    subscription.cancelAtPeriodEnd
+                      ? SECONDARY_BUTTON
+                      : "inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                  }
+                >
+                  {subscription.cancelAtPeriodEnd ? "Keep my plan" : "Cancel plan"}
+                </button>
+              </>
             )
           ) : (
             <Link
@@ -768,6 +790,21 @@ function PlanSection() {
           </Link>
         </div>
       </div>
+
+      {showChangeModal && (
+        <ChangePlanModal
+          isOpen
+          currentPlan={subscription.plan ?? null}
+          isCancelScheduled={subscription.cancelAtPeriodEnd}
+          isProcessing={changePlan.isPending}
+          error={changeError}
+          onConfirm={handleConfirmChange}
+          onClose={() => {
+            setShowChangeModal(false);
+            setChangeError(null);
+          }}
+        />
+      )}
 
       <CancelPlanModal
         isOpen={showCancelModal}

@@ -1,18 +1,82 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const TOKEN_KEY = "resumate_access_token";
+
+// The session is the httpOnly refresh cookie (30 days, renewed on every
+// refresh). The short-lived access token lives only in memory, never in
+// storage a script could read later; each tab gets its own from the cookie
+// on load. localStorage only holds a non-secret "signed in" hint, so pages can
+// tell synchronously that a session probably exists, and so signing out in one
+// tab signs out the others.
+const SESSION_HINT_KEY = "resumate_session";
+const LEGACY_TOKEN_KEY = "resumate_access_token";
+
+let accessToken: string | null = null;
+
+function readHint(): boolean {
+  try {
+    return localStorage.getItem(SESSION_HINT_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeHint(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(SESSION_HINT_KEY, "1");
+    else localStorage.removeItem(SESSION_HINT_KEY);
+  } catch {
+    // Storage blocked (private mode): the in-memory token still works.
+  }
+}
+
+if (typeof window !== "undefined") {
+  // Tokens stored by earlier versions: drop them, but remember the session.
+  try {
+    if (localStorage.getItem(LEGACY_TOKEN_KEY)) {
+      localStorage.removeItem(LEGACY_TOKEN_KEY);
+      writeHint(true);
+    }
+  } catch {
+    // ignore
+  }
+  // Signed out in another tab: forget this tab's token too.
+  window.addEventListener("storage", (event) => {
+    if (event.key === SESSION_HINT_KEY && event.newValue === null) accessToken = null;
+  });
+}
 
 export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return accessToken;
+}
+
+/** True when this browser probably has a session (a token, or a refresh cookie to get one). */
+export function hasSession(): boolean {
+  if (typeof window === "undefined") return false;
+  return accessToken !== null || readHint();
 }
 
 export function setAccessToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  accessToken = token;
+  writeHint(true);
 }
 
 export function clearAccessToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  accessToken = null;
+  writeHint(false);
 }
+
+/** Seconds until the token's exp claim, or 0 if it can't be read. */
+function secondsLeft(token: string): number {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+    return typeof payload.exp === "number" ? payload.exp - Date.now() / 1000 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Refresh this long before the access token expires, so requests don't
+// bounce off a 401 first.
+const EXPIRY_MARGIN_SECONDS = 60;
 
 export interface ApiUser {
   id: string;
@@ -57,25 +121,52 @@ export class ApiError extends Error {
 
 const REFRESH_PATH = "/api/v1/auth/refresh";
 
-// Dedupes concurrent 401s during a single access-token refresh so parallel
-// requests don't each fire their own /auth/refresh call.
-let refreshPromise: Promise<string | null> | null = null;
+// Endpoints that work without a session: never refresh before calling them
+// (a stale hint would only add a wasted round trip to sign-in).
+const SESSIONLESS_PATHS = new Set([
+  "/api/v1/auth/register",
+  "/api/v1/auth/verify-email",
+  "/api/v1/auth/resend-verification",
+  "/api/v1/auth/login",
+  "/api/v1/auth/google",
+  REFRESH_PATH,
+  "/api/v1/auth/forgot-password",
+  "/api/v1/auth/reset-password",
+  "/api/v1/auth/logout",
+  "/api/v1/admin/auth/login",
+  "/api/v1/platform/status",
+  "/api/v1/notifications/unsubscribe",
+]);
 
-function requestRefresh(): Promise<string | null> {
+/**
+ * "signed_out": the server refused the session (expired, revoked, suspended).
+ * "offline": the network or server failed — the session may be fine, so
+ * nothing is cleared and nobody is sent to the sign-in page.
+ */
+export type RefreshResult = { status: "ok"; token: string } | { status: "signed_out" } | { status: "offline" };
+
+// Dedupes concurrent refreshes so parallel requests share one /auth/refresh call.
+let refreshPromise: Promise<RefreshResult> | null = null;
+
+function requestRefresh(): Promise<RefreshResult> {
   if (!refreshPromise) {
     refreshPromise = fetch(`${API_URL}${REFRESH_PATH}`, {
       method: "POST",
       credentials: "include",
     })
-      .then(async (res) => {
-        if (!res.ok) return null;
+      .then(async (res): Promise<RefreshResult> => {
+        if (res.status === 401 || res.status === 403) {
+          clearAccessToken();
+          return { status: "signed_out" };
+        }
+        if (!res.ok) return { status: "offline" };
         const body = await res.json().catch(() => null);
         const newToken = body?.data?.accessToken as string | undefined;
-        if (!newToken) return null;
+        if (!newToken) return { status: "offline" };
         setAccessToken(newToken);
-        return newToken;
+        return { status: "ok", token: newToken };
       })
-      .catch(() => null)
+      .catch((): RefreshResult => ({ status: "offline" }))
       .finally(() => {
         refreshPromise = null;
       });
@@ -83,14 +174,51 @@ function requestRefresh(): Promise<string | null> {
   return refreshPromise;
 }
 
-// Exchanges the httpOnly refresh cookie for a fresh access token (stored on
-// success). Resolves null when there's no valid session.
-export function refreshAccessToken(): Promise<string | null> {
+/** Restores the session from the refresh cookie (page load, sign-in pages). */
+export function restoreSession(): Promise<RefreshResult> {
   return requestRefresh();
 }
 
+// Exchanges the httpOnly refresh cookie for a fresh access token (kept in
+// memory on success). Resolves null when there's no usable session.
+export async function refreshAccessToken(): Promise<string | null> {
+  const result = await requestRefresh();
+  return result.status === "ok" ? result.token : null;
+}
+
+/** A token good for at least another minute — refreshed first when needed. */
+async function currentToken(path: string): Promise<string | null> {
+  if (accessToken && secondsLeft(accessToken) > EXPIRY_MARGIN_SECONDS) return accessToken;
+  if (SESSIONLESS_PATHS.has(path) || (!accessToken && !readHint())) return accessToken;
+  const result = await requestRefresh();
+  // Offline: try with what we have; the request itself will say what's wrong.
+  return result.status === "ok" ? result.token : accessToken;
+}
+
+function goToSignIn(error?: string) {
+  if (typeof window === "undefined") return;
+  const admin = window.location.pathname.startsWith("/admin");
+  const target = admin ? "/admin/login" : "/login";
+  if (window.location.pathname.startsWith(target)) return;
+  window.location.href = error ? `${target}?error=${error}` : target;
+}
+
+/** fetch with the access token, refreshing and retrying once on a 401. For non-JSON responses (PDFs). */
+async function authedFetch(path: string, init: RequestInit = {}, isRetry = false): Promise<Response> {
+  const token = await currentToken(path);
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(`${API_URL}${path}`, { ...init, headers, credentials: "include" });
+  if (res.status === 401 && token && !isRetry) {
+    const result = await requestRefresh();
+    if (result.status === "ok") return authedFetch(path, init, true);
+    if (result.status === "signed_out") goToSignIn();
+  }
+  return res;
+}
+
 export async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
-  const token = getAccessToken();
+  const token = await currentToken(path);
   const headers = new Headers(options.headers);
   // FormData (file uploads) must keep the browser-generated multipart
   // boundary — never force JSON headers onto it. And a bodyless request
@@ -107,18 +235,15 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
     credentials: "include",
   });
 
-  // Access tokens expire after 15 minutes; the refresh token lives in an
-  // httpOnly cookie, so on a 401 we silently rotate the access token and
-  // retry the request once before giving up.
-  if (res.status === 401 && token && !isRetry && path !== REFRESH_PATH) {
-    const newToken = await requestRefresh();
-    if (newToken) {
+  // Tokens are refreshed ahead of expiry, but one can still be refused (the
+  // laptop slept, the session was revoked). Refresh and retry once; only a
+  // session the server actually refused sends the user to sign in.
+  if (res.status === 401 && token && !isRetry && !SESSIONLESS_PATHS.has(path)) {
+    const result = await requestRefresh();
+    if (result.status === "ok") {
       return apiFetch<T>(path, options, true);
     }
-    clearAccessToken();
-    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
-      window.location.href = "/login";
-    }
+    if (result.status === "signed_out") goToSignIn();
   }
 
   const body = await res.json().catch(() => null);
@@ -129,9 +254,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
     // session and explain why on the sign-in page.
     if (code === "ACCOUNT_SUSPENDED" && token) {
       clearAccessToken();
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login?error=ACCOUNT_SUSPENDED";
-      }
+      goToSignIn("ACCOUNT_SUSPENDED");
     }
     throw new ApiError(res.status, code, message, details);
   }
@@ -1014,6 +1137,17 @@ export function cancelSubscription() {
   return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/cancel", { method: "POST" });
 }
 
+// Switches an active Polar subscription to another tier. The current plan
+// ends and the new one replaces it on the same subscription (prorated — never
+// billed twice). Also lifts a scheduled cancellation. Returns the same shape
+// as getSubscriptionStatus().
+export function changeSubscriptionPlan(plan: SubscriptionPlan) {
+  return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/change-plan", {
+    method: "POST",
+    body: JSON.stringify({ plan }),
+  });
+}
+
 // Reverses a pending cancel-at-period-end — the subscription goes back to
 // renewing normally.
 export function resumeSubscription() {
@@ -1022,14 +1156,7 @@ export function resumeSubscription() {
 
 // Not run through apiFetch: the response body is a raw PDF stream, not JSON.
 export async function downloadCvPdf(cvId: string): Promise<Blob> {
-  const token = getAccessToken();
-  const headers = new Headers();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  const res = await fetch(`${API_URL}/api/v1/cv/${encodeURIComponent(cvId)}/download`, {
-    headers,
-    credentials: "include",
-  });
+  const res = await authedFetch(`/api/v1/cv/${encodeURIComponent(cvId)}/download`);
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
@@ -1074,14 +1201,9 @@ export function previewCvHtml(templateId: string, content: CVContentDTO, showMis
 
 // The real PDF of unsaved editor content (no save, no finalize) — "Preview PDF".
 export async function previewCvPdf(templateId: string, content: CVContentDTO): Promise<Blob> {
-  const token = getAccessToken();
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (token) headers.set("Authorization", `Bearer ${token}`);
-
-  const res = await fetch(`${API_URL}/api/v1/cv/preview/pdf`, {
+  const res = await authedFetch("/api/v1/cv/preview/pdf", {
     method: "POST",
-    headers,
-    credentials: "include",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ templateId, content }),
   });
 

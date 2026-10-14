@@ -16,7 +16,7 @@ import {
   updateMe,
   setAccessToken,
   clearAccessToken,
-  getAccessToken,
+  hasSession,
   AuthResponse,
   UpdateMeInput,
 } from "@/lib/api";
@@ -80,7 +80,7 @@ export function useMe() {
   return useQuery({
     queryKey: ME_QUERY_KEY,
     queryFn: getMe,
-    enabled: hasMounted && !!getAccessToken(),
+    enabled: hasMounted && hasSession(),
   });
 }
 

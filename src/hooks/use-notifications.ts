@@ -3,8 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   dismissNotification,
-  getAccessToken,
   getPlatformStatus,
+  hasSession,
   listNotifications,
   markAllNotificationsRead,
   markNotificationRead,
@@ -20,7 +20,7 @@ export function useNotifications() {
   return useQuery({
     queryKey: NOTIFICATIONS_QUERY_KEY,
     queryFn: listNotifications,
-    enabled: hasMounted && !!getAccessToken(),
+    enabled: hasMounted && hasSession(),
     refetchInterval: 2 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
