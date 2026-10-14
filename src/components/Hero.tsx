@@ -83,7 +83,6 @@ export function Hero() {
             >
               <TemplateThumbnail
                 templateId={template.id}
-                persona={i}
                 title={`${template.name} template example`}
                 className={`aspect-[210/297] rounded-lg border transition-shadow duration-700 ${
                   isActive

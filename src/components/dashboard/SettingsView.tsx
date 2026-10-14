@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell } from "lucide-react";
+import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell, Mail } from "lucide-react";
 import {
   useSubscriptionStatus,
   useCancelSubscription,
@@ -17,11 +17,16 @@ import {
   useLogoutAll,
   useChangePassword,
   useDeleteAccount,
+  ME_QUERY_KEY,
 } from "@/hooks/use-auth";
 import {
   ApiError,
   ApiUser,
   ProfileAutoSync,
+  cancelEmailChange,
+  confirmEmailChange,
+  resendEmailChange,
+  startEmailChange,
   SubscriptionPlan,
   canUseCareerProfiles,
   getNotificationPreferences,
@@ -40,6 +45,7 @@ import { ChangePlanModal } from "@/components/dashboard/ChangePlanModal";
 import { ICON_TONES, OptionTone } from "@/components/dashboard/create-flow/OptionCard";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { useToast } from "@/components/Toaster";
+import { EmailCodeEntry } from "@/components/EmailCodeEntry";
 
 const INPUT_CLASS =
   "w-full px-3.5 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 transition disabled:bg-neutral-50 disabled:text-neutral-500";
@@ -149,20 +155,19 @@ function ProfileForm({ me }: { me: ApiUser }) {
   const saved = {
     firstName: seeded.first,
     lastName: seeded.last,
-    email: me.email,
     phone: me.phone ?? "",
     profession: me.occupationTitle ?? "",
   };
   const [form, setForm] = useState(saved);
   const [error, setError] = useState<string | null>(null);
+  const [changingEmail, setChangingEmail] = useState(false);
   const toast = useToast();
 
   const set = (key: keyof typeof form) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }));
   const changed = (key: keyof typeof form) => form[key].trim() !== saved[key];
   const isDirty = (Object.keys(form) as (keyof typeof form)[]).some(changed);
   const phoneInvalid = !PHONE_PATTERN.test(form.phone);
-  const isValid =
-    form.firstName.trim() !== "" && form.lastName.trim() !== "" && form.email.trim() !== "" && !phoneInvalid;
+  const isValid = form.firstName.trim() !== "" && form.lastName.trim() !== "" && !phoneInvalid;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,7 +177,6 @@ function ProfileForm({ me }: { me: ApiUser }) {
       const namesChanged = changed("firstName") || changed("lastName");
       await updateProfile.mutateAsync({
         ...(namesChanged ? { firstName: form.firstName.trim(), lastName: form.lastName.trim() } : {}),
-        ...(changed("email") ? { email: form.email.trim() } : {}),
         ...(changed("phone") ? { phone: form.phone.trim() } : {}),
         ...(changed("profession") && form.profession.trim() ? { occupationTitle: form.profession.trim() } : {}),
       });
@@ -183,6 +187,7 @@ function ProfileForm({ me }: { me: ApiUser }) {
   };
 
   return (
+    <>
     <form onSubmit={handleSave} className="space-y-5">
       <p className="text-xs text-neutral-500 -mt-1">
         New resumes start with these details, and the AI won&apos;t ask for them again. You can still change them on
@@ -219,17 +224,13 @@ function ProfileForm({ me }: { me: ApiUser }) {
           <label htmlFor="email" className={LABEL_CLASS}>
             Email
           </label>
-          <input
-            id="email"
-            type="email"
-            required
-            value={form.email}
-            onChange={(e) => set("email")(e.target.value)}
-            className={INPUT_CLASS}
-          />
-          {changed("email") && (
-            <p className="mt-1.5 text-xs text-neutral-500">You&apos;ll sign in with this email from now on.</p>
-          )}
+          {/* Changed only by proving the new address (a code), in its own dialog. */}
+          <div className="flex gap-2">
+            <input id="email" type="email" value={me.email} readOnly disabled className={INPUT_CLASS} />
+            <button type="button" onClick={() => setChangingEmail(true)} className={`${SECONDARY_BUTTON} shrink-0`}>
+              Change
+            </button>
+          </div>
         </div>
         <div>
           <label htmlFor="phone" className={LABEL_CLASS}>
@@ -277,6 +278,155 @@ function ProfileForm({ me }: { me: ApiUser }) {
         </div>
       </div>
     </form>
+    {/* Beside the form, not in it: the dialog has a form of its own. */}
+    {changingEmail && <ChangeEmailModal me={me} onClose={() => setChangingEmail(false)} />}
+    </>
+  );
+}
+
+/**
+ * Changing the sign-in email: the new address (and the password, when the
+ * account has one), then the 6-digit code sent to that address. The account
+ * only moves once the code is right; the old address gets a notice.
+ */
+function ChangeEmailModal({ me, onClose }: { me: ApiUser; onClose: () => void }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [newEmail, setNewEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Set once the code is on its way: the form gives way to the code boxes.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
+  const canSend = newEmail.trim().includes("@") && (!me.hasPassword || password.length > 0);
+
+  const close = () => {
+    // Leaving mid-way drops the pending change, so a stray code can't be used later.
+    if (pendingEmail) void cancelEmailChange().catch(() => undefined);
+    onClose();
+  };
+
+  const send = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSending(true);
+    try {
+      const { pendingEmail } = await startEmailChange({
+        newEmail: newEmail.trim(),
+        ...(me.hasPassword ? { password } : {}),
+      });
+      setPendingEmail(pendingEmail);
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't send the code. Please try again."));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onChanged = (user: ApiUser) => {
+    queryClient.setQueryData(ME_QUERY_KEY, user);
+    toast.success("Email changed", { description: `You'll sign in with ${user.email} from now on.` });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={close}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="change-email-title"
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md bg-white rounded-2xl border border-neutral-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      >
+        <button
+          type="button"
+          onClick={close}
+          className="absolute top-4 right-4 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+          title="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {pendingEmail ? (
+          <div className="p-7">
+            <EmailCodeEntry<ApiUser>
+              email={pendingEmail}
+              theme="light"
+              titleId="change-email-title"
+              verify={confirmEmailChange}
+              resend={resendEmailChange}
+              onVerified={onChanged}
+              onChangeEmail={() => {
+                setPendingEmail(null);
+                setError(null);
+              }}
+            />
+          </div>
+        ) : (
+          <form onSubmit={send}>
+            <div className="p-7">
+              <span className="w-11 h-11 rounded-xl flex items-center justify-center bg-neutral-50 border border-neutral-200 text-neutral-700 mb-4">
+                <Mail className="w-5 h-5" />
+              </span>
+              <h3 id="change-email-title" className="text-lg font-bold text-neutral-950 tracking-tight">
+                Change your email
+              </h3>
+              <p className="mt-1.5 text-sm text-neutral-500 leading-relaxed">
+                We&apos;ll send a code to the new address. Your email changes once you enter it; until then you keep
+                signing in with <span className="font-semibold text-neutral-800 [overflow-wrap:anywhere]">{me.email}</span>.
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <div>
+                  <label htmlFor="newEmail" className={LABEL_CLASS}>
+                    New email
+                  </label>
+                  <input
+                    id="newEmail"
+                    type="email"
+                    autoComplete="email"
+                    autoFocus
+                    required
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    className={INPUT_CLASS}
+                  />
+                </div>
+                {me.hasPassword && (
+                  <div>
+                    <label htmlFor="changeEmailPassword" className={LABEL_CLASS}>
+                      Your password
+                    </label>
+                    <input
+                      id="changeEmailPassword"
+                      type="password"
+                      autoComplete="current-password"
+                      required
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className={INPUT_CLASS}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {error && <p className="mt-4 text-xs font-medium text-red-600">{error}</p>}
+            </div>
+
+            <div className="px-7 py-4 border-t border-neutral-200 bg-neutral-50/80 flex gap-2.5">
+              <button type="button" onClick={close} className={`${SECONDARY_BUTTON} flex-1`}>
+                Cancel
+              </button>
+              <button type="submit" disabled={!canSend || sending} className={`${PRIMARY_BUTTON} flex-1`}>
+                {sending && <Loader2 className="w-4 h-4 animate-spin" />}
+                {sending ? "Sending..." : "Send code"}
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 

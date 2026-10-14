@@ -66,7 +66,6 @@ export function TemplatesSection() {
               {ids.length ? (
                 <TemplateThumbnail
                   templateId={ids[i % ids.length]}
-                  persona={i}
                   title="Resume template example"
                   className="aspect-[210/297] w-full rounded-xl border border-neutral-200/80 shadow-[0_1px_2px_rgba(15,17,21,0.05),0_6px_16px_-8px_rgba(15,17,21,0.08)]"
                 />

@@ -368,6 +368,15 @@ export function register(email: string, password: string) {
   });
 }
 
+/** The 6-digit code from the confirmation email: confirms the address and signs in. */
+export function verifyEmailCode(email: string, code: string) {
+  return apiFetch<AuthResponse>("/api/v1/auth/verify-code", {
+    method: "POST",
+    body: JSON.stringify({ email, code }),
+  });
+}
+
+// Links from emails sent before codes (the /verify-email page).
 export function verifyEmail(token: string) {
   return apiFetch<AuthResponse>("/api/v1/auth/verify-email", {
     method: "POST",
@@ -419,9 +428,10 @@ export function getMe() {
   return apiFetch<ApiUser>("/api/v1/auth/me");
 }
 
+// The email isn't here: it changes only through startEmailChange, which
+// proves the new address with a code.
 export interface UpdateMeInput {
   fullName?: string;
-  email?: string;
   firstName?: string;
   lastName?: string;
   /** "" clears it. */
@@ -451,6 +461,31 @@ export function searchOccupations(q: string, limit = 8) {
 
 // Changes the password, or sets a first one on a Google-only account (omit
 // currentPassword). Signs out every other device; this one stays signed in.
+// Changing the account email: a code goes to the new address, and only that
+// code (confirmEmailChange) moves the account to it. The password is needed
+// when the account has one.
+export function startEmailChange(input: { newEmail: string; password?: string }) {
+  return apiFetch<{ pendingEmail: string }>("/api/v1/auth/me/email", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function resendEmailChange() {
+  return apiFetch<{ pendingEmail: string }>("/api/v1/auth/me/email/resend", { method: "POST" });
+}
+
+export function confirmEmailChange(code: string) {
+  return apiFetch<ApiUser>("/api/v1/auth/me/email/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+}
+
+export function cancelEmailChange() {
+  return apiFetch<{ success: boolean }>("/api/v1/auth/me/email", { method: "DELETE" });
+}
+
 export function changePassword(input: { currentPassword?: string; newPassword: string }) {
   return apiFetch<ApiUser>("/api/v1/auth/password", {
     method: "POST",
@@ -691,6 +726,8 @@ export interface ApiCvDocument {
   title: string | null;
   templateId: string;
   content: CVContentDTO;
+  /** The job it was tailored to, if any — kept so later saves don't drop it. */
+  jobDescription?: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -1187,16 +1224,14 @@ export function getCvThumbnail(cvId: string) {
   return apiFetch<{ html: string }>(`/api/v1/cv/${encodeURIComponent(cvId)}/thumbnail`);
 }
 
-// A template rendered with a fictional sample CV — for gallery thumbnails.
-// `persona` picks one of several sample people (the backend wraps it around).
+// A template rendered with its fictional sample CV — for gallery thumbnails.
+// Every template has exactly one sample person.
 export interface CvTemplateSample {
   html: string;
-  persona: number;
-  personaCount: number;
   /** The sample person's headline, e.g. "Data Analyst". */
   label: string;
 }
 
-export function getCvTemplateSample(templateId: string, persona = 0) {
-  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample?persona=${persona}`);
+export function getCvTemplateSample(templateId: string) {
+  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample`);
 }

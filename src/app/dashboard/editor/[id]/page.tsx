@@ -46,6 +46,8 @@ export default function CvEditorPage({
           atsScore: draft.atsScore,
           // The backend resolves legacy ids to a real template, so any stored id is renderable.
           templateStyle: doc.templateId || DEFAULT_TEMPLATE_ID,
+          // Kept as it is: the editor saves it back with every change.
+          jobDescription: doc.jobDescription ?? undefined,
         });
         setLoaded({ id, cv: applyCvContent(blank, doc.content), notFound: false });
       })

@@ -17,6 +17,9 @@ import {
   updateCvContent,
 } from "@/lib/api";
 import { toResumeDraft } from "@/lib/cv-mapper";
+import type { FlowKind } from "@/lib/flow-drafts";
+import { dashboardFlowHref, markFlowClosed } from "@/lib/flow-url";
+import { editorHref, ensureSavedCv } from "@/lib/finished-cv";
 import {
   ResumeDraft,
   CvData,
@@ -35,14 +38,6 @@ interface DashboardContextValue {
   activeEditingCv: CvData | null;
   setActiveEditingCv: React.Dispatch<React.SetStateAction<CvData | null>>;
 
-  isCreateModalOpen: boolean;
-  setIsCreateModalOpen: (open: boolean) => void;
-  isStartWithTemplateOpen: boolean;
-  setIsStartWithTemplateOpen: (open: boolean) => void;
-  /** Set when the create flow was opened from a career profile. */
-  preselectedProfileId: string | null;
-  preselectedTemplate: TemplateId | undefined;
-
   handleOpenDraftInEditor: (draft: ResumeDraft) => void;
   handleDuplicateDraft: (draft: ResumeDraft) => void;
   handleDeleteDraft: (id: string) => Promise<void>;
@@ -50,6 +45,12 @@ interface DashboardContextValue {
   handleUseTemplate: (templateId: TemplateId) => void;
   handleCreateCvFromProfile: (profileId: string) => void;
   handleNewResume: () => void;
+  /** Opens a flow on the Builder — in its URL, so a refresh reopens it and Back closes it (see flow-url). */
+  openFlow: (flow: FlowKind, options?: { template?: string; profile?: string }) => void;
+  /** Closes the open flow (✕): back to the plain dashboard URL. */
+  closeFlow: (session: string) => void;
+  /** A flow finished: its CV opens on its own editor page, in place of the flow's URL. */
+  openFinishedCv: (cv: CvData, session: string) => Promise<void>;
   goToPastProjects: () => void;
   goToTemplates: () => void;
 }
@@ -75,10 +76,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   const [activeEditingCv, setActiveEditingCv] = useState<CvData | null>(null);
 
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [isStartWithTemplateOpen, setIsStartWithTemplateOpen] = useState(false);
-  const [preselectedProfileId, setPreselectedProfileId] = useState<string | null>(null);
-  const [preselectedTemplate, setPreselectedTemplate] = useState<TemplateId | undefined>(undefined);
 
   // Opens a draft in its own dedicated editor page (a real route, not an
   // overlay component swapped in over whichever page triggered it) — the
@@ -165,26 +162,33 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     queryClient.invalidateQueries({ queryKey: CV_DRAFTS_QUERY_KEY });
   };
 
-  const handleUseTemplate = (templateId: TemplateId) => {
-    setPreselectedTemplate(templateId);
-    setPreselectedProfileId(null);
-    setIsStartWithTemplateOpen(true);
-    router.push("/dashboard");
+  // Every flow opens through its URL (see flow-url): from any dashboard page,
+  // it lands on the Builder with the flow open on top.
+  const openFlow = (flow: FlowKind, options: { template?: string; profile?: string } = {}) => {
+    router.push(dashboardFlowHref(flow, options), { scroll: false });
   };
 
-  const handleCreateCvFromProfile = (profileId: string) => {
-    setPreselectedProfileId(profileId);
-    setPreselectedTemplate(undefined);
-    setIsCreateModalOpen(true);
-    router.push("/dashboard");
+  const closeFlow = (session: string) => {
+    markFlowClosed(session);
+    router.replace("/dashboard", { scroll: false });
   };
 
-  const handleNewResume = () => {
-    setPreselectedProfileId(null);
-    setPreselectedTemplate(undefined);
-    setIsCreateModalOpen(true);
-    router.push("/dashboard");
+  const openFinishedCv = async (cv: CvData, session: string) => {
+    markFlowClosed(session);
+    try {
+      const id = await ensureSavedCv(cv);
+      queryClient.invalidateQueries({ queryKey: CV_DRAFTS_QUERY_KEY });
+      router.replace(editorHref(id), { scroll: false });
+    } catch {
+      // Couldn't save it as a document just now: open it here, where the editor saves it on the first change.
+      router.replace("/dashboard", { scroll: false });
+      setActiveEditingCv(cv);
+    }
   };
+
+  const handleUseTemplate = (templateId: TemplateId) => openFlow("create", { template: templateId });
+  const handleCreateCvFromProfile = (profileId: string) => openFlow("create", { profile: profileId });
+  const handleNewResume = () => openFlow("create");
 
   const goToPastProjects = () => router.push("/dashboard/past-projects");
   const goToTemplates = () => router.push("/dashboard/templates");
@@ -200,12 +204,6 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         setDrafts,
         activeEditingCv,
         setActiveEditingCv,
-        isCreateModalOpen,
-        setIsCreateModalOpen,
-        isStartWithTemplateOpen,
-        setIsStartWithTemplateOpen,
-        preselectedProfileId,
-        preselectedTemplate,
         handleOpenDraftInEditor,
         handleDuplicateDraft,
         handleDeleteDraft,
@@ -213,6 +211,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         handleUseTemplate,
         handleCreateCvFromProfile,
         handleNewResume,
+        openFlow,
+        closeFlow,
+        openFinishedCv,
         goToPastProjects,
         goToTemplates,
       }}

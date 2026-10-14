@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
   FilePlus,
@@ -35,6 +35,9 @@ import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, updateCvCont
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
+import { useAccountGate } from "@/components/account-gate/AccountGate";
+import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
+import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { ProfileSyncStep } from "./ProfileSyncStep";
@@ -61,55 +64,130 @@ type TailorStep =
   | "review-gaps"
   | "select-template";
 
+type TemplateNext = { kind: "existing"; sourceId: string } | { kind: "story" } | { kind: "upload"; file: File };
+
+/** What's kept across a refresh: everything typed and chosen, and the AI's results so far (not a picked file). */
+interface TailorDraft {
+  step: TailorStep;
+  templateNext: Exclude<TemplateNext, { kind: "upload" }> | null;
+  templateBackStep: TailorStep;
+  sourceType: "profile" | "past-project" | "new-cv";
+  selectedProjectId: string;
+  newCvMethod: "scratch" | "upload";
+  freestyleStory: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  uploadedFileName: string | null;
+  targetRole: string;
+  jobDescription: string;
+  alignmentLevel: number;
+  selectedTemplate: TemplateId;
+  cvDocumentId: string | null;
+  latestContent: CVContentDTO | undefined;
+  analyzedSourceText: string;
+  clarifyingQuestions: ClarificationQuestion[];
+  questionAnswers: Record<string, string>;
+  jobGaps: string[];
+  confirmedGaps: ConfirmedGap[];
+  sourceProfileId: string | null;
+}
+
+/** The steps in the URL, which need data to show, and which only last while the AI works. */
+const TAILOR_STEPS: FlowStepConfig<TailorStep, TailorDraft> = {
+  first: "select-source",
+  slugs: {
+    "select-source": "start",
+    "existing-cv-choice": "existing",
+    "pick-source-item": "pick",
+    "new-cv-freestyle": "about-you",
+    "new-cv-upload": "upload",
+    "new-cv-analyzing": "reading",
+    "choose-template": "template",
+    "new-cv-missing": "details",
+    "jd-and-slider": "job",
+    "review-gaps": "gaps",
+    "select-template": "finish",
+  },
+  transient: { "new-cv-analyzing": "new-cv-upload" },
+  available: (step, d) => {
+    switch (step) {
+      case "choose-template":
+        return Boolean(d?.templateNext);
+      case "pick-source-item":
+        return d?.sourceType === "profile" || d?.sourceType === "past-project";
+      case "new-cv-missing":
+      case "jd-and-slider":
+      case "select-template":
+        return Boolean(d?.cvDocumentId);
+      case "review-gaps":
+        return Boolean(d?.cvDocumentId && d.jobGaps.length);
+      default:
+        return true;
+    }
+  },
+};
+
+/** Where a restored flow reopens: a step mid-AI-wait goes back to the one it started from (a picked file isn't kept). */
+function resumeStep(draft: TailorDraft): TailorStep {
+  if (draft.step === "new-cv-analyzing") return "new-cv-upload";
+  if (draft.step === "choose-template" && !draft.templateNext) return draft.templateBackStep;
+  return draft.step;
+}
+
 export function TailorCvModal({
   isOpen,
   onClose,
   onComplete,
   pastProjects = [],
 }: TailorCvModalProps) {
-  const [step, setStep] = useState<TailorStep>("select-source");
+  // Progress kept across a refresh (or a trip to checkout): see useSaveFlowDraft below.
+  const saved = useRestoredFlowDraft<TailorDraft>("tailor");
+  // The step lives in the URL, so Back / Forward move between steps (see flow-steps).
+  const [step, setStep, trackStepData] = useFlowStep<TailorStep, TailorDraft>(
+    TAILOR_STEPS,
+    saved ? { step: resumeStep(saved), data: saved } : null
+  );
   // The template is chosen right before the first AI call (the AI only writes
   // the sections it shows). What to run once it's picked, and where Back goes.
-  const [templateNext, setTemplateNext] = useState<
-    { kind: "existing"; sourceId: string } | { kind: "story" } | { kind: "upload"; file: File } | null
-  >(null);
-  const [templateBackStep, setTemplateBackStep] = useState<TailorStep>("select-source");
+  const [templateNext, setTemplateNext] = useState<TemplateNext | null>(saved?.templateNext ?? null);
+  const [templateBackStep, setTemplateBackStep] = useState<TailorStep>(saved?.templateBackStep ?? "select-source");
 
   // Source selection: 'profile' | 'past-project' | 'new-cv'
   const [sourceType, setSourceType] = useState<
     "profile" | "past-project" | "new-cv"
-  >("profile");
+  >(saved?.sourceType ?? "profile");
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
-    pastProjects[0]?.id || "draft-1"
+    saved?.selectedProjectId ?? (pastProjects[0]?.id || "draft-1")
   );
 
   // New CV / Scratch sub-flow states
-  const [newCvMethod, setNewCvMethod] = useState<"scratch" | "upload">("scratch");
-  const [freestyleStory, setFreestyleStory] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [newCvMethod, setNewCvMethod] = useState<"scratch" | "upload">(saved?.newCvMethod ?? "scratch");
+  const [freestyleStory, setFreestyleStory] = useState(saved?.freestyleStory ?? "");
+  const [fullName, setFullName] = useState(saved?.fullName ?? "");
+  const [email, setEmail] = useState(saved?.email ?? "");
+  const [phone, setPhone] = useState(saved?.phone ?? "");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(saved?.uploadedFileName ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Job Description state
-  const [targetRole, setTargetRole] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
+  const [targetRole, setTargetRole] = useState(saved?.targetRole ?? "");
+  const [jobDescription, setJobDescription] = useState(saved?.jobDescription ?? "");
 
   // 0 to 10 Scroll / Slider
-  const [alignmentLevel, setAlignmentLevel] = useState<number>(7);
+  const [alignmentLevel, setAlignmentLevel] = useState<number>(saved?.alignmentLevel ?? 7);
 
 
   // Template selection state
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(DEFAULT_TEMPLATE_ID);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? DEFAULT_TEMPLATE_ID);
 
   // Real backend integration now covers every source — "new-cv" via
   // analyze/upload, "profile"/"past-project" via pulling their real saved
   // content (see handlePrepareExistingSource). All downstream logic keys off
   // `cvDocumentId` actually being set, not the source type itself.
-  const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
-  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
-  const [analyzedSourceText, setAnalyzedSourceText] = useState("");
+  const [cvDocumentId, setCvDocumentId] = useState<string | null>(saved?.cvDocumentId ?? null);
+  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(saved?.latestContent ?? undefined);
+  const [analyzedSourceText, setAnalyzedSourceText] = useState(saved?.analyzedSourceText ?? "");
   const [flowError, setFlowError] = useState<string | null>(null);
   // The profile / past resume currently being loaded from a click.
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
@@ -117,14 +195,14 @@ export function TailorCvModal({
   // AI clarification questions surfaced by /cv/analyze (the whole
   // missing-details form) and job-compatibility gaps surfaced after
   // tailoring — both shown only when non-empty.
-  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>([]);
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>(saved?.clarifyingQuestions ?? []);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>(saved?.questionAnswers ?? {});
   // Called before the early `if (!isOpen) return null` so hook order never changes.
   const questionPages = useQuestionPages(clarifyingQuestions, questionAnswers);
-  const [jobGaps, setJobGaps] = useState<string[]>([]);
+  const [jobGaps, setJobGaps] = useState<string[]>(saved?.jobGaps ?? []);
   // Gaps the user said they do have after seeing them — kept for any later
   // re-tailor too, since they're facts about the user, not about this job.
-  const [confirmedGaps, setConfirmedGaps] = useState<ConfirmedGap[]>([]);
+  const [confirmedGaps, setConfirmedGaps] = useState<ConfirmedGap[]>(saved?.confirmedGaps ?? []);
 
   // A CV document created mid-flow should never outlive an abandoned
   // session — only a completed flow keeps it (see markCompleted() below).
@@ -135,15 +213,27 @@ export function TailorCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const proGate = useProGate();
+  // Signed out (the /try pages): only what needs no account, and an account before the AI.
+  const { isGuest, requireAccount } = useAccountGate();
   // Career profiles are Pro-only; free users see the option with a Pro badge.
   const { data: careerProfiles = [] } = useProfiles();
   // The profile this CV is being tailored from, if any — facts go back to it.
-  const [sourceProfileId, setSourceProfileId] = useState<string | null>(null);
+  const [sourceProfileId, setSourceProfileId] = useState<string | null>(saved?.sourceProfileId ?? null);
   const subscriptionStatus = useSubscriptionStatus().data;
   const canUseProfiles = canUseCareerProfiles(subscriptionStatus);
   // The quick save after the AI pass (adding confirmed gaps) — Moxie stays up through it.
   const [finishingUp, setFinishingUp] = useState(false);
   const { done: aiDone, celebrate } = useAiDone();
+
+  const draft: TailorDraft = {
+    step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, sourceType, selectedProjectId,
+    newCvMethod, freestyleStory, fullName, email, phone, uploadedFileName, targetRole, jobDescription, alignmentLevel,
+    selectedTemplate, cvDocumentId, latestContent, analyzedSourceText, clarifyingQuestions, questionAnswers, jobGaps,
+    confirmedGaps, sourceProfileId,
+  };
+  // Back / Forward check the step they land on against this.
+  useEffect(() => trackStepData(draft));
+  useSaveFlowDraft<TailorDraft>("tailor", draft, step !== "select-source");
 
   if (!isOpen) return null;
 
@@ -167,6 +257,7 @@ export function TailorCvModal({
 
   const handlePrepareExistingSource = async (sourceId: string, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
+    if (!(await requireAccount())) return;
     setLoadingSourceId(sourceId);
     try {
       const { cvDocumentId: docId, sourceText, document } =
@@ -202,6 +293,8 @@ export function TailorCvModal({
   // the extracted text through the AI parse (same as CreateCvModal's upload flow).
   const handleUploadFile = async (file: File, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
+    // Signed out (the /try pages): an account first — nothing goes to the AI before one exists.
+    if (!(await requireAccount())) return;
     setUploadedFileName(file.name);
     setStep("new-cv-analyzing");
 
@@ -252,6 +345,9 @@ export function TailorCvModal({
       setFlowError("Tell us about your experience first. A few sentences is enough.");
       return;
     }
+
+    // Signed out (the /try pages): an account first — nothing goes to the AI before one exists.
+    if (!(await requireAccount())) return;
 
     try {
       const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync({
@@ -310,38 +406,47 @@ export function TailorCvModal({
   const alignmentHint = ALIGNMENT_OPTIONS.find((o) => o.value === alignmentLevel)?.hint;
 
   // Generate finalized tailored CV
-  const buildTailoredCv = (): CvData => {
+  // `content` is passed in when finishing straight after the AI pass, before its state update has landed.
+  const buildTailoredCv = (content: CVContentDTO | undefined = latestContent): CvData => {
     const base = getBaseCv();
+    const role = targetRole || content?.personal?.title || base.targetRole;
     let tailored: CvData = {
       ...base,
       id: `tailored-${Date.now()}`,
-      title: `${targetRole || base.targetRole || "Resume"} (Tailored)`,
-      targetRole: targetRole || base.targetRole,
+      title: `${role || "Resume"} (Tailored)`,
+      targetRole: role,
       templateStyle: selectedTemplate,
       jobDescription,
       tailorAlignmentScore: alignmentLevel,
     };
 
-    if (cvDocumentId && latestContent) {
-      tailored = applyCvContent(tailored, latestContent);
+    if (cvDocumentId && content) {
+      tailored = applyCvContent(tailored, content);
     }
 
     return tailored;
   };
 
-  const handleFinish = () => {
+  const handleFinish = (content: CVContentDTO | undefined = latestContent) => {
     setFlowError(null);
-    const finalCv = cvDocumentId ? { ...buildTailoredCv(), id: cvDocumentId } : buildTailoredCv();
+    const finalCv = cvDocumentId ? { ...buildTailoredCv(content), id: cvDocumentId } : buildTailoredCv(content);
     if (cvDocumentId) markCompleted();
     onComplete(finalCv);
+  };
+
+  // Done tailoring: straight into the editor — or, on Pro, first the offer to
+  // save it to a career profile (the only end step with a real choice in it).
+  const toTheEnd = (content?: CVContentDTO) => {
+    if (canUseProfiles && cvDocumentId) setStep("select-template");
+    else handleFinish(content);
   };
 
   // Folds the job description, alignment slider, the answers to the AI's
   // questions and any gaps the user confirmed into the backend document via
   // the same refine endpoint CreateCvModal uses (enhancementLevel here comes
   // from the 0–10 alignment slider instead of a fixed default). Resolves to
-  // the gaps still left, or null when it didn't go through.
-  const runTailoring = async (gapsToAdd: ConfirmedGap[]): Promise<string[] | null> => {
+  // the gaps still left and the tailored content, or null when it didn't go through.
+  const runTailoring = async (gapsToAdd: ConfirmedGap[]): Promise<{ remaining: string[]; content: CVContentDTO } | null> => {
     if (!cvDocumentId) return null;
 
     const { personal, otherLines } = splitClarificationAnswers(clarifyingQuestions, questionAnswers);
@@ -395,7 +500,7 @@ export function TailorCvModal({
       const confirmed = new Set(gapsToAdd.map(({ gap }) => gap.toLowerCase()));
       const remaining = (document.jobAnalysis?.gaps ?? []).filter((gap) => !confirmed.has(gap.toLowerCase()));
       setJobGaps(remaining);
-      return remaining;
+      return { remaining, content };
     } catch (err) {
       if (proGate.isProRequired(err)) return null;
       setFlowError(err instanceof Error ? err.message : "Could not tailor your CV. Please try again.");
@@ -408,29 +513,29 @@ export function TailorCvModal({
   const handleContinueToTemplate = async () => {
     setFlowError(null);
     if (!cvDocumentId) {
-      setStep("select-template");
+      handleFinish();
       return;
     }
-    const remaining = await runTailoring(confirmedGaps);
-    if (!remaining) return;
+    const result = await runTailoring(confirmedGaps);
+    if (!result) return;
     // Gaps left to review means it isn't finished yet — save the ta-da for the end.
-    if (remaining.length > 0) {
+    if (result.remaining.length > 0) {
       setStep("review-gaps");
       return;
     }
     await celebrate("tailor");
-    setStep("select-template");
+    toTheEnd(result.content);
   };
 
   // "Add to my CV" on the gaps step — re-tailors with the confirmed gaps.
   const handleAddConfirmedGaps = async (added: ConfirmedGap[]) => {
     setFlowError(null);
     const all = [...confirmedGaps.filter((c) => !added.some((a) => a.gap === c.gap)), ...added];
-    const remaining = await runTailoring(all);
-    if (!remaining) return;
+    const result = await runTailoring(all);
+    if (!result) return;
     setConfirmedGaps(all);
     await celebrate("tailor");
-    setStep("select-template");
+    toTheEnd(result.content);
   };
 
   const aiWait: AiWait | null =
@@ -490,28 +595,39 @@ export function TailorCvModal({
                 icon={FileText}
                 tone="sky"
                 title="Use an existing CV"
-                description="Upload one, or pick a resume you've made here."
-                onClick={() => setStep("existing-cv-choice")}
-              />
-              <OptionCard
-                icon={User}
-                tone="violet"
-                title="Start from a career profile"
-                description={
-                  canUseProfiles
-                    ? "Tailor everything a role profile holds to this job."
-                    : "A FitCV Pro feature: build from your saved role profiles."
-                }
+                description={isGuest ? "Upload a PDF, Word file or photo of your resume." : "Upload one, or pick a resume you've made here."}
                 onClick={() => {
-                  if (!canUseProfiles) {
-                    proGate.openPaywall();
+                  // Nothing saved here yet to pick from: straight to the upload.
+                  if (isGuest) {
+                    setSourceType("new-cv");
+                    setNewCvMethod("upload");
+                    setStep("new-cv-upload");
                     return;
                   }
-                  setSourceType("profile");
-                  setSourceProfileId(null);
-                  setStep("pick-source-item");
+                  setStep("existing-cv-choice");
                 }}
               />
+              {!isGuest && (
+                <OptionCard
+                  icon={User}
+                  tone="violet"
+                  title="Start from a career profile"
+                  description={
+                    canUseProfiles
+                      ? "Tailor everything a role profile holds to this job."
+                      : "A FitCV Pro feature: build from your saved role profiles."
+                  }
+                  onClick={() => {
+                    if (!canUseProfiles) {
+                      proGate.openPaywall();
+                      return;
+                    }
+                    setSourceType("profile");
+                    setSourceProfileId(null);
+                    setStep("pick-source-item");
+                  }}
+                />
+              )}
               <OptionCard
                 icon={FilePlus}
                 tone="accent"
@@ -853,14 +969,14 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 4: GAPS → ADD WHAT THE USER LEFT OUT, OR CONTINUE AS IS ================= */}
-        {/* Before the ready step: on Pro that step can save the CV to a profile straight away. */}
+        {/* Before the end: on Pro, the offer to save the CV to a profile; otherwise straight into the editor. */}
         {step === "review-gaps" && (
           <GapReviewStep
             gaps={jobGaps}
             onAdd={handleAddConfirmedGaps}
             onSkip={() => {
               setFlowError(null);
-              setStep("select-template");
+              toTheEnd();
             }}
             onBack={() => {
               setFlowError(null);
@@ -890,43 +1006,11 @@ export function TailorCvModal({
             }
             // Tailored to a job: only facts go back, never the wording.
             tailored
-            onFinish={handleFinish}
+            onFinish={() => handleFinish()}
             onProRequired={proGate.isProRequired}
           >
             <JobGaps gaps={jobGaps} />
           </ProfileSyncStep>
-        )}
-
-        {/* ================= STEP 5: READY (free plan) ================= */}
-        {step === "select-template" && !(canUseProfiles && cvDocumentId) && (
-          <div>
-            <div className="text-center mb-5">
-              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Your tailored CV is ready</h2>
-            </div>
-
-            <JobGaps gaps={jobGaps} />
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("jd-and-slider")}
-                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span>Open in editor</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-            {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
-            )}
-          </div>
         )}
     </FlowModal>
   );

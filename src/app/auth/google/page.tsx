@@ -3,9 +3,12 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { clearAccessToken, refreshAccessToken } from "@/lib/api";
+import { isOwnPopup, reportToOpener } from "@/lib/google-popup";
 
 // Where the backend's Google callback sends the browser. It has set the
-// refresh cookie; trade it for an access token and continue to the dashboard.
+// refresh cookie; trade it for an access token and continue to the dashboard —
+// or, in the sign-up pop-up's Google window, report back to the page that
+// opened it (which carries on from there) and close.
 export default function GoogleAuthCompletePage() {
   const router = useRouter();
 
@@ -17,6 +20,10 @@ export default function GoogleAuthCompletePage() {
       clearAccessToken();
       const token = await refreshAccessToken();
       if (cancelled) return;
+      if (isOwnPopup()) {
+        reportToOpener({ ok: Boolean(token) });
+        return;
+      }
       router.replace(token ? "/dashboard" : "/login?error=GOOGLE_SIGN_IN_FAILED");
     })();
 

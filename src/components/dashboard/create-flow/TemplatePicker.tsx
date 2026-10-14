@@ -42,8 +42,9 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
   }
 
   const groups = groupTemplatesByCategory(templates);
-  // One flat list in gallery order; the filter chips are the only grouping.
-  const ordered = groups.flatMap((g) => g.templates);
+  // One flat list in the backend's gallery order (the default, then the
+  // newest); the filter chips are the only grouping.
+  const ordered = templates ?? [];
   const visible = category === ALL ? ordered : ordered.filter((t) => t.category === category);
 
   const renderCard = (tmpl: ApiCvTemplate) => {

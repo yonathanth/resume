@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Upload,
   PenLine,
@@ -39,6 +39,9 @@ import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useMe } from "@/hooks/use-auth";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
+import { useAccountGate } from "@/components/account-gate/AccountGate";
+import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
+import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { ProfileSyncStep } from "./ProfileSyncStep";
 import { ProfilePicker } from "./ProfilePicker";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
@@ -83,6 +86,87 @@ const FREESTYLE_GUIDE = [
   { title: "Anything else relevant", hint: "Projects, volunteering, awards" },
 ];
 
+type TemplateNext = { kind: "freestyle" } | { kind: "upload"; file: File } | { kind: "profile" };
+
+/**
+ * What's kept across a refresh: everything typed and chosen, and the AI's
+ * results so far (not a picked file) — and how the flow was opened, so the
+ * dashboard reopens it the same way (from a template, a profile, or plain).
+ */
+export interface CreateDraft {
+  openedWith: { template?: TemplateId; profileId?: string };
+  step: Step;
+  templateNext: Exclude<TemplateNext, { kind: "upload" }> | null;
+  templateBackStep: Step;
+  selectedProfileId: string;
+  fromProfile: boolean;
+  selectedTemplate: TemplateId;
+  freestyleText: string;
+  targetRole: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  optionalJd: string;
+  jobBackStep: Step;
+  flowExtraDetails: string;
+  uploadedFileName: string | null;
+  cvDocumentId: string | null;
+  latestContent: CVContentDTO | undefined;
+  analyzedSourceText: string;
+  analyzedInputs: { jd: string; extra: string };
+  clarifyingQuestions: ClarificationQuestion[];
+  questionAnswers: Record<string, string>;
+  jobGaps: string[];
+}
+
+/** The steps in the URL, which need data to show, and which only last while the AI works. */
+const CREATE_STEPS: FlowStepConfig<Step, CreateDraft> = {
+  first: "select-method",
+  slugs: {
+    "select-method": "start",
+    "select-career-profile": "profiles",
+    "profile-extras": "profile-details",
+    "scratch-choice": "write",
+    "scratch-freestyle": "about-you",
+    "upload-cv": "upload",
+    "upload-analyzing": "reading",
+    "select-template-first": "template",
+    "scratch-missing": "details",
+    "upload-instructions": "upload-notes",
+    "upload-missing": "upload-details",
+    "job-ask": "job",
+    "job-target": "job-post",
+    "save-profile-prompt": "finish",
+  },
+  transient: { "upload-analyzing": "upload-cv" },
+  available: (step, d) => {
+    switch (step) {
+      case "select-template-first":
+        return Boolean(d?.templateNext);
+      case "profile-extras":
+        return Boolean(d?.selectedProfileId);
+      case "job-ask":
+      case "job-target":
+        // Asked before a profile's CV is generated, or after the AI wrote one.
+        return Boolean(d?.cvDocumentId || d?.selectedProfileId);
+      case "scratch-missing":
+      case "upload-instructions":
+      case "upload-missing":
+      case "save-profile-prompt":
+        return Boolean(d?.cvDocumentId);
+      default:
+        return true;
+    }
+  },
+};
+
+/** Where a restored flow reopens: a step mid-AI-wait goes back to the one it started from (a picked file isn't kept). */
+function resumeStep(draft: CreateDraft): Step {
+  if (draft.step === "upload-analyzing") return "upload-cv";
+  if (draft.step === "select-template-first" && !draft.templateNext) return draft.templateBackStep;
+  return draft.step;
+}
+
 export function CreateCvModal({
   isOpen,
   onClose,
@@ -90,76 +174,69 @@ export function CreateCvModal({
   initialTemplate,
   initialProfileId,
 }: CreateCvModalProps) {
-  const [step, setStep] = useState<Step>("select-method");
+  // Progress kept across a refresh (or a trip to checkout): see useSaveFlowDraft below.
+  const saved = useRestoredFlowDraft<CreateDraft>("create");
+  // Opened from a career profile: straight to choosing the template for it. (Each
+  // opening mounts afresh, so this is just where it starts — unless it's restoring.)
+  const fromProfileStart = !saved && initialProfileId ? initialProfileId : null;
+  // The step lives in the URL, so Back / Forward move between steps (see flow-steps).
+  const [step, setStep, trackStepData] = useFlowStep<Step, CreateDraft>(
+    CREATE_STEPS,
+    saved
+      ? { step: resumeStep(saved), data: saved }
+      : fromProfileStart
+        ? { step: "select-template-first", data: { templateNext: { kind: "profile" } } as CreateDraft }
+        : null
+  );
   // The template is chosen right before the first AI call — the AI only
   // writes the sections it shows, follows its notes, and asks about what it
   // needs but can't find. These remember what to run once it's picked, and
   // where the template step's Back returns to. (Skipped when the flow was
   // opened with a template already chosen.)
-  const [templateNext, setTemplateNext] = useState<
-    { kind: "freestyle" } | { kind: "upload"; file: File } | { kind: "profile" } | null
-  >(null);
-  const [templateBackStep, setTemplateBackStep] = useState<Step>("select-method");
+  const [templateNext, setTemplateNext] = useState<TemplateNext | null>(
+    saved?.templateNext ?? (fromProfileStart ? { kind: "profile" } : null)
+  );
+  const [templateBackStep, setTemplateBackStep] = useState<Step>(
+    saved?.templateBackStep ?? (fromProfileStart ? "select-career-profile" : "select-method")
+  );
 
   // Career profiles are Pro-only: free users see the option with a Pro
   // badge, and the end-of-flow "save to a profile" step is skipped for them.
   const { data: availableProfiles = [] } = useProfiles();
   const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
 
-  const [selectedProfileId, setSelectedProfileId] = useState<string>("");
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(saved?.selectedProfileId ?? fromProfileStart ?? "");
   // True when this CV is being generated from a profile — it's already
   // linked to that profile, so there's no "save to a profile" step after.
-  const [fromProfile, setFromProfile] = useState(false);
+  const [fromProfile, setFromProfile] = useState(saved?.fromProfile ?? Boolean(fromProfileStart));
 
-  React.useEffect(() => {
-    if (isOpen) {
-      if (initialProfileId) {
-        setSelectedProfileId(initialProfileId);
-        setFromProfile(true);
-        setTemplateNext({ kind: "profile" });
-        setTemplateBackStep("select-career-profile");
-        setStep("select-template-first");
-      } else {
-        setFromProfile(false);
-        setStep("select-method");
-      }
-
-      if (initialTemplate) {
-        setSelectedTemplate(initialTemplate);
-      }
-    }
-  }, [
-    isOpen,
-    initialTemplate,
-    initialProfileId,
-  ]);
 
 
   // Selection states
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(DEFAULT_TEMPLATE_ID);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? initialTemplate ?? DEFAULT_TEMPLATE_ID);
 
   // Free style state — left blank until real data exists (typed, uploaded,
   // or picked from a saved profile); never seeded with sample text.
-  const [freestyleText, setFreestyleText] = useState("");
-  const [targetRole, setTargetRole] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [freestyleText, setFreestyleText] = useState(saved?.freestyleText ?? "");
+  const [targetRole, setTargetRole] = useState(saved?.targetRole ?? "");
+  const [fullName, setFullName] = useState(saved?.fullName ?? "");
+  const [email, setEmail] = useState(saved?.email ?? "");
+  const [phone, setPhone] = useState(saved?.phone ?? "");
 
   // Optional Job Description state (as requested across all flows)
-  const [optionalJd, setOptionalJd] = useState("");
+  const [optionalJd, setOptionalJd] = useState(saved?.optionalJd ?? "");
   // Where Back on the "Tailor to a job?" step returns to — the questions,
   // or the career-profile step when there was nothing to ask.
-  const [jobBackStep, setJobBackStep] = useState<Step>("scratch-missing");
+  const [jobBackStep, setJobBackStep] = useState<Step>(saved?.jobBackStep ?? "scratch-missing");
   const [showWritingGuide, setShowWritingGuide] = useState(false);
 
   // Facts the user adds in this flow that aren't in the upload/profile yet
   // ("Anything else / anything new?"). They go into the CV, and a profile
   // can be offered them afterwards.
-  const [flowExtraDetails, setFlowExtraDetails] = useState("");
+  const [flowExtraDetails, setFlowExtraDetails] = useState(saved?.flowExtraDetails ?? "");
 
   // Upload state
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(saved?.uploadedFileName ?? null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Real backend integration covers freestyle, upload, and "start from
@@ -167,26 +244,26 @@ export function CreateCvModal({
   // data-entry UI built yet, so there's nothing real to send the backend;
   // it stays local-only. Downstream logic keys off `cvDocumentId` actually
   // being set, not the method itself.
-  const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
-  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
-  const [analyzedSourceText, setAnalyzedSourceText] = useState("");
+  const [cvDocumentId, setCvDocumentId] = useState<string | null>(saved?.cvDocumentId ?? null);
+  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(saved?.latestContent ?? undefined);
+  const [analyzedSourceText, setAnalyzedSourceText] = useState(saved?.analyzedSourceText ?? "");
   const [flowError, setFlowError] = useState<string | null>(null);
   // What the first AI analysis already incorporated — refine only needs a
   // new AI call when the user added something beyond this (or beyond plain
   // personal details, which are written directly).
-  const [analyzedInputs, setAnalyzedInputs] = useState({ jd: "", extra: "" });
+  const [analyzedInputs, setAnalyzedInputs] = useState(saved?.analyzedInputs ?? { jd: "", extra: "" });
 
   // AI clarification questions surfaced by /cv/analyze (additive to the
   // fixed missing-details fields below) and any job-compatibility gaps
   // surfaced after refining — both optional, shown only when non-empty.
-  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>([]);
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>(saved?.clarifyingQuestions ?? []);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>(saved?.questionAnswers ?? {});
   // Called before the early `if (!isOpen) return null` so hook order never changes.
   const questionPages = useQuestionPages(clarifyingQuestions, questionAnswers);
   // The account's saved details (from onboarding / Account settings) fill any
   // contact field this flow didn't collect.
   const { data: me } = useMe();
-  const [jobGaps, setJobGaps] = useState<string[]>([]);
+  const [jobGaps, setJobGaps] = useState<string[]>(saved?.jobGaps ?? []);
 
   // The guided (Filling Form) sub-flow's own source-of-truth choice, made
   // before the user ever sees the editor: attach an existing profile's
@@ -207,6 +284,8 @@ export function CreateCvModal({
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const proGate = useProGate();
+  // Signed out (the /try pages): no career profiles, and an account before the AI.
+  const { isGuest, requireAccount } = useAccountGate();
   const { done: aiDone, celebrate } = useAiDone();
 
   // Generates the CV from the chosen profile's own content (see
@@ -216,6 +295,7 @@ export function CreateCvModal({
   // AI call at all.
   const generateFromProfile = async (jobDescription: string) => {
     setFlowError(null);
+    if (!(await requireAccount())) return;
     try {
       const { cvDocumentId: docId, sourceText, document } = await analyzeExistingMutation.mutateAsync({
         templateId: selectedTemplate,
@@ -254,6 +334,17 @@ export function CreateCvModal({
     }
   };
 
+  const draft: CreateDraft = {
+    openedWith: { template: initialTemplate, profileId: initialProfileId ?? undefined },
+    step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, selectedProfileId,
+    fromProfile, selectedTemplate, freestyleText, targetRole, fullName, email, phone, optionalJd, jobBackStep,
+    flowExtraDetails, uploadedFileName, cvDocumentId, latestContent, analyzedSourceText, analyzedInputs,
+    clarifyingQuestions, questionAnswers, jobGaps,
+  };
+  // Back / Forward check the step they land on against this.
+  useEffect(() => trackStepData(draft));
+  useSaveFlowDraft<CreateDraft>("create", draft, step !== "select-method");
+
   if (!isOpen) return null;
 
   // Handle Free Style Analysis — sends the raw story to the backend AI parser
@@ -267,6 +358,9 @@ export function CreateCvModal({
       setFlowError("Tell us about your experience first. A few sentences is enough.");
       return;
     }
+
+    // Signed out (the /try pages): an account first — nothing goes to the AI before one exists.
+    if (!(await requireAccount())) return;
 
     try {
       const { cvDocumentId: docId, document } = await analyzeMutation.mutateAsync({
@@ -299,6 +393,8 @@ export function CreateCvModal({
   // the extracted text through the same AI parse as the freestyle flow.
   const handleUploadFile = async (file: File, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
+    // Signed out (the /try pages): an account first — nothing goes to the AI before one exists.
+    if (!(await requireAccount())) return;
     setUploadedFileName(file.name);
     setStep("upload-analyzing");
 
@@ -512,8 +608,10 @@ export function CreateCvModal({
 
   // Opens the finished CV in the editor. (Saving it to a career profile
   // happens before this, in ProfileSyncStep.)
-  const handleFinish = (content: CVContentDTO | undefined = latestContent, docId: string | null = cvDocumentId) => {
+  const handleFinish = async (content: CVContentDTO | undefined = latestContent, docId: string | null = cvDocumentId) => {
     setFlowError(null);
+    // The guided form goes straight to the editor, which needs an account too.
+    if (!(await requireAccount())) return;
     if (docId) {
       markCompleted();
       onComplete({ ...buildLocalCv(content), id: docId });
@@ -603,23 +701,25 @@ export function CreateCvModal({
                   setStep("upload-cv");
                 }}
               />
-              <OptionCard
-                icon={User}
-                tone="violet"
-                title="Start from career profile"
-                description={
-                  canUseProfiles
-                    ? "Build from the experience and skills saved in one of your role profiles."
-                    : "A FitCV Pro feature: build from your saved role profiles."
-                }
-                onClick={() => {
-                  if (!canUseProfiles) {
-                    proGate.openPaywall();
-                    return;
+              {!isGuest && (
+                <OptionCard
+                  icon={User}
+                  tone="violet"
+                  title="Start from career profile"
+                  description={
+                    canUseProfiles
+                      ? "Build from the experience and skills saved in one of your role profiles."
+                      : "A FitCV Pro feature: build from your saved role profiles."
                   }
-                  setStep("select-career-profile");
-                }}
-              />
+                  onClick={() => {
+                    if (!canUseProfiles) {
+                      proGate.openPaywall();
+                      return;
+                    }
+                    setStep("select-career-profile");
+                  }}
+                />
+              )}
             </div>
 
 

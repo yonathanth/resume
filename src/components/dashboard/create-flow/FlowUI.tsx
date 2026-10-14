@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Loader2, X } from "lucide-react";
 import { MoxieLoader, type MoxieLoaderProps } from "@/components/moxie";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
@@ -111,6 +111,7 @@ export function FlowModal({
 }) {
   if (loader) wide = false;
   const waiting = Boolean(loader);
+  useWarnBeforeLeaving(waiting);
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200 transition-colors ${
@@ -142,6 +143,23 @@ export function FlowModal({
       {outside}
     </div>
   );
+}
+
+/**
+ * While the AI is working, leaving (a refresh, closing the tab) would cut it
+ * off mid-way — the browser asks first. Everything before it is kept anyway
+ * (see flow-drafts), so this is only needed during the wait.
+ */
+function useWarnBeforeLeaving(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [active]);
 }
 
 /** Slides a step's content in whenever the step changes. */

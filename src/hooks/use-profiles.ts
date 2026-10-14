@@ -6,6 +6,7 @@ import {
   ProfileContentDTO,
   createProfile,
   deleteProfile,
+  getAccessToken,
   getProfile,
   listProfiles,
   revertProfileChange,
@@ -17,8 +18,9 @@ const profileKey = (id: string) => ["career-profile", id] as const;
 
 // The user's career profiles (one per role). Readable on every plan, so a
 // downgraded user still sees what they made; writes are Pro-only server-side.
+// Only with an account: the flows also run signed out (the /try pages).
 export function useProfiles() {
-  return useQuery({ queryKey: PROFILES_QUERY_KEY, queryFn: listProfiles });
+  return useQuery({ queryKey: PROFILES_QUERY_KEY, queryFn: listProfiles, enabled: !!getAccessToken() });
 }
 
 export function useProfile(id: string | null) {

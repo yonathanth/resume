@@ -21,6 +21,7 @@ import {
   UpdateMeInput,
 } from "@/lib/api";
 import { useHasMounted } from "./use-has-mounted";
+import { clearAllFlowDrafts } from "@/lib/flow-drafts";
 
 function onAuthSuccess(data: AuthResponse, router: ReturnType<typeof useRouter>) {
   setAccessToken(data.accessToken);
@@ -103,6 +104,7 @@ export function useLogout() {
     mutationFn: () => logout(),
     onSettled: () => {
       clearAccessToken();
+      clearAllFlowDrafts();
       queryClient.clear();
       router.push("/login");
     },
@@ -128,6 +130,7 @@ export function useLogoutAll() {
     mutationFn: () => logoutAll(),
     onSettled: () => {
       clearAccessToken();
+      clearAllFlowDrafts();
       queryClient.clear();
       router.push("/login");
     },

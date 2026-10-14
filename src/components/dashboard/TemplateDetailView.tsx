@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, LayoutTemplate } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, LayoutTemplate } from "lucide-react";
 import { SHOW_PHOTO_TEMPLATES, useCvTemplates } from "@/hooks/use-cv-templates";
 import { getCvTemplateSample } from "@/lib/api";
 import { CvPreviewFrame } from "./create-flow/CvPreviewFrame";
@@ -15,26 +15,19 @@ interface TemplateDetailViewProps {
   onUseTemplate: (templateId: string) => void;
 }
 
-const PERSONA_BUTTON =
-  "p-2 rounded-lg bg-white border border-neutral-300 text-neutral-700 hover:text-neutral-950 hover:border-neutral-400 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed";
 // How many other templates from the same category to suggest underneath.
 const RELATED_COUNT = 4;
 
-/** One template up close: a large real render you can flip through with different example CVs. */
+/** One template up close: a large real render with its example CV. */
 export function TemplateDetailView({ templateId, onUseTemplate }: TemplateDetailViewProps) {
   const { data: templates, isLoading } = useCvTemplates();
   const template = templates?.find((t) => t.id === templateId);
-  const [persona, setPersona] = useState(0);
-
-  const { data: sample, isFetching: isSampleLoading } = useQuery({
-    queryKey: ["cv-template-sample", templateId, persona],
-    queryFn: () => getCvTemplateSample(templateId, persona),
+  const { data: sample } = useQuery({
+    queryKey: ["cv-template-sample", templateId],
+    queryFn: () => getCvTemplateSample(templateId),
     staleTime: Infinity,
     enabled: Boolean(template),
-    // Keep showing the current example while the next one loads.
-    placeholderData: (previous) => previous,
   });
-  const personaCount = sample?.personaCount ?? 1;
 
   const backLink = (
     <Link
@@ -96,42 +89,12 @@ export function TemplateDetailView({ templateId, onUseTemplate }: TemplateDetail
       {backLink}
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-10 items-start">
-        {/* Large real render, with example CVs to flip through */}
+        {/* Large real render of the template's example CV */}
         <div>
-          <div
-            className={`relative max-w-[640px] mx-auto overflow-hidden border border-neutral-200 rounded-md shadow-lg bg-white transition-opacity ${
-              isSampleLoading && sample ? "opacity-70" : ""
-            }`}
-          >
+          <div className="relative max-w-[640px] mx-auto overflow-hidden border border-neutral-200 rounded-md shadow-lg bg-white">
             <CvPreviewFrame html={sample?.html ?? null} bare title={`${template.name} template`} />
             {!sample && <div className="aspect-[210/297] bg-neutral-100 animate-pulse" />}
           </div>
-          {personaCount > 1 && (
-            <div className="mt-5 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => setPersona((p) => (p - 1 + personaCount) % personaCount)}
-                disabled={isSampleLoading}
-                className={PERSONA_BUTTON}
-                aria-label="Previous example"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-xs font-medium text-neutral-600 min-w-[180px] text-center" aria-live="polite">
-                Example {persona + 1} of {personaCount}
-                {sample?.label ? ` · ${sample.label}` : ""}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPersona((p) => (p + 1) % personaCount)}
-                disabled={isSampleLoading}
-                className={PERSONA_BUTTON}
-                aria-label="Next example"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Details */}

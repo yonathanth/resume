@@ -12,7 +12,7 @@ import { Reveal } from "@/components/Reveal";
 
 const ALL = "All";
 
-function TemplateCard({ template, persona }: { template: ApiCvTemplate; persona: number }) {
+function TemplateCard({ template }: { template: ApiCvTemplate }) {
   const tags = [template.twoColumn && "Two-column", template.hasPhoto && "Photo"].filter(Boolean) as string[];
 
   return (
@@ -21,7 +21,6 @@ function TemplateCard({ template, persona }: { template: ApiCvTemplate; persona:
       <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-white transition-all duration-300 [clip-path:inset(0_round_0.5rem)] group-hover:-translate-y-1 group-hover:border-accent-border group-hover:shadow-[0_18px_40px_-24px_rgba(15,17,21,0.3)] group-focus-visible:border-accent">
         <TemplateThumbnail
           templateId={template.id}
-          persona={persona}
           title={`${template.name} template example`}
           className="aspect-[210/297] w-full"
         />
@@ -51,7 +50,9 @@ export function TemplatesGallery() {
   const [category, setCategory] = useState<string>(ALL);
 
   const groups = templates ? groupTemplatesByCategory(templates) : [];
-  const ordered = groups.flatMap((g) => g.templates);
+  // One flat list in the backend's gallery order (the default, then the
+  // newest); the filter chips are the only grouping.
+  const ordered = templates ?? [];
   const visible = category === ALL ? ordered : ordered.filter((t) => t.category === category);
   const filters = [{ name: ALL, count: ordered.length }, ...groups.map((g) => ({ name: g.category, count: g.templates.length }))];
 
@@ -94,7 +95,7 @@ export function TemplatesGallery() {
           : visible.map((template, i) => (
               // Cards fade up as they scroll in, staggered across each row.
               <Reveal key={template.id} delay={(i % 3) * 90}>
-                <TemplateCard template={template} persona={i % 5} />
+                <TemplateCard template={template} />
               </Reveal>
             ))}
       </div>
