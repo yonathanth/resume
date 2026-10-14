@@ -1,6 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useDashboard } from "./DashboardContext";
+import { isFlowClosed, readOpenFlow } from "@/lib/flow-url";
 import {
   FilePlus,
   Target,
@@ -60,12 +63,6 @@ interface BuilderViewProps {
   onDuplicateDraft?: (draft: ResumeDraft) => void;
   onDeleteDraft?: (id: string) => void | Promise<void>;
   onUpdateDraftFromSavedCv?: (savedCv: CvData) => void;
-  isCreateModalOpenExternal?: boolean;
-  onCloseCreateModalExternal?: () => void;
-  isStartWithTemplateModalOpenExternal?: boolean;
-  onCloseStartWithTemplateModalExternal?: () => void;
-  preselectedProfileId?: string | null;
-  preselectedTemplate?: TemplateId;
 }
 
 export function BuilderView({
@@ -80,12 +77,6 @@ export function BuilderView({
   onDuplicateDraft: externalDuplicateDraft,
   onDeleteDraft: externalDeleteDraft,
   onUpdateDraftFromSavedCv: externalUpdateDraftFromSavedCv,
-  isCreateModalOpenExternal = false,
-  onCloseCreateModalExternal,
-  isStartWithTemplateModalOpenExternal = false,
-  onCloseStartWithTemplateModalExternal,
-  preselectedProfileId,
-  preselectedTemplate,
 }: BuilderViewProps) {
   // Local states as fallbacks
   const [localDrafts, setLocalDrafts] = useState<ResumeDraft[]>(INITIAL_DRAFTS);
@@ -102,10 +93,20 @@ export function BuilderView({
   const setActiveEditingCv =
     externalSetActiveEditingCv ?? setLocalActiveEditingCv;
 
-  // Internal Modals
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [tailorModalOpen, setTailorModalOpen] = useState(false);
-  const [enhanceModalOpen, setEnhanceModalOpen] = useState(false);
+  // The open flow is whatever the URL says (see flow-url): a refresh reopens
+  // it, Back closes it. One already closed or finished (Back onto its old
+  // steps) isn't reopened — the URL goes back to the plain dashboard.
+  const { openFlow, closeFlow, openFinishedCv } = useDashboard();
+  const searchParams = useSearchParams();
+  const urlFlow = readOpenFlow(new URLSearchParams(searchParams.toString()));
+  const openFlowNow = urlFlow && !isFlowClosed(urlFlow.session) ? urlFlow : null;
+  const staleFlowUrl = Boolean(urlFlow) && !openFlowNow;
+  useEffect(() => {
+    if (staleFlowUrl) window.history.replaceState(null, "", "/dashboard");
+  }, [staleFlowUrl]);
+  const finishFlow = (cvData: CvData) => {
+    if (openFlowNow) void openFinishedCv(cvData, openFlowNow.session);
+  };
   const [pendingAction, setPendingAction] = useState<{
     type: "delete" | "duplicate";
     draft: ResumeDraft;
@@ -233,7 +234,7 @@ export function BuilderView({
         >
           <button
             type="button"
-            onClick={() => setCreateModalOpen(true)}
+            onClick={() => openFlow("create")}
             className="group flex-1 flex items-center gap-5 p-6 sm:p-7 text-left rounded-lg cursor-pointer"
           >
             <span className={`w-14 h-14 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.accent}`}>
@@ -253,8 +254,8 @@ export function BuilderView({
         <div className="flex flex-col gap-4">
           {(
             [
-              { title: "Tailor to a job", description: "Match your CV to a job posting", Icon: Target, tone: ICON_TONES.sky, colors: ACTION_CARD_COLORS.tailor, onClick: () => setTailorModalOpen(true) },
-              { title: "Improve a CV", description: "Strengthen one you already have", Icon: PenLine, tone: ICON_TONES.violet, colors: ACTION_CARD_COLORS.improve, onClick: () => setEnhanceModalOpen(true) },
+              { title: "Tailor to a job", description: "Match your CV to a job posting", Icon: Target, tone: ICON_TONES.sky, colors: ACTION_CARD_COLORS.tailor, onClick: () => openFlow("tailor") },
+              { title: "Improve a CV", description: "Strengthen one you already have", Icon: PenLine, tone: ICON_TONES.violet, colors: ACTION_CARD_COLORS.improve, onClick: () => openFlow("improve") },
             ] as const
           ).map(({ title, description, Icon, tone, colors, onClick }) => (
             <button
@@ -331,66 +332,37 @@ export function BuilderView({
         </div>
       )}
 
-      {/* Each flow is mounted only while open, so closing it (X) throws away
-          its progress and the next open starts from the first step. Unmounting
-          also cleans up any half-made CV (see useDraftCvLifecycle). */}
-
-      {/* ================= MODAL 1: CREATE NEW CV ================= */}
-      {(createModalOpen || isCreateModalOpenExternal) && (
-      <CreateCvModal
-        isOpen
-        onClose={() => {
-          setCreateModalOpen(false);
-          onCloseCreateModalExternal?.();
-        }}
-        onComplete={(cvData) => {
-          setCreateModalOpen(false);
-          onCloseCreateModalExternal?.();
-          setActiveEditingCv(cvData);
-        }}
-        initialProfileId={preselectedProfileId}
-      />
+      {/* The open flow, from the URL. Each is mounted only while open (keyed
+          by this opening), so closing it (X) throws away its progress and the
+          next open starts from the first step. Unmounting also cleans up any
+          half-made CV (see useDraftCvLifecycle). */}
+      {openFlowNow?.kind === "create" && (
+        <CreateCvModal
+          key={openFlowNow.session}
+          isOpen
+          onClose={() => closeFlow(openFlowNow.session)}
+          onComplete={finishFlow}
+          initialTemplate={openFlowNow.template as TemplateId | undefined}
+          initialProfileId={openFlowNow.profile ?? null}
+        />
       )}
-
-      {/* ================= MODAL 2: START FROM TEMPLATE ================= */}
-      {isStartWithTemplateModalOpenExternal && (
-      <CreateCvModal
-        isOpen
-        initialTemplate={preselectedTemplate}
-        onClose={() => {
-          onCloseStartWithTemplateModalExternal?.();
-        }}
-        onComplete={(cvData) => {
-          onCloseStartWithTemplateModalExternal?.();
-          setActiveEditingCv(cvData);
-        }}
-      />
+      {openFlowNow?.kind === "tailor" && (
+        <TailorCvModal
+          key={openFlowNow.session}
+          isOpen
+          onClose={() => closeFlow(openFlowNow.session)}
+          onComplete={finishFlow}
+          pastProjects={pastProjectsList}
+        />
       )}
-
-      {/* ================= MODAL 3: TAILOR TO JOB DESCRIPTION ================= */}
-      {tailorModalOpen && (
-      <TailorCvModal
-        isOpen
-        onClose={() => setTailorModalOpen(false)}
-        onComplete={(cvData) => {
-          setTailorModalOpen(false);
-          setActiveEditingCv(cvData);
-        }}
-        pastProjects={pastProjectsList}
-      />
-      )}
-
-      {/* ================= MODAL 4: ENHANCE EXISTING CV ================= */}
-      {enhanceModalOpen && (
-      <EnhanceCvModal
-        isOpen
-        onClose={() => setEnhanceModalOpen(false)}
-        onComplete={(cvData) => {
-          setEnhanceModalOpen(false);
-          setActiveEditingCv(cvData);
-        }}
-        pastProjects={pastProjectsList}
-      />
+      {openFlowNow?.kind === "improve" && (
+        <EnhanceCvModal
+          key={openFlowNow.session}
+          isOpen
+          onClose={() => closeFlow(openFlowNow.session)}
+          onComplete={finishFlow}
+          pastProjects={pastProjectsList}
+        />
       )}
 
       <ConfirmDialog

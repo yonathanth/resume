@@ -2292,8 +2292,9 @@ const REACH_HIGH = { x: 188, y: 166 } as const;
 /**
  * The paywall: a Pro crown hangs in the air just above her big claw. She
  * looks up at it, reaches — crouches, and jumps for it, claw stretched,
- * pincer snapping shut on thin air just short of it. She lands, looks at you
- * with a hopeful little "please?", and eyes it again. The crown never moves:
+ * pincer snapping shut on thin air just short of it. She lands, and wilts —
+ * sad, with a sigh — then perks up to look at you with a hopeful little
+ * "please?", and eyes it again. The crown never moves:
  * it's out of reach, that's all. (It's its own crown, Pro or not.)
  */
 const upgrade: MoxiePreset = {
@@ -2343,10 +2344,26 @@ const upgrade: MoxiePreset = {
       .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.45, ease: "back.out(2.2)" }, fall + 0.38);
     clawTo(tl, p, REACH, fall, 0.3, "power2.in", PINCER_TIPS);
     stretchStalks(tl, p, 1.04, fall + 0.3, 0.6, "elastic.out(1, 0.4)");
-    // Missed. A hopeful look at you: "please?"
-    const ask = fall + 0.95;
-    tl.to(p.bigClaw, { rotation: 0, x: 0, y: 0, duration: 0.5, ease: "power2.inOut" }, ask)
-      .to(p.bigPincer, { rotation: 0, duration: 0.4 }, ask)
+    // Missed. She's sad about it: the claw drops, stalks droop a little, a
+    // slumped sigh — her eyes lowered only slightly, still mostly on you.
+    const sad = fall + 0.85;
+    tl.to(p.bigClaw, { rotation: 0, x: 0, y: 0, duration: 0.6, ease: "power2.inOut" }, sad)
+      .to(p.bigPincer, { rotation: 0, duration: 0.5 }, sad)
+      .to([p.lidL, p.lidR], { y: LID.relaxed, duration: 0.4 }, sad)
+      .to(p.stalkL, { rotation: -9, duration: 0.6, ease: "power2.inOut" }, sad)
+      .to(p.stalkR, { rotation: 8, duration: 0.6, ease: "power2.inOut" }, sad + 0.05)
+      .to(p.root, { scaleY: 0.95, scaleX: 1.02, duration: 0.6, ease: "power2.out" }, sad)
+      // the sigh: a breath in, and out
+      .to(p.root, { scaleY: 0.97, duration: 0.35, ease: "sine.inOut" }, sad + 0.8)
+      .to(p.root, { scaleY: 0.94, duration: 0.45, ease: "sine.inOut" }, sad + 1.15);
+    stretchStalks(tl, p, 0.94, sad, 0.6, "power2.inOut");
+    mouth(tl, p, "flat", sad + 0.1);
+    look(tl, p, -2, 4, sad, 0.5, "sine.inOut");
+    // …then perks up with a hopeful look at you: "please?"
+    const ask = sad + 1.75;
+    tl.to(p.stalkL, { rotation: 0, duration: 0.45, ease: "back.out(1.6)" }, ask)
+      .to(p.stalkR, { rotation: 0, duration: 0.45, ease: "back.out(1.6)" }, ask + 0.05)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.4, ease: "back.out(2)" }, ask)
       .to([p.lidL, p.lidR], { y: LID.happy, duration: 0.25 }, ask + 0.25)
       .to(p.smallClaw, { rotation: -22, duration: 0.35, ease: "back.out(2)" }, ask + 0.3)
       .to(p.smallPincer, { rotation: -14, duration: 0.15 }, ask + 0.65)

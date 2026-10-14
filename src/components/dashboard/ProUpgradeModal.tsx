@@ -1,6 +1,7 @@
 "use client";
 
-import { Loader2, Crown, X, Check } from "lucide-react";
+import { Loader2, X, Check } from "lucide-react";
+import { Moxie } from "@/components/moxie";
 import { useStartProCheckout, useSubscriptionStatus } from "@/hooks/use-subscription";
 import type { CheckoutProvider } from "@/lib/api";
 
@@ -16,13 +17,18 @@ interface ProUpgradeModalProps {
 // kept to real gated features, nothing invented.
 const PRO_FEATURES = ["Unlimited AI-tailored CV generations", "Reusable, editable career profiles"];
 
+// The flow modals' button styles (see AccountGate, ProfileSyncStep).
+const BUTTON_PRIMARY =
+  "w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed";
+const BUTTON_SECONDARY =
+  "w-full py-3 rounded-xl border border-neutral-200 bg-white text-sm font-bold text-neutral-800 hover:bg-neutral-100 transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
+
 // The paywall shown once a free user's one free use of a dashboard tab
 // (Create, Tailor or Improve) is already spent (backend rejects with
 // PRO_REQUIRED — see use-pro-gate.ts) or when they click an "Upgrade" entry
-// point directly. Same dialog shell as ConfirmDialog, but
-// using the app's actual Pro visual identity (the peach Crown badge + accent
-// gradient used in the sidebar/CareerProfilesView/UpgradeView) instead of
-// the generic amber that had drifted in here. Offers both payment providers:
+// point directly. Same shell, fields and buttons as the flow modals and the
+// sign-up pop-up (AccountGate), with Moxie jumping for the Pro crown just out
+// of reach — the upgrade page's scene. Offers both payment providers:
 // Polar (real $5/month recurring subscription) and Chapa (local-market
 // alternative — no auto-renewal, so it sells a fixed 1-month period for 80
 // ETB per payment instead).
@@ -34,91 +40,72 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
 
   const startCheckout = (provider: CheckoutProvider) => checkout.mutate(provider);
 
+  const pendingOn = (provider: CheckoutProvider) => checkout.isPending && checkout.variables === provider;
+
   return (
-    <div className="fixed inset-0 z-[80] text-center bg-neutral-950/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-sm bg-white rounded-2xl border border-neutral-200 shadow-[0_24px_60px_-24px_rgba(255,94,31,0.35),0_25px_50px_-12px_rgba(0,0,0,0.25)] p-6 relative animate-in zoom-in-95 duration-150 text-center">
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 sm:p-6 bg-neutral-950/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pro-upgrade-title"
+        className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white p-7 text-center shadow-2xl animate-in zoom-in-95 sm:p-9"
+      >
         <button
           type="button"
           onClick={onClose}
           disabled={checkout.isPending}
-          className="absolute top-4 right-4 p-1 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           title="Close"
+          aria-label="Close"
+          className="absolute top-4 right-4 z-20 p-1.5 rounded-full bg-white/80 backdrop-blur text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center mb-3 mx-auto border bg-[#fdebe1] border-[#f3cfbb] text-[#9a3d12] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          <Crown className="w-5 h-5" />
-        </div>
+        <Moxie animation="upgrade" size={112} decorative ticklish shadow={false} className="mx-auto -mt-3 mb-1" />
 
-        <h3 className="text-base font-bold tracking-tight text-neutral-950 mb-1.5 text-center">
+        <h2 id="pro-upgrade-title" className="text-xl font-bold tracking-tight text-neutral-950">
           {subscription?.isExpired ? "Your FitCV Pro plan has expired" : "Upgrade to FitCV Pro"}
-        </h3>
-        <p className="text-xs text-neutral-500 leading-relaxed mb-4 text-center">
+        </h2>
+        <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">
           {reason ??
             (subscription?.isExpired
               ? "Renew to keep unlimited AI tailoring. Your free generations are already used up."
               : "You've already used your free generation on this tab. Upgrade to FitCV Pro for unlimited AI tailoring.")}
         </p>
 
-        <div className="space-y-2 mb-5">
+        <ul className="my-6 space-y-2.5 text-left">
           {PRO_FEATURES.map((feature) => (
-            <div key={feature} className="flex items-center justify-center gap-2.5">
+            <li key={feature} className="flex items-center gap-2.5 text-sm text-neutral-700">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-strong">
                 <Check className="h-3 w-3 stroke-[3]" />
               </span>
-              <span className="text-xs text-neutral-700">{feature}</span>
-            </div>
+              {feature}
+            </li>
           ))}
-        </div>
+        </ul>
 
         {checkout.isError && (
-          <p className="text-xs text-rose-600 font-medium leading-relaxed mb-2 text-center">
-            Could not start the checkout. Please try again.
-          </p>
+          <p className="text-xs text-red-600 font-medium text-center mb-3">Could not start the checkout. Please try again.</p>
         )}
 
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => startCheckout("polar")}
-            disabled={checkout.isPending}
-            className="w-full py-3 rounded-xl bg-accent text-white text-sm font-bold hover:bg-accent-strong transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-[0_8px_20px_-8px_rgba(255,94,31,0.6)] disabled:opacity-70 disabled:cursor-not-allowed"
-          >
-            {checkout.isPending && checkout.variables === "polar" && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            )}
-            <span>
-              {checkout.isPending && checkout.variables === "polar"
-                ? "Redirecting..."
-                : "Pay with Polar · $5/month"}
-            </span>
+        <div className="space-y-2.5">
+          <button type="button" onClick={() => startCheckout("polar")} disabled={checkout.isPending} className={BUTTON_PRIMARY}>
+            {pendingOn("polar") && <Loader2 className="w-4 h-4 animate-spin" />}
+            {pendingOn("polar") ? "Redirecting..." : "Pay with card · $5/month"}
+          </button>
+          <button type="button" onClick={() => startCheckout("chapa")} disabled={checkout.isPending} className={BUTTON_SECONDARY}>
+            {pendingOn("chapa") && <Loader2 className="w-4 h-4 animate-spin" />}
+            {pendingOn("chapa") ? "Redirecting..." : "Pay with Chapa · 80 ETB/month"}
           </button>
           <button
             type="button"
-            onClick={() => startCheckout("chapa")}
+            onClick={onClose}
             disabled={checkout.isPending}
-            className="w-full py-3 rounded-xl border border-neutral-200 bg-white text-neutral-800 text-sm font-bold hover:border-accent-border hover:bg-neutral-50 transition-colors cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-70 disabled:cursor-not-allowed"
+            className="w-full py-2 text-xs font-semibold text-neutral-500 hover:text-neutral-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {checkout.isPending && checkout.variables === "chapa" && (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            )}
-            <span>
-              {checkout.isPending && checkout.variables === "chapa"
-                ? "Redirecting..."
-                : "Pay with Chapa (local) · 80 ETB / month"}
-            </span>
+            Maybe later
           </button>
         </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={checkout.isPending}
-          className="w-full mt-3 py-2 text-xs font-semibold text-neutral-500 hover:text-neutral-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Maybe later
-        </button>
       </div>
     </div>
   );

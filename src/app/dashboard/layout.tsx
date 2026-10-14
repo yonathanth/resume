@@ -12,6 +12,7 @@ import { MoxieMoment } from "@/components/moxie";
 import { AuthGuard } from "@/components/AuthGuard";
 import { DashboardTopBar } from "@/components/dashboard/DashboardTopBar";
 import { QuickTour } from "@/components/dashboard/QuickTour";
+import { QuickLinkLauncher } from "@/components/dashboard/QuickLinkLauncher";
 
 // The sidebar's pages, listed in the top bar's menu on small screens.
 const MOBILE_NAV_ITEMS: { href: string; label: string }[] = [
@@ -133,6 +134,8 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
       {/* First-run details for a brand-new account. `=== false` so an older
           API that doesn't send the flag never shows it. */}
       {me && me.onboardingCompleted === false && <OnboardingModal me={me} onFinished={(firstName) => setWelcome(firstName)} />}
+      {/* What a quick link (/go/...) asked for, once nothing else is over the page. */}
+      <QuickLinkLauncher ready={Boolean(me) && me?.onboardingCompleted !== false && welcome === null && !activeEditingCv} />
       {welcome !== null && (
         <MoxieMoment
           animation="onboarded"

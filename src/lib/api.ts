@@ -436,6 +436,8 @@ export interface ApiCvDocument {
   title: string | null;
   templateId: string;
   content: CVContentDTO;
+  /** The job it was tailored to, if any — kept so later saves don't drop it. */
+  jobDescription?: string | null;
   status: string;
   createdAt: string;
   updatedAt: string;

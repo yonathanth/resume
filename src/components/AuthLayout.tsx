@@ -8,6 +8,8 @@ import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
 import { ApiError, googleSignInUrl } from "@/lib/api";
+import { describeQuickIntent, peekQuickIntent } from "@/lib/quick-links";
+import { isOwnPopup, reportToOpener } from "@/lib/google-popup";
 
 interface AuthLayoutProps {
   mode: "signup" | "login";
@@ -110,7 +112,7 @@ function useIsDesktop() {
 const inputClass =
   "w-full rounded-xl border border-white/[0.06] bg-[#262626] px-3.5 py-3 text-[14.5px] text-white placeholder:text-neutral-500 transition-all focus:border-accent/60 focus:outline-none focus:ring-2 focus:ring-accent/20";
 
-function GoogleIcon() {
+export function GoogleIcon() {
   return (
     <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" aria-hidden>
       <path
@@ -164,6 +166,14 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
     : null;
   const displayedError = formError ?? (showGoogleError ? googleError : null);
 
+  // Google failed inside the sign-up pop-up's Google window: report it to the page that opened it, and close.
+  useEffect(() => {
+    if (googleErrorCode && isOwnPopup()) reportToOpener({ ok: false, code: googleErrorCode });
+  }, [googleErrorCode]);
+
+  // Arrived from a quick link (/go/...): say what they'll go on to do once they're in.
+  const quickIntent = hasMounted ? peekQuickIntent() : null;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
@@ -201,6 +211,11 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
           <h1 className="text-center text-[28px] font-bold leading-tight tracking-tight text-white sm:text-[32px]">
             {isSignup ? "Create your account" : "Welcome back"}
           </h1>
+          {quickIntent && (
+            <p className="mt-2 text-center text-sm text-neutral-400">
+              {isSignup ? "Sign up" : "Log in"} to {describeQuickIntent(quickIntent)}.
+            </p>
+          )}
 
           <button
             type="button"

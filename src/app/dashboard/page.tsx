@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { BuilderView } from "@/components/dashboard/BuilderView";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 
@@ -15,12 +15,6 @@ export default function BuilderPage() {
     handleDuplicateDraft,
     handleDeleteDraft,
     updateDraftFromSavedCv,
-    isCreateModalOpen,
-    setIsCreateModalOpen,
-    isStartWithTemplateOpen,
-    setIsStartWithTemplateOpen,
-    preselectedProfileId,
-    preselectedTemplate,
     goToPastProjects,
     goToTemplates,
   } = useDashboard();
@@ -35,24 +29,21 @@ export default function BuilderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // BuilderView reads the open flow from the URL (useSearchParams), which needs a Suspense boundary.
   return (
-    <BuilderView
-      drafts={drafts}
-      setDrafts={setDrafts}
-      activeEditingCv={activeEditingCv}
-      setActiveEditingCv={setActiveEditingCv}
-      onOpenDraftInEditor={handleOpenDraftInEditor}
-      onDuplicateDraft={handleDuplicateDraft}
-      onDeleteDraft={handleDeleteDraft}
-      onUpdateDraftFromSavedCv={updateDraftFromSavedCv}
-      isCreateModalOpenExternal={isCreateModalOpen}
-      onCloseCreateModalExternal={() => setIsCreateModalOpen(false)}
-      isStartWithTemplateModalOpenExternal={isStartWithTemplateOpen}
-      onCloseStartWithTemplateModalExternal={() => setIsStartWithTemplateOpen(false)}
-      preselectedProfileId={preselectedProfileId}
-      preselectedTemplate={preselectedTemplate}
-      onNavigateToPastProjects={goToPastProjects}
-      onNavigateToTemplates={goToTemplates}
-    />
+    <Suspense fallback={null}>
+      <BuilderView
+        drafts={drafts}
+        setDrafts={setDrafts}
+        activeEditingCv={activeEditingCv}
+        setActiveEditingCv={setActiveEditingCv}
+        onOpenDraftInEditor={handleOpenDraftInEditor}
+        onDuplicateDraft={handleDuplicateDraft}
+        onDeleteDraft={handleDeleteDraft}
+        onUpdateDraftFromSavedCv={updateDraftFromSavedCv}
+        onNavigateToPastProjects={goToPastProjects}
+        onNavigateToTemplates={goToTemplates}
+      />
+    </Suspense>
   );
 }

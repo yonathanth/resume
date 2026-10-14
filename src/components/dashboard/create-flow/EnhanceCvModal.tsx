@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Upload,
   FileText,
@@ -32,6 +32,9 @@ import {
 import { ClarificationQuestion, CVContentDTO, WordingPreview, previewCvWording } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
+import { useAccountGate } from "@/components/account-gate/AccountGate";
+import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
+import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { WordingReviewStep } from "./WordingReviewStep";
@@ -54,43 +57,113 @@ type EnhanceStep =
   | "job-target"
   | "select-template";
 
+type TemplateNext = { kind: "existing"; sourceId: string } | { kind: "upload"; file: File };
+type ProfileWordingPreview = WordingPreview & { profile: NonNullable<WordingPreview["profile"]> };
+
+/** What's kept across a refresh: everything typed and chosen, and the AI's results so far (not a picked file). */
+interface EnhanceDraft {
+  step: EnhanceStep;
+  templateNext: Exclude<TemplateNext, { kind: "upload" }> | null;
+  templateBackStep: EnhanceStep;
+  sourceType: "upload" | "past-project";
+  uploadedFileName: string | null;
+  selectedProjectId: string;
+  improvementGoal: string;
+  optionalJd: string;
+  selectedTemplate: TemplateId;
+  cvDocumentId: string | null;
+  latestContent: CVContentDTO | undefined;
+  analyzedSourceText: string;
+  clarifyingQuestions: ClarificationQuestion[];
+  questionAnswers: Record<string, string>;
+  jobGaps: string[];
+  wordingPreview: ProfileWordingPreview | null;
+}
+
+/** The steps in the URL, and which need data to show. `first` is the upload for a guest (nothing saved to pick from). */
+function enhanceSteps(first: EnhanceStep): FlowStepConfig<EnhanceStep, EnhanceDraft> {
+  return {
+    first,
+    slugs: {
+      "select-source": "start",
+      "upload-file": "upload",
+      "pick-source-item": "pick",
+      "choose-template": "template",
+      "enhance-questions": "details",
+      "improvement-goals": "goals",
+      "job-ask": "job",
+      "job-target": "job-post",
+      "select-template": "finish",
+    },
+    available: (step, d) => {
+      switch (step) {
+        case "choose-template":
+          return Boolean(d?.templateNext);
+        case "pick-source-item":
+          return d?.sourceType === "past-project";
+        case "enhance-questions":
+        case "improvement-goals":
+        case "job-ask":
+        case "job-target":
+        case "select-template":
+          return Boolean(d?.cvDocumentId);
+        default:
+          return true;
+      }
+    },
+  };
+}
+
+/** Where a restored flow reopens: the template step for a picked file goes back (the file isn't kept). */
+function resumeStep(draft: EnhanceDraft): EnhanceStep {
+  if (draft.step === "choose-template" && !draft.templateNext) return draft.templateBackStep;
+  return draft.step;
+}
+
 export function EnhanceCvModal({
   isOpen,
   onClose,
   onComplete,
   pastProjects = [],
 }: EnhanceCvModalProps) {
-  const [step, setStep] = useState<EnhanceStep>("select-source");
+  // Signed out (the /try pages): nothing saved to pick from, so straight to the upload — and an account before the AI.
+  const { isGuest, requireAccount } = useAccountGate();
+  // Progress kept across a refresh (or a trip to checkout): see useSaveFlowDraft below.
+  const saved = useRestoredFlowDraft<EnhanceDraft>("improve");
+  const firstStep: EnhanceStep = isGuest ? "upload-file" : "select-source";
+  // The step lives in the URL, so Back / Forward move between steps (see flow-steps).
+  const [step, setStep, trackStepData] = useFlowStep<EnhanceStep, EnhanceDraft>(
+    enhanceSteps(firstStep),
+    saved ? { step: resumeStep(saved), data: saved } : null
+  );
   // The template is chosen right before the first AI call (the AI only writes
   // the sections it shows). What to run once it's picked, and where Back goes.
-  const [templateNext, setTemplateNext] = useState<
-    { kind: "existing"; sourceId: string } | { kind: "upload"; file: File } | null
-  >(null);
-  const [templateBackStep, setTemplateBackStep] = useState<EnhanceStep>("select-source");
+  const [templateNext, setTemplateNext] = useState<TemplateNext | null>(saved?.templateNext ?? null);
+  const [templateBackStep, setTemplateBackStep] = useState<EnhanceStep>(saved?.templateBackStep ?? "select-source");
 
   // Source state: 'upload' | 'profile' | 'past-project'
-  const [sourceType, setSourceType] = useState<"upload" | "past-project">("upload");
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [sourceType, setSourceType] = useState<"upload" | "past-project">(saved?.sourceType ?? "upload");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(saved?.uploadedFileName ?? null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
-    pastProjects[0]?.id || "draft-1"
+    saved?.selectedProjectId ?? (pastProjects[0]?.id || "draft-1")
   );
 
   // Improvement goals state
-  const [improvementGoal, setImprovementGoal] = useState<string>("");
+  const [improvementGoal, setImprovementGoal] = useState<string>(saved?.improvementGoal ?? "");
 
   // Optional Job Description (as requested across flows)
-  const [optionalJd, setOptionalJd] = useState<string>("");
+  const [optionalJd, setOptionalJd] = useState<string>(saved?.optionalJd ?? "");
 
   // Template state
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(DEFAULT_TEMPLATE_ID);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? DEFAULT_TEMPLATE_ID);
 
   // Real backend integration now covers every source — "upload" via OCR,
   // "profile"/"past-project" via pulling their real saved content (see
   // handlePrepareExistingSource). Downstream logic keys off `cvDocumentId`
   // actually being set, not the source type itself.
-  const [cvDocumentId, setCvDocumentId] = useState<string | null>(null);
-  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(undefined);
-  const [analyzedSourceText, setAnalyzedSourceText] = useState("");
+  const [cvDocumentId, setCvDocumentId] = useState<string | null>(saved?.cvDocumentId ?? null);
+  const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(saved?.latestContent ?? undefined);
+  const [analyzedSourceText, setAnalyzedSourceText] = useState(saved?.analyzedSourceText ?? "");
   const [flowError, setFlowError] = useState<string | null>(null);
   // The profile / past resume currently being loaded from a click.
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
@@ -99,11 +172,11 @@ export function EnhanceCvModal({
   // AI clarification questions surfaced by /cv/analyze (additive to the
   // improvement-goals step) and job-compatibility gaps surfaced after
   // enhancing — both optional, shown only when non-empty.
-  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>([]);
-  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
+  const [clarifyingQuestions, setClarifyingQuestions] = useState<ClarificationQuestion[]>(saved?.clarifyingQuestions ?? []);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>(saved?.questionAnswers ?? {});
   // Called before the early `if (!isOpen) return null` so hook order never changes.
   const questionPages = useQuestionPages(clarifyingQuestions, questionAnswers);
-  const [jobGaps, setJobGaps] = useState<string[]>([]);
+  const [jobGaps, setJobGaps] = useState<string[]>(saved?.jobGaps ?? []);
 
   // A CV document created mid-flow should never outlive an abandoned
   // session — only a completed flow keeps it (see markCompleted() below).
@@ -116,12 +189,19 @@ export function EnhanceCvModal({
   const isPro = useSubscriptionStatus().data?.isPro ?? false;
   // Improved wording that differs from the matching career profile — offered
   // on the last step when there is any (Pro only).
-  const [wordingPreview, setWordingPreview] = useState<
-    (WordingPreview & { profile: NonNullable<WordingPreview["profile"]> }) | null
-  >(null);
+  const [wordingPreview, setWordingPreview] = useState<ProfileWordingPreview | null>(saved?.wordingPreview ?? null);
   // The quick request after the AI pass (the wording preview) — Moxie stays up through it.
   const [finishingUp, setFinishingUp] = useState(false);
   const { done: aiDone, celebrate } = useAiDone();
+
+  const draft: EnhanceDraft = {
+    step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, sourceType, uploadedFileName,
+    selectedProjectId, improvementGoal, optionalJd, selectedTemplate, cvDocumentId, latestContent, analyzedSourceText,
+    clarifyingQuestions, questionAnswers, jobGaps, wordingPreview,
+  };
+  // Back / Forward check the step they land on against this.
+  useEffect(() => trackStepData(draft));
+  useSaveFlowDraft<EnhanceDraft>("improve", draft, step !== firstStep);
 
   if (!isOpen) return null;
 
@@ -142,6 +222,8 @@ export function EnhanceCvModal({
 
   const handleUploadFile = async (file: File, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
+    // Signed out (the /try pages): an account first — nothing goes to the AI before one exists.
+    if (!(await requireAccount())) return;
     setUploadedFileName(file.name);
     try {
       const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
@@ -173,6 +255,7 @@ export function EnhanceCvModal({
   // profile — it's a new document for the same trajectory, not a detached one.
   const handlePrepareExistingSource = async (sourceId: string, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
+    if (!(await requireAccount())) return;
     setLoadingSourceId(sourceId);
     try {
       const { cvDocumentId: docId, sourceText, document } =
@@ -258,7 +341,7 @@ export function EnhanceCvModal({
     const goal = improvementGoal;
 
     if (!cvDocumentId) {
-      setStep("select-template");
+      handleFinish();
       return;
     }
 
@@ -375,16 +458,18 @@ export function EnhanceCvModal({
                   setStep("upload-file");
                 }}
               />
-              <OptionCard
-                icon={FileText}
-                tone="accent"
-                title="Pick an existing resume"
-                description={`Choose one you've already made (${pastProjects.length} available).`}
-                onClick={() => {
-                  setSourceType("past-project");
-                  setStep("pick-source-item");
-                }}
-              />
+              {!isGuest && (
+                <OptionCard
+                  icon={FileText}
+                  tone="accent"
+                  title="Pick an existing resume"
+                  description={`Choose one you've already made (${pastProjects.length} available).`}
+                  onClick={() => {
+                    setSourceType("past-project");
+                    setStep("pick-source-item");
+                  }}
+                />
+              )}
             </div>
           </div>
         )}
