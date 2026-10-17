@@ -34,7 +34,7 @@ const PERIODS = [7, 30, 90] as const;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EVENTS_PAGE_SIZE = 25;
 
-const OPERATIONS = ["cv_generation", "polish_summary", "role_match"] as const;
+const OPERATIONS = ["cv_generation", "polish_summary", "role_match", "jd_analysis", "cv_review", "cv_polish"] as const;
 
 type StatusKind = "ok" | "user" | "provider" | "app" | "platform";
 

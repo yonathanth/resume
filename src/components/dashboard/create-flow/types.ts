@@ -1,3 +1,4 @@
+import type { ScoreJobRequirements } from "@/lib/cv-score/engine";
 // The editor's working model of a CV. It maps 1:1 onto the backend's
 // CVContent (see lib/cv-mapper.ts) so nothing is lost when a CV is loaded
 // into the editor and saved back. List items carry a local `id` only so React
@@ -211,8 +212,14 @@ export interface CvData {
   /** Data-processing consent clause (common on EU CVs). */
   consent: string;
   jobDescription?: string;
-  tailorAlignmentScore?: number; // 0 to 10
   enhancementFocus?: string;
+  /**
+   * The job's requirements, extracted by AI from `forJobDescription` (the job
+   * description text they were made from) — scored by lib/cv-score. Never
+   * saved by the editor: the backend stores them on POST /cv/:id/job-analysis.
+   * `data: null` means the text wasn't a job description.
+   */
+  jobRequirements?: { forJobDescription: string; data: ScoreJobRequirements | null } | null;
 }
 
 export interface PastProjectOption {

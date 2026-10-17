@@ -1,3 +1,4 @@
+import type { PolishTarget, ScoreJobRequirements } from "@/lib/cv-score/engine";
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 // The session is the httpOnly refresh cookie (30 days, renewed on every
@@ -728,6 +729,11 @@ export interface ApiCvDocument {
   content: CVContentDTO;
   /** The job it was tailored to, if any — kept so later saves don't drop it. */
   jobDescription?: string | null;
+  /** The CV score (lib/cv-score), stored on every save. Null until first scored. */
+  score?: number | null;
+  scoreVersion?: string | null;
+  /** The job description's AI-extracted requirements, for the score's job match (see POST /cv/:id/job-analysis). */
+  jobRequirements?: StoredJobRequirements | null;
   status: string;
   createdAt: string;
   updatedAt: string;
@@ -862,7 +868,7 @@ export interface ProfileSuggestion {
 }
 
 /** Which profile a new CV belongs to, and what saving it would change. Read-only. Pro only. */
-export function suggestProfileForCv(input: { cvDocumentId: string; factsOnly?: boolean }) {
+export function suggestProfileForCv(input: { cvDocumentId: string; factsOnly?: boolean; profileId?: string }) {
   return apiFetch<ProfileSuggestion>("/api/v1/profiles/suggest-for-cv", {
     method: "POST",
     body: JSON.stringify(input),
@@ -955,6 +961,51 @@ export function polishSummary(input: {
   experienceBullets?: string[];
 }) {
   return apiFetch<{ summary: string }>("/api/v1/cv/polish-summary", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// ---- CV score (lib/cv-score) ----
+
+/** What CVDocument.jobRequirements holds; `data: null` means the text wasn't a job description. */
+export interface StoredJobRequirements {
+  jdHash: string;
+  data: ScoreJobRequirements | null;
+}
+
+/** Extracts (once per job description, then cached on the document) what the job asks for. */
+export function analyzeJobRequirements(cvId: string, jobDescription?: string) {
+  return apiFetch<{ jobRequirements: StoredJobRequirements; score: number; scoreVersion: string }>(`/api/v1/cv/${cvId}/job-analysis`, {
+    method: "POST",
+    body: JSON.stringify(jobDescription !== undefined ? { jobDescription } : {}),
+  });
+}
+
+export interface CvReviewTip {
+  section: string;
+  text: string;
+}
+
+/** The score panel's "AI check": written tips that never change the score. */
+export function reviewCv(cvId: string, content?: CVContentDTO) {
+  return apiFetch<{ tips: CvReviewTip[] }>(`/api/v1/cv/${cvId}/review`, {
+    method: "POST",
+    body: JSON.stringify(content ? { content } : {}),
+  });
+}
+
+/** The rewritten parts of a polished CV — only the ones that changed. */
+export interface CvPolishPatch {
+  summary?: string;
+  headline?: string;
+  experience?: { index: number; bullets: string[] }[];
+  skillGroups?: { category: string; items: string[] }[];
+}
+
+/** Pro "AI polish": rewrites the targeted parts to fix failing score checks. Nothing is saved. */
+export function polishCv(cvId: string, input: { content?: CVContentDTO; targets: "all" | PolishTarget[] }) {
+  return apiFetch<{ patch: CvPolishPatch; score: number; projectedScore: number }>(`/api/v1/cv/${cvId}/polish`, {
     method: "POST",
     body: JSON.stringify(input),
   });
@@ -1077,7 +1128,7 @@ export interface SubscriptionStatusResult {
   proSource?: "subscription" | "grant" | null;
   proGrantExpiresAt?: string | null;
   // What this user may use right now — the backend enforces the same rules.
-  features?: { careerProfiles: boolean; polishSummary: boolean; cvImport: boolean };
+  features?: { careerProfiles: boolean; polishSummary: boolean; cvImport: boolean; aiPolish?: boolean };
   freeUses?: Record<CvFlowType, { limit: number | null; used: number; remaining: number | null }>;
 }
 

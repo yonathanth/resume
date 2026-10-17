@@ -1249,9 +1249,7 @@ export function CreateCvModal({
               tailored={Boolean(optionalJd.trim())}
               onFinish={() => handleFinish()}
               onProRequired={proGate.isProRequired}
-            >
-              <JobGaps gaps={jobGaps} />
-            </ProfileSyncStep>
+            />
           ) : (
             <div>
               <div className="text-center mb-5">

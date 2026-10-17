@@ -16,7 +16,7 @@ interface ProUpgradeModalProps {
 // The two things Pro actually unlocks today (see the reason strings passed
 // in from CareerProfilesView/ProfileEditorView/the create-flow modals) —
 // kept to real gated features, nothing invented.
-const PRO_FEATURES = ["Unlimited AI-tailored CV generations", "Reusable, editable career profiles"];
+const PRO_FEATURES = ["Unlimited AI-tailored CV generations", "Reusable, editable career profiles", "AI polish to push your CV score to 100"];
 
 const PLAN_OPTIONS: { plan: SubscriptionPlan; label: string; price: string; popular?: boolean }[] = [
   { plan: "weekly", label: "Weekly", price: "$4.99" },

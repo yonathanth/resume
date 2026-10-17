@@ -83,9 +83,9 @@ export function ProfileSyncStep({
   // update to the matching profile right away (the card then offers Undo).
   // Cached per CV with no refetching, so the update happens at most once.
   const suggestion = useQuery({
-    queryKey: ["profile-suggestion", cvDocumentId, factsOnly],
+    queryKey: ["profile-suggestion", cvDocumentId, factsOnly, sourceProfile?.id ?? null],
     queryFn: async () => {
-      const found = await suggestProfileForCv({ cvDocumentId, factsOnly });
+      const found = await suggestProfileForCv({ cvDocumentId, factsOnly, profileId: sourceProfile?.id });
       if (sourceProfile || found.autoSync !== "always" || !found.match || isEmptyChange(found.match.preview)) {
         return { found, autoApplied: null };
       }
@@ -109,7 +109,7 @@ export function ProfileSyncStep({
 
   const [newTitle, setNewTitle] = useState(roleTitle);
   const [alwaysUpdate, setAlwaysUpdate] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
@@ -269,16 +269,15 @@ export function ProfileSyncStep({
   // ---- update an existing profile
   if (target) {
     const counts = target.preview ? describeChangeCounts(target.preview) : "";
-    const nothingNew = target.preview !== null && !counts;
+    // Nothing to add (or nothing we can show): don't ask to update the profile.
+    const nothingNew = !counts;
     return (
       <div>
         {header(
           nothingNew ? "Your CV is ready" : `Update your ${target.title} profile?`,
           nothingNew
             ? `Your ${target.title} profile already has everything in this CV.`
-            : counts && !sourceProfile
-              ? `This CV adds ${counts}.`
-              : undefined
+            : `This CV adds ${counts}.`
         )}
 
         {target.preview && !nothingNew && (

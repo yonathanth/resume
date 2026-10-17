@@ -239,7 +239,7 @@ export interface UserListQuery extends Query {
 export const listUsers = (query: UserListQuery) => get<Paged<UserListItem>>("/users", query);
 
 export type EntitlementKind = "PRO_ACCESS" | "FEATURE" | "LIMIT_ADJUSTMENT" | "EXEMPTION";
-export type FeatureKey = "careerProfiles" | "polishSummary" | "cvImport";
+export type FeatureKey = "careerProfiles" | "polishSummary" | "cvImport" | "aiPolish";
 export type GrantableFeature = FeatureKey | "beta";
 export type ExemptionKey = "aiRateLimit" | "generationQuota";
 

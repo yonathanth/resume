@@ -48,6 +48,9 @@ export default function CvEditorPage({
           templateStyle: doc.templateId || DEFAULT_TEMPLATE_ID,
           // Kept as it is: the editor saves it back with every change.
           jobDescription: doc.jobDescription ?? undefined,
+          // Stored requirements always belong to the stored job description (the backend clears them when it changes).
+          jobRequirements:
+            doc.jobRequirements && doc.jobDescription ? { forJobDescription: doc.jobDescription, data: doc.jobRequirements.data } : null,
         });
         setLoaded({ id, cv: applyCvContent(blank, doc.content), notFound: false });
       })
