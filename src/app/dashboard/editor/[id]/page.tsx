@@ -6,14 +6,27 @@ import { FileQuestion } from "lucide-react";
 import { CvEditorWorkspace } from "@/components/dashboard/create-flow/CvEditorWorkspace";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { useRefreshSubscriptionStatus } from "@/hooks/use-subscription";
-import { getCvDocument } from "@/lib/api";
+import { getCvDocument, type CvFlowType } from "@/lib/api";
+import { AiDraftFeedback } from "@/components/dashboard/feedback/AiDraftFeedback";
+import { notifyCvDownloaded, notifyLeftEditor } from "@/lib/cv-rating";
+
+const FLOW_KINDS: readonly CvFlowType[] = ["create", "tailor", "improve"];
+
+/** ?fresh=<flow>: the CV was just written by that flow (see editorHref). */
+function readFreshFlow(): CvFlowType | null {
+  if (typeof window === "undefined") return null;
+  const value = new URLSearchParams(window.location.search).get("fresh") as CvFlowType | null;
+  return value && FLOW_KINDS.includes(value) ? value : null;
+}
 import { applyCvContent, createBlankCv, toResumeDraft } from "@/lib/cv-mapper";
 import { CvData, DEFAULT_TEMPLATE_ID } from "@/components/dashboard/create-flow/types";
 
 // A dedicated page (its own route) for editing a CV, rather than an overlay
 // component swapped in over whichever page triggered it — reachable and
 // refreshable directly at /dashboard/editor/[id]. Always loads the
-// document's real saved content fresh from the backend.
+// document's real saved content fresh from the backend. Opened straight from
+// a flow, it asks how the draft came out. Downloads and leaving it are
+// announced for the CV rating (see CvRatingHost in the dashboard layout).
 export default function CvEditorPage({
   params,
 }: {
@@ -28,6 +41,9 @@ export default function CvEditorPage({
   const [loaded, setLoaded] = useState<{ id: string; cv: CvData | null; notFound: boolean } | null>(null);
   const cvData = loaded?.id === id ? loaded.cv : null;
   const notFound = loaded?.id === id && loaded.notFound;
+  // Read once: the feedback card drops the param from the address when it opens.
+  // (Nothing that uses it renders before the CV has loaded, so the server render is unaffected.)
+  const [freshFlow] = useState(readFreshFlow);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,15 +111,23 @@ export default function CvEditorPage({
   }
 
   return (
-    <CvEditorWorkspace
-      initialData={cvData}
-      onBack={() => router.push("/dashboard")}
-      onSave={(savedCv) => {
-        updateDraftFromSavedCv(savedCv);
-        refreshSubscriptionStatus();
-        router.push("/dashboard");
-      }}
-    />
+    <>
+      <CvEditorWorkspace
+        initialData={cvData}
+        onBack={() => {
+          notifyLeftEditor(id);
+          router.push("/dashboard");
+        }}
+        onSave={(savedCv) => {
+          notifyLeftEditor(id);
+          updateDraftFromSavedCv(savedCv);
+          refreshSubscriptionStatus();
+          router.push("/dashboard");
+        }}
+        onDownloaded={notifyCvDownloaded}
+      />
+      {freshFlow && <AiDraftFeedback cvDocumentId={id} flowType={freshFlow} />}
+    </>
   );
 }
 

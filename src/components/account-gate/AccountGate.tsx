@@ -18,6 +18,15 @@ import {
 } from "@/lib/api";
 import { GOOGLE_POPUP_MESSAGE, type GooglePopupMessage } from "@/lib/google-popup";
 import { saveQuickIntent, type QuickIntent } from "@/lib/quick-links";
+import { markTryHandoff } from "@/lib/try-handoff";
+import { track } from "@/lib/analytics";
+import type { FlowKind } from "@/lib/flow-drafts";
+
+/** The /try flow a fallback intent belongs to (a template link is a create flow). */
+function flowOf(intent: QuickIntent): FlowKind | null {
+  if (intent.kind === "template") return "create";
+  return intent.kind === "pro" ? null : intent.kind;
+}
 
 /**
  * Try first, sign up later. Inside an <AccountGateProvider> (the public /try
@@ -84,11 +93,13 @@ export function AccountGateProvider({
 
   const requireAccount = useCallback(async () => {
     if (signedIn || getAccessToken()) return true;
+    const flow = flowOf(fallbackIntent);
+    if (flow) track("try_signup_prompted", { flow });
     return new Promise<boolean>((resolve) => {
       pending.current = resolve;
       setPopupOpen(true);
     });
-  }, [signedIn]);
+  }, [signedIn, fallbackIntent]);
 
   // A guest until we know otherwise, so account-only options never flash up for one.
   return (
@@ -169,6 +180,8 @@ function SignUpPopup({
     if (!popup) {
       // Pop-ups blocked: Google takes over this tab instead, and the dashboard opens this flow afresh after.
       saveQuickIntent(fallbackIntent);
+      const flow = flowOf(fallbackIntent);
+      if (flow) markTryHandoff(flow);
       window.location.href = googleSignInUrl();
       return;
     }

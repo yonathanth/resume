@@ -150,6 +150,7 @@ export default function AdminSettingsPage() {
             <PlatformCard data={settings.data} canWrite={canWrite} />
             <AiPricingCard data={settings.data} canWrite={canWrite} />
             <NotificationLimitsCard data={settings.data} canWrite={canWrite} />
+            <LifecycleEmailsCard data={settings.data} canWrite={canWrite} />
           </>
         )}
         <HealthCard />
@@ -578,6 +579,55 @@ function NotificationLimitsCard({ data, canWrite }: { data: SettingsResponse; ca
             </Button>
           </div>
         )}
+        {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
+      </div>
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------------ 3b. lifecycle emails
+
+function LifecycleEmailsCard({ data, canWrite }: { data: SettingsResponse; canWrite: boolean }) {
+  const toast = useToast();
+  const save = useSaveSetting();
+  const enabled = data.values.lifecycleEmails.enabled;
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onToggle = async (next: boolean) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await save("lifecycleEmails", { enabled: next });
+      toast.success(next ? "Lifecycle emails are on" : "Lifecycle emails are off");
+    } catch (err) {
+      setError(errorText(err, "Couldn't save."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card title="Lifecycle emails" description="Automatic emails for new accounts." actions={<LastUpdated meta={data.meta.lifecycleEmails} />}>
+      <div className="space-y-4">
+        {!canWrite && <ReadOnlyNote />}
+        <ToggleRow
+          label="Send lifecycle emails"
+          description={
+            <>
+              A <span className="font-semibold">welcome</span> once onboarding is done, a <span className="font-semibold">nudge</span> a day after sign-up if
+              they haven&apos;t made a CV, and a <span className="font-semibold">reminder</span> if they made one but never downloaded it. Each at most once
+              per account.
+            </>
+          }
+          checked={enabled}
+          onChange={onToggle}
+          disabled={!canWrite || saving}
+        />
+        <Note>
+          Only verified accounts that haven&apos;t unsubscribed from product emails get them, and only accounts created after this feature shipped (older ones
+          were skipped). Sent and failed counts are on the Insights page; each email is also in the email log.
+        </Note>
         {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
       </div>
     </Card>

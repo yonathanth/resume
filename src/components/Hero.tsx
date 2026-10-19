@@ -40,10 +40,10 @@ export function Hero() {
   }, [size, paused]);
 
   return (
-    <section className="relative min-h-[100svh] flex flex-col items-center justify-center text-center px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto pt-24 sm:pt-28 pb-10">
-      {/* Template fan */}
+    <section className="relative min-h-[100svh] flex flex-col items-center justify-center text-center px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto pt-24 sm:pt-28 pb-10 sm:pb-16 lg:pb-20">
+      {/* Template fan — its feet tuck under the headline from sm up; on phones it sits clear of it */}
       <div
-        className="hero-rise relative -mb-10 sm:-mb-14 h-[162px] sm:h-[188px] w-[236px] sm:w-[304px] flex items-start justify-center"
+        className="hero-rise relative -mb-3 sm:-mb-14 h-[162px] sm:h-[188px] w-[236px] sm:w-[304px] flex items-start justify-center"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
       >
@@ -115,15 +115,14 @@ export function Hero() {
       </h1>
 
       {/* Sub-headline */}
-      <p className="hero-rise [animation-delay:220ms] mt-5 text-lg sm:text-xl text-neutral-500 font-normal max-w-2xl mx-auto leading-relaxed">
-        Featuring real-time ATS keyword matching, tailored bullet generation,
-        and recruiter-tested modern templates, updated weekly.
+      <p className="hero-rise [animation-delay:220ms] mt-5 text-lg sm:text-xl text-neutral-500 font-normal max-w-xl mx-auto leading-relaxed">
+        Build your resume with AI, tailor it to every job, and download it ready to send.
       </p>
 
-      {/* CTA Buttons */}
-      <div className="hero-rise [animation-delay:320ms] mt-8 flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto justify-center">
-        <CtaButton href="/signup" className="w-full sm:w-auto">Get started free</CtaButton>
-        <CtaButton href="/how-it-works" variant="secondary" className="w-full sm:w-auto">How it works</CtaButton>
+      {/* CTA Buttons — side by side at every size */}
+      <div className="hero-rise [animation-delay:320ms] mt-8 flex flex-row items-center justify-center gap-2.5 sm:gap-3">
+        <CtaButton href="/signup" size="hero">Start free</CtaButton>
+        <CtaButton href="/how-it-works" variant="secondary" size="hero">How it works</CtaButton>
       </div>
     </section>
   );

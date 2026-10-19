@@ -11,13 +11,24 @@ export interface TourStep {
   onShow?: () => void;
 }
 
+// The Builder's own content: both tours start with it (the dashboard layout
+// goes to the Builder before starting the tour).
+const BUILDER_STEPS: TourStep[] = [
+  {
+    target: "builder-actions",
+    title: "Start here",
+    body: "Create a new resume, tailor one to a job posting, or improve a CV you already have.",
+  },
+  {
+    target: "recent-resumes",
+    title: "Your resumes",
+    body: "Your latest resumes show below. Open one to edit it, or See all for every resume you've made.",
+  },
+];
+
 /** The dashboard tour, started from the top bar's menu. */
 const DASHBOARD_STEPS: TourStep[] = [
-  {
-    target: "builder",
-    title: "The Builder",
-    body: "Start here. Create a CV from scratch, a file, or a career profile, or tailor and improve one you already have.",
-  },
+  ...BUILDER_STEPS,
   {
     target: "career-profiles",
     title: "Career Profiles",
@@ -40,6 +51,26 @@ const DASHBOARD_STEPS: TourStep[] = [
   },
 ];
 
+/**
+ * The same tour below md, where the sidebar is hidden: the Builder's content,
+ * then the menu (which holds the other pages).
+ */
+const MOBILE_DASHBOARD_STEPS: TourStep[] = [
+  ...BUILDER_STEPS,
+  {
+    target: "menu",
+    title: "Everything else is in the menu",
+    body: "Career Profiles, Past Projects and Templates, plus Help, Settings and this tour.",
+  },
+];
+
+/** Below md the dashboard sidebar is hidden (see the dashboard layout). */
+const DASHBOARD_PHONE_QUERY = "(max-width: 767px)";
+
+function defaultDashboardSteps(): TourStep[] {
+  return window.matchMedia(DASHBOARD_PHONE_QUERY).matches ? MOBILE_DASHBOARD_STEPS : DASHBOARD_STEPS;
+}
+
 const PAD = 6;
 const CARD_WIDTH = 320;
 const CARD_HEIGHT = 230; // roughly; used only to keep the card on screen
@@ -59,8 +90,20 @@ function placeCard(rect: DOMRect): React.CSSProperties {
   return { left: clampLeft(rect.left + rect.width / 2 - CARD_WIDTH / 2), top: clampTop(rect.bottom - CARD_HEIGHT - 24) };
 }
 
-/** A short spotlight tour over the real UI — the dashboard's by default, or any `steps`. */
-export function QuickTour({ onClose, steps = DASHBOARD_STEPS }: { onClose: () => void; steps?: TourStep[] }) {
+/** A short spotlight tour over the real UI — the dashboard's by default (desktop or phone), or any `steps`. */
+export function QuickTour({
+  onClose,
+  onFinished,
+  steps: stepsProp,
+}: {
+  onClose: () => void;
+  /** Called (before onClose) when they reach the end and press Done, with how many steps it had. */
+  onFinished?: (steps: number) => void;
+  steps?: TourStep[];
+}) {
+  // The dashboard's own steps are picked once, for the screen the tour opens on.
+  const [dashboardSteps] = useState(defaultDashboardSteps);
+  const steps = stepsProp ?? dashboardSteps;
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const step = steps[index];
@@ -76,20 +119,52 @@ export function QuickTour({ onClose, steps = DASHBOARD_STEPS }: { onClose: () =>
     stepsRef.current[index]?.onShow?.();
   }, [index]);
 
-  // Follow the target as the window resizes or the sidebar expands.
+  // Each step: wait for its target (a step's onShow may first open a tab, or
+  // the page may still be loading), scroll it into view, and only show the
+  // spotlight once it has stopped moving, so it never lands on a stale spot
+  // and then jumps. After that, keep following it (resizes, sidebar, scroll).
+  const [readyTarget, setReadyTarget] = useState<string | null>(null);
+  const ready = readyTarget === step.target;
   useLayoutEffect(() => {
-    const measure = () => {
-      const el = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
+    const target = step.target;
+    const started = performance.now();
+    let scrolled = false;
+    let last: DOMRect | null = null;
+    let stableSince = 0;
+    let isReady = false;
+    let frame = 0;
+
+    const tick = () => {
+      const now = performance.now();
+      const el = document.querySelector<HTMLElement>(`[data-tour="${target}"]`);
       const box = el?.getBoundingClientRect();
-      setRect(box && box.width > 0 && box.height > 0 ? box : null);
+      const found = el && box && box.width > 0 && box.height > 0 ? box : null;
+
+      if (found && el && !scrolled) {
+        scrolled = true;
+        const fits = found.height < window.innerHeight - 2 * GAP;
+        const inView = found.top >= 0 && found.bottom <= window.innerHeight;
+        if (!inView) el.scrollIntoView({ behavior: "smooth", block: fits ? "center" : "start" });
+      }
+
+      const moved =
+        !found || !last || Math.abs(found.left - last.left) > 0.5 || Math.abs(found.top - last.top) > 0.5 ||
+        Math.abs(found.width - last.width) > 0.5 || Math.abs(found.height - last.height) > 0.5;
+      if (moved) {
+        stableSince = now;
+        setRect(found);
+      }
+      last = found;
+
+      // Settled for a moment, or the target never showed up (then the card is centered).
+      if (!isReady && ((found && now - stableSince > 120) || now - started > 1500)) {
+        isReady = true;
+        setReadyTarget(target);
+      }
+      frame = requestAnimationFrame(tick);
     };
-    measure();
-    window.addEventListener("resize", measure);
-    const timer = setInterval(measure, 300);
-    return () => {
-      window.removeEventListener("resize", measure);
-      clearInterval(timer);
-    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
   }, [step.target]);
 
   useEffect(() => {
@@ -109,10 +184,10 @@ export function QuickTour({ onClose, steps = DASHBOARD_STEPS }: { onClose: () =>
 
   return (
     <div className="fixed inset-0 z-[90]" role="dialog" aria-modal="true" aria-label="Quick tour">
-      {rect ? (
+      {rect && ready ? (
         // The spotlight: a clear box over the target with everything else dimmed by its shadow.
         <div
-          className="absolute rounded-lg ring-2 ring-accent transition-all duration-300 pointer-events-none"
+          className="absolute rounded-lg ring-2 ring-accent pointer-events-none"
           style={{
             left: rect.left - PAD,
             top: rect.top - PAD,
@@ -127,7 +202,9 @@ export function QuickTour({ onClose, steps = DASHBOARD_STEPS }: { onClose: () =>
       {/* Clicks outside the card do nothing, so the tour isn't lost by accident. */}
       <div className="absolute inset-0" />
 
+      {ready && (
       <div
+        key={index}
         className="toast-enter absolute rounded-lg border border-neutral-300 bg-white shadow-2xl p-5"
         style={{ ...cardStyle, width: CARD_WIDTH, maxWidth: "calc(100vw - 32px)" }}
       >
@@ -163,13 +240,18 @@ export function QuickTour({ onClose, steps = DASHBOARD_STEPS }: { onClose: () =>
           )}
           <button
             type="button"
-            onClick={() => (isLast ? onClose() : setIndex(index + 1))}
+            onClick={() => {
+              if (!isLast) return setIndex(index + 1);
+              onFinished?.(steps.length);
+              onClose();
+            }}
             className="px-3.5 py-2 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
           >
             {isLast ? "Done" : "Next"}
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

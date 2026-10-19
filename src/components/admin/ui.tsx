@@ -49,6 +49,34 @@ export function Button({
   );
 }
 
+const PERIODS = [7, 30, 90, 365] as const;
+
+export function periodLabel(days: number) {
+  return days === 365 ? "1y" : `${days}d`;
+}
+
+/** 7d / 30d / 90d / 1y — the reporting window on the Overview and Insights pages. */
+export function PeriodPicker({ value, onChange }: { value: number; onChange: (days: number) => void }) {
+  return (
+    <div role="group" aria-label="Period" className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5">
+      {PERIODS.map((d) => (
+        <button
+          key={d}
+          type="button"
+          aria-pressed={value === d}
+          title={`Last ${d} days`}
+          onClick={() => onChange(d)}
+          className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
+            value === d ? "bg-neutral-950 text-white" : "text-neutral-600 hover:text-neutral-950 hover:bg-neutral-100"
+          }`}
+        >
+          {periodLabel(d)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PageHeader({ title, description, actions }: { title: string; description?: string; actions?: React.ReactNode }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">

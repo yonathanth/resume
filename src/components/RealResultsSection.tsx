@@ -5,24 +5,15 @@ import { Reveal } from "@/components/Reveal";
 import { CtaButton } from "@/components/CtaButton";
 
 // Before & after: the same (fictional) person's resume as a typical
-// home-made Word document, and as Resumate writes and lays it out.
+// home-made Word document, and as GoMoxie writes and lays it out.
 // Both sheets are drawn at A4 proportions and scaled to fit their column.
 
 const SHEET_W = 595;
 const SHEET_H = 842;
 
-// The magnifier: a round lens that follows the pointer and shows the sheet
-// under it at LENS_ZOOM× its on-screen size.
-const LENS_SIZE = 130;
-const LENS_ZOOM = 2.4;
-
 function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  // Pointer position in the sheet's own (untilted) pixels. It's kept after the
-  // pointer leaves so the lens fades out where it was instead of jumping.
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [active, setActive] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
@@ -33,62 +24,15 @@ function Sheet({ children, className = "" }: { children: React.ReactNode; classN
   }, []);
 
   const scale = width / SHEET_W;
-  // offsetX/Y are measured in the overlay's own coordinates, so the lens
-  // tracks correctly even though the sheets are rotated.
-  const track = (e: React.MouseEvent<HTMLDivElement>) => {
-    setPos({ x: e.nativeEvent.offsetX, y: e.nativeEvent.offsetY });
-    setActive(true);
-  };
 
   return (
     <div ref={ref} className={`relative w-full bg-white ${className}`} style={{ height: SHEET_H * scale || undefined, aspectRatio: width ? undefined : "210 / 297" }}>
       {width > 0 && (
-        <>
-          <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
-            <div className="absolute left-0 top-0 origin-top-left" style={{ width: SHEET_W, height: SHEET_H, transform: `scale(${scale})` }}>
-              {children}
-            </div>
+        <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
+          <div className="absolute left-0 top-0 origin-top-left" style={{ width: SHEET_W, height: SHEET_H, transform: `scale(${scale})` }}>
+            {children}
           </div>
-
-          {/* Hover surface */}
-          <div className="absolute inset-0 z-10 cursor-none" onMouseMove={track} onMouseEnter={track} onMouseLeave={() => setActive(false)} />
-
-          {/* Magnifying glass: black rim and handle, orange collar */}
-          <div
-            aria-hidden
-            className={`pointer-events-none absolute z-20 transition-[opacity,transform] duration-200 ease-out ${
-              active ? "scale-100 opacity-100" : "scale-75 opacity-0"
-            }`}
-            style={{ width: LENS_SIZE, height: LENS_SIZE, left: pos.x - LENS_SIZE / 2, top: pos.y - LENS_SIZE / 2 }}
-          >
-            {/* Handle, angled down and to the right from the rim */}
-            <div
-              className="absolute left-1/2 top-1/2 flex h-[14px] origin-left -translate-y-1/2 rotate-45 items-center drop-shadow-[0_8px_10px_rgba(15,17,21,0.3)]"
-              style={{ width: LENS_SIZE / 2 + 74, paddingLeft: LENS_SIZE / 2 - 2 }}
-            >
-              <span className="h-[10px] w-3 bg-neutral-800" />
-              <span className="h-[14px] w-2.5 rounded-[2px] bg-accent" />
-              <span className="h-[14px] flex-1 rounded-r-full bg-gradient-to-b from-neutral-700 to-neutral-950" />
-            </div>
-
-            {/* Glass */}
-            <div className="absolute inset-0 overflow-hidden rounded-full border-[5px] border-neutral-950 bg-white shadow-[0_0_0_1px_rgba(255,255,255,0.6)_inset,0_16px_32px_-10px_rgba(15,17,21,0.45)]">
-              <div
-                className="absolute left-0 top-0 origin-top-left"
-                style={{
-                  width: SHEET_W,
-                  height: SHEET_H,
-                  // offset by the rim so the point under the pointer sits in the centre of the glass
-                  transform: `translate(${LENS_SIZE / 2 - 5 - pos.x * LENS_ZOOM}px, ${LENS_SIZE / 2 - 5 - pos.y * LENS_ZOOM}px) scale(${scale * LENS_ZOOM})`,
-                }}
-              >
-                {children}
-              </div>
-              {/* Glare */}
-              <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_25%,rgba(255,255,255,0.55),transparent_45%)]" />
-            </div>
-          </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -326,19 +270,26 @@ function AfterResume() {
 
 export function RealResultsSection() {
   return (
-    <section id="results" className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 sm:py-28 lg:px-8">
-      {/* Header */}
-      <Reveal className="mx-auto max-w-2xl text-center">
+    <section
+      id="results"
+      className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-4 py-10 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-14 lg:px-8 lg:py-20"
+    >
+      {/* Side by side on large screens: the sheets on the left, the copy and the button on the
+          right. Stacked on smaller ones: the copy and button first, then the sheets. */}
+      <Reveal className="flex flex-col items-center text-center lg:order-2 lg:items-start lg:text-left">
         <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.08]">
           Recruiters give you six seconds.
           <br />
           <span className="text-neutral-400">Make them count.</span>
         </h2>
+        <div className="mt-8">
+          <CtaButton href="/signup">Try it with your resume</CtaButton>
+        </div>
       </Reveal>
 
       {/* Sheets: Before sits lower and leans left, After rises, leans right and
           overlaps it a little; a hand-drawn arrow sweeps from one to the other. */}
-      <div className="relative mx-auto mt-16 grid max-w-sm grid-cols-1 gap-14 md:mt-12 md:max-w-3xl md:grid-cols-2 md:gap-0">
+      <div className="relative mx-auto grid w-full max-w-sm grid-cols-1 gap-14 md:max-w-3xl md:grid-cols-2 md:gap-0 lg:order-1">
         <Reveal delay={450} className="pointer-events-none absolute left-[42%] top-3 z-20 hidden w-[16%] md:block">
           <svg viewBox="0 0 160 90" fill="none" className="w-full text-accent" aria-hidden>
             <path d="M8 82 C 24 34, 70 10, 140 16" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
@@ -368,11 +319,6 @@ export function RealResultsSection() {
           </figure>
         </Reveal>
       </div>
-
-      {/* CTA */}
-      <Reveal className="mt-16 flex flex-col items-center text-center">
-        <CtaButton href="/signup">Try it with your resume</CtaButton>
-      </Reveal>
     </section>
   );
 }

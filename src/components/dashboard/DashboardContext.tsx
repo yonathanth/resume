@@ -6,7 +6,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAllDrafts, CV_DRAFTS_QUERY_KEY } from "@/hooks/use-cv-drafts";
 import {
@@ -19,7 +19,9 @@ import {
 import { toResumeDraft } from "@/lib/cv-mapper";
 import type { FlowKind } from "@/lib/flow-drafts";
 import { dashboardFlowHref, markFlowClosed } from "@/lib/flow-url";
-import { editorHref, ensureSavedCv } from "@/lib/finished-cv";
+import { editorHref, ensureSavedCv, fillAccountFromFinishedCv } from "@/lib/finished-cv";
+import { clearTryHandoff } from "@/lib/try-handoff";
+import { ME_QUERY_KEY } from "@/hooks/use-auth";
 import {
   ResumeDraft,
   CvData,
@@ -48,9 +50,9 @@ interface DashboardContextValue {
   /** Opens a flow on the Builder — in its URL, so a refresh reopens it and Back closes it (see flow-url). */
   openFlow: (flow: FlowKind, options?: { template?: string; profile?: string }) => void;
   /** Closes the open flow (✕): back to the plain dashboard URL. */
-  closeFlow: (session: string) => void;
+  closeFlow: (session: string, from?: string) => void;
   /** A flow finished: its CV opens on its own editor page, in place of the flow's URL. */
-  openFinishedCv: (cv: CvData, session: string) => Promise<void>;
+  openFinishedCv: (cv: CvData, session: string, flow: FlowKind) => Promise<void>;
   goToPastProjects: () => void;
   goToTemplates: () => void;
 }
@@ -59,6 +61,7 @@ const DashboardContext = createContext<DashboardContextValue | null>(null);
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const queryClient = useQueryClient();
   const [drafts, setDrafts] = useState<ResumeDraft[]>([]);
@@ -165,22 +168,31 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   // Every flow opens through its URL (see flow-url): from any dashboard page,
   // it lands on the Builder with the flow open on top.
   const openFlow = (flow: FlowKind, options: { template?: string; profile?: string } = {}) => {
-    router.push(dashboardFlowHref(flow, options), { scroll: false });
+    router.push(dashboardFlowHref(flow, { ...options, from: pathname }), { scroll: false });
   };
 
-  const closeFlow = (session: string) => {
+  // Back to the page the flow was opened from (Past projects, Templates…).
+  // Closing or finishing a flow ends a /try handoff (see lib/try-handoff):
+  // onboarding no longer waits for it.
+  const closeFlow = (session: string, from = "/dashboard") => {
     markFlowClosed(session);
-    router.replace("/dashboard", { scroll: false });
+    clearTryHandoff();
+    router.replace(from, { scroll: false });
   };
 
-  const openFinishedCv = async (cv: CvData, session: string) => {
+  const openFinishedCv = async (cv: CvData, session: string, flow: FlowKind) => {
     markFlowClosed(session);
     try {
       const id = await ensureSavedCv(cv);
       queryClient.invalidateQueries({ queryKey: CV_DRAFTS_QUERY_KEY });
-      router.replace(editorHref(id), { scroll: false });
+      // A first CV can answer onboarding's questions (a /try sign-up, or an upload during onboarding).
+      const user = await fillAccountFromFinishedCv(id, flow);
+      if (user) queryClient.setQueryData(ME_QUERY_KEY, user);
+      clearTryHandoff();
+      router.replace(editorHref(id, flow), { scroll: false });
     } catch {
       // Couldn't save it as a document just now: open it here, where the editor saves it on the first change.
+      clearTryHandoff();
       router.replace("/dashboard", { scroll: false });
       setActiveEditingCv(cv);
     }

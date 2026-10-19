@@ -144,7 +144,7 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
           <SidebarMoxie crowned={isPro} />
           {isExpanded && (
             <span className="flex items-center gap-2 min-w-0">
-              <span className="text-[15px] font-bold tracking-tight text-neutral-950 truncate">Resumate</span>
+              <span className="text-[15px] font-bold tracking-tight text-neutral-950 truncate">GoMoxie</span>
               {isPro && (
                 <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-accent text-white border border-accent leading-none">
                   Pro

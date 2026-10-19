@@ -57,7 +57,7 @@ function transformLayers(p: MoxieParts) {
     p.stalkL, p.stalkR, p.stalkLineL, p.stalkLineR, p.eyeL, p.eyeR, p.pupilL, p.pupilR, p.glintL, p.glintR,
     p.lidL, p.lidR, p.face, p.pdfFile, p.coin, p.coinFace, p.crown, p.paperBack, p.paperSheet, p.groundPost, p.glassesL, p.glassesR,
     p.bladeA, p.bladeB, p.pencilTip, p.mouthO, p.side, p.sideTurn, p.sideBody, ...p.sideLegs, ...p.sidePupils, ...p.sideLids,
-    p.sideSweat, p.crownFloat,
+    p.sideSweat, p.crownFloat, p.hugFiles, p.hugStack, p.hugPincer,
   ];
 }
 
@@ -65,7 +65,7 @@ function transformLayers(p: MoxieParts) {
 function propLayers(p: MoxieParts) {
   return [
     p.pencil, p.stamp, p.scissors, p.magnifier, p.pdfFile, p.coin, p.folderBack, p.folderFront, ...p.confetti,
-    p.paperBack, p.groundPost, p.glassesL, p.glassesR, p.glassesBridge,
+    p.paperBack, p.groundPost, p.glassesL, p.glassesR, p.glassesBridge, p.hugFiles,
   ];
 }
 
@@ -100,8 +100,8 @@ export function toNeutral(p: MoxieParts, duration = 0.35, ease = "power2.inOut")
   tl.to(transformLayers(p), { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, duration, ease }, 0)
     .to(p.shadow, { x: 0, scaleX: 1, scaleY: 1, opacity: SHADOW_OPACITY, duration, ease }, 0)
     .to([...p.sparkles, ...p.zs, p.side, p.sideSweat, p.crownFloat, p.lashL, p.lashR, ...propLayers(p)], { opacity: 0, duration: Math.min(duration, 0.25) }, 0)
-    // Back to her front view, if she was seen from the side.
-    .to(p.root, { opacity: 1, duration: Math.min(duration, 0.25) }, 0)
+    // Back to her front view, if she was seen from the side — and her own small claw, if a copy of it was hugging folders.
+    .to([p.root, p.smallClaw], { opacity: 1, duration: Math.min(duration, 0.25) }, 0)
     // A snapped pencil is whole again (hidden with it) for next time.
     .set(p.pencilTip, { opacity: 1 }, Math.min(duration, 0.25))
     .set(p.pencilSplinter, { opacity: 0 }, Math.min(duration, 0.25));
@@ -2392,6 +2392,160 @@ const upgrade: MoxiePreset = {
   },
 };
 
+// ─── Presenting (a loader, to compare with "loading") ────────────────────────
+
+/** One round of presenting a fact, in seconds — the card beside her (MoxieDidYouKnow) changes on the same beat. */
+export const PRESENT_SECONDS = 6;
+/** The big claw resting, held out a little toward the card on her left. */
+const PRESENT_REST = -8;
+/** …and swept out to present it: "ta-da, look at this". */
+const PRESENT_SWEEP = -22;
+/** Her eyes on the card, up and to her left, through her lenses. */
+const CARD_GAZE = { x: -11, y: -3 } as const;
+
+/** A tap of the hugging pincer on the folders. */
+function tapFolders(tl: TL, p: MoxieParts, at: number) {
+  tl.to(p.hugPincer, { rotation: -14, duration: 0.1, ease: "power2.out" }, at).to(p.hugPincer, { rotation: 0, duration: 0.18, ease: "power2.in" }, at + 0.1);
+}
+
+/**
+ * Hang on, it's coming — and meanwhile, did you know…? Glasses on, a stack of
+ * folders hugged to her side, she presents a card beside her with her big
+ * claw (a new fact on it each round): sweeps her claw out to it, leans in and
+ * reads it eagerly through her glasses — and is amazed: eyes wide, stalks up,
+ * "oh!"; then has to share it, spinning round to you grinning, jabbing at the
+ * card and bouncing on her toes; then the folders slip, and she hitches them
+ * back up with a little hop. The card itself is the page's, not part of her
+ * (see MoxieDidYouKnow), so its words stay crisp at any size.
+ */
+const presenting: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    // The folders, tucked under her small claw: its copy (drawn just the same) takes its place at once,
+    // lifts to let them in, and presses them to her side.
+    tl.set(p.hugFiles, { opacity: 1 }, 0)
+      .set(p.smallClaw, { opacity: 0 }, 0)
+      .set(p.hugStack, { y: 34, opacity: 0 }, 0)
+      .to(p.hugFiles, { rotation: -12, duration: 0.2, ease: "power2.out" }, 0.05)
+      .to(p.hugStack, { opacity: 1, duration: 0.15 }, 0.1)
+      .to(p.hugStack, { y: 0, duration: 0.45, ease: "back.out(1.6)" }, 0.1)
+      .to(p.hugFiles, { rotation: 0, duration: 0.35, ease: "back.out(2)" }, 0.35)
+      .to(p.root, { scaleY: 0.97, scaleX: 1.02, duration: 0.12, ease: "power2.out" }, 0.4)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.35, ease: "back.out(2.5)" }, 0.52)
+      .to(p.bigClaw, { rotation: PRESENT_REST, duration: 0.45, ease: "power2.inOut" }, 0.3);
+    tapFolders(tl, p, 0.55);
+    glassesOn(tl, p, 0.25);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+    // A new fact: she sweeps her claw out to present it, pincer open — ta-da.
+    tl.to(p.bigClaw, { rotation: PRESENT_SWEEP, duration: 0.4, ease: "back.out(1.8)" }, 0)
+      .to(p.bigPincer, { rotation: -12, duration: 0.3, ease: "back.out(2)" }, 0.05)
+      .to(p.root, { rotation: -2, duration: 0.4 }, 0);
+    look(tl, p, CARD_GAZE.x, CARD_GAZE.y, 0, 0.3);
+    stretchStalks(tl, p, 1.05, 0, 0.3, "back.out(2)");
+    // Reading it, eagerly: she leans in toward the card, stalks craning, eyes bright and running along
+    // the lines, smiling — a little bounce on each line, a happy squeeze of the folders.
+    tl.to(p.root, { rotation: -4, duration: 0.4, ease: "power2.out" }, 0.4)
+      .to(p.stalkL, { rotation: -9, duration: 0.4, ease: "back.out(1.8)" }, 0.4)
+      .to(p.stalkR, { rotation: -7, duration: 0.4, ease: "back.out(1.8)" }, 0.44)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.2 }, 0.4)
+      .to(p.bigClaw, { rotation: PRESENT_REST - 4, duration: 0.8, ease: "sine.inOut" }, 0.6)
+      .to(p.bigPincer, { rotation: 0, duration: 0.5 }, 0.7);
+    parallax(tl, p, -5, 0.4, 0.4, "power2.out");
+    stretchStalks(tl, p, 1.08, 0.4, 0.4, "back.out(1.8)");
+    mouth(tl, p, "smile", 0.4);
+    for (const t of [0.75, 1.15]) {
+      tl.to(p.root, { y: -3, scaleY: 1.02, duration: 0.1, ease: "power2.out" }, t).to(p.root, { y: 0, scaleY: 1, duration: 0.16, ease: "power2.in" }, t + 0.1);
+    }
+    tapFolders(tl, p, 0.95);
+    look(tl, p, CARD_GAZE.x - 2, CARD_GAZE.y + 1, 0.5, 0.35, "sine.inOut");
+    look(tl, p, CARD_GAZE.x + 3, CARD_GAZE.y + 2, 0.85, 0.35, "sine.inOut");
+    look(tl, p, CARD_GAZE.x - 2, CARD_GAZE.y + 3, 1.2, 0.15, "power2.out");
+    look(tl, p, CARD_GAZE.x + 3, CARD_GAZE.y + 4, 1.35, 0.3, "sine.inOut");
+
+    // …wait, what? Amazed: eyes wide, stalks shot up, glasses jolted, a big "oh!" and a little hop back.
+    const wow = 1.75;
+    tl.to([p.eyeL, p.eyeR], { scale: 1.18, duration: 0.18, ease: "back.out(3)" }, wow)
+      .to([p.glassesL, p.glassesR], { y: -7, duration: 0.12, ease: "power2.out" }, wow)
+      .to([p.glassesL, p.glassesR], { y: 0, duration: 0.35, ease: "bounce.out" }, wow + 0.12)
+      .to(p.root, { y: -7, rotation: -2, duration: 0.14, ease: "power2.out" }, wow)
+      .to(p.root, { y: 0, duration: 0.25, ease: "back.out(2.5)" }, wow + 0.14)
+      .to([p.stalkL, p.stalkR], { rotation: -3, duration: 0.16, ease: "power2.out" }, wow)
+      .to(p.mouthO, { scale: 1.4, duration: 0.15, ease: "back.out(3)" }, wow);
+    parallax(tl, p, 0, wow, 0.2, "power2.out");
+    mouth(tl, p, "o", wow, 0.05);
+    stretchStalks(tl, p, 1.18, wow, 0.16, "power2.out");
+    stretchStalks(tl, p, 1.08, wow + 0.25, 0.5, "elastic.out(1, 0.4)");
+    look(tl, p, CARD_GAZE.x, CARD_GAZE.y, wow, 0.12, "power3.out");
+    sparkleAt(tl, p, 0, wow + 0.05, { x: 226, y: 118 }, 0.55);
+    sparkleAt(tl, p, 1, wow + 0.12, { x: 386, y: 108 }, 0.5);
+    tl.to([p.eyeL, p.eyeR], { scale: 1.08, duration: 0.3, ease: "power2.inOut" }, wow + 0.55).to(p.mouthO, { scale: 1, duration: 0.2 }, wow + 0.6);
+
+    // …and she has to share it: she spins round to you grinning, jabbing her claw at the card —
+    // this! look! — pincer clacking, bouncing on her toes, stalks bobbing.
+    const share = 2.45;
+    mouth(tl, p, "smile", share);
+    tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.15 }, share)
+      .to(p.root, { rotation: 2, duration: 0.25, ease: "back.out(2)" }, share)
+      .to(p.bigClaw, { rotation: PRESENT_SWEEP - 2, duration: 0.16, ease: "back.out(2.5)" }, share + 0.05)
+      .to(p.bigClaw, { rotation: PRESENT_SWEEP + 8, duration: 0.16, ease: "power2.inOut" }, share + 0.25)
+      .to(p.bigClaw, { rotation: PRESENT_SWEEP - 2, duration: 0.16, ease: "back.out(2.5)" }, share + 0.45)
+      .to(p.bigClaw, { rotation: PRESENT_REST - 2, duration: 0.5, ease: "power2.inOut" }, share + 0.8);
+    for (const [i, t] of [0.05, 0.25, 0.45].entries()) {
+      tl.to(p.bigPincer, { rotation: -14, duration: 0.07, ease: "power2.out" }, share + t)
+        .to(p.bigPincer, { rotation: 0, duration: 0.1, ease: "power2.in" }, share + t + 0.08);
+      const hop = share + 0.08 + i * 0.24;
+      tl.to(p.root, { y: -7, scaleY: 1.04, scaleX: 0.98, duration: 0.11, ease: "power2.out" }, hop)
+        .to(p.root, { y: 0, scaleY: 0.97, scaleX: 1.02, duration: 0.11, ease: "power2.in" }, hop + 0.11)
+        .to(p.legList, { y: -3, rotation: (j: number) => (j - 1) * 6, duration: 0.11 }, hop)
+        .to(p.legList, { y: 0, rotation: 0, duration: 0.11 }, hop + 0.11)
+        .to(p.stalkL, { rotation: i % 2 ? 2 : 8, duration: 0.2, ease: "sine.inOut" }, hop)
+        .to(p.stalkR, { rotation: i % 2 ? 7 : 1, duration: 0.2, ease: "sine.inOut" }, hop + 0.04);
+    }
+    look(tl, p, 1, -3, share, 0.2);
+    sparkleAt(tl, p, 2, share + 0.3, { x: 150, y: 168 }, 0.5);
+    // Settling down, still beaming; a happy squeeze of the folders.
+    const settle = share + 0.85;
+    tl.to(p.root, { y: 0, rotation: 0, scaleY: 1, scaleX: 1, duration: 0.4, ease: "back.out(2)" }, settle)
+      .to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.45, ease: "back.out(1.6)" }, settle)
+      .to([p.eyeL, p.eyeR], { scale: 1, duration: 0.4, ease: "power2.inOut" }, settle)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, settle + 0.35);
+    stretchStalks(tl, p, 1, settle, 0.45, "power2.inOut");
+    tapFolders(tl, p, settle + 0.1);
+    blink(tl, p, settle + 0.5);
+
+    // The folders slip… she notices, and hitches them back up with a little hop.
+    const slip = 3.9;
+    tl.to(p.hugStack, { y: 7, rotation: 5, duration: 0.55, ease: "power1.in" }, slip);
+    look(tl, p, 9, 8, slip + 0.4, 0.18);
+    mouth(tl, p, "o", slip + 0.4);
+    const hitch = slip + 0.6;
+    tl.to(p.hugFiles, { rotation: -10, duration: 0.14, ease: "power2.out" }, hitch)
+      .to(p.hugStack, { y: -3, rotation: -1.5, duration: 0.16, ease: "power2.out" }, hitch)
+      .to(p.root, { y: -5, rotation: 0, scaleY: 1.03, scaleX: 0.99, duration: 0.14, ease: "power2.out" }, hitch)
+      .to(p.root, { y: 0, scaleY: 1, scaleX: 1, duration: 0.32, ease: "back.out(2.5)" }, hitch + 0.14)
+      .to(p.hugFiles, { rotation: 0, duration: 0.35, ease: "back.out(2)" }, hitch + 0.15)
+      .to(p.hugStack, { y: 0, rotation: 0, duration: 0.35, ease: "back.out(2)" }, hitch + 0.15)
+      .to(p.bigClaw, { rotation: PRESENT_REST, duration: 0.4 }, hitch + 0.2);
+    mouth(tl, p, "smile", hitch + 0.3);
+    lookHome(tl, p, hitch + 0.4, 0.3);
+    tl.to({}, { duration: 0 }, PRESENT_SECONDS);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    tl.set([p.hugFiles, p.glassesL, p.glassesR, p.glassesBridge], { opacity: 1 }, 0)
+      .set(p.smallClaw, { opacity: 0 }, 0)
+      .to(p.bigClaw, { rotation: PRESENT_SWEEP, duration: 0.4 }, 0)
+      .to([p.lidL, p.lidR], { y: READ_LID, duration: 0.4 }, 0);
+    look(tl, p, CARD_GAZE.x, CARD_GAZE.y, 0, 0.4);
+    return tl;
+  },
+};
+
 // ─── Tickle ───────────────────────────────────────────────────────────────────
 
 /** How long the giggle lasts, start to "ahem". */
@@ -2490,6 +2644,7 @@ export const MOXIE_PRESETS: Record<MoxieAnimation, MoxiePreset> = {
   paid,
   onboarded,
   saved,
+  presenting,
   searching,
   emptyFolder,
   sitting,

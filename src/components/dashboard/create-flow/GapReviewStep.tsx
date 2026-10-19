@@ -37,6 +37,25 @@ export function gapsNotInContent(content: CVContentDTO, confirmed: ConfirmedGap[
     });
 }
 
+/** After the gap review: which of the job's requirements the user's picks put into the CV. */
+export function GapOutcome({ added }: { added: string[] }) {
+  if (added.length === 0) return null;
+  return (
+    <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 text-left">
+      <p className="text-sm font-semibold text-emerald-900">Added to your CV</p>
+      <p className="mt-0.5 text-xs leading-relaxed text-emerald-800/80">From what you picked. Check how they read in the editor.</p>
+      <ul className="mt-2.5 space-y-1.5">
+        {added.map((gap) => (
+          <li key={gap} className="flex items-start gap-2 text-sm text-emerald-950">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            {gap}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** The skills sections with `items` added — to the flat list and, when it has them, the last skill group. */
 export function withAddedSkills(content: CVContentDTO, items: string[]): CVContentDTO {
   const skills = [...(content.skills ?? []), ...items];

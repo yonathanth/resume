@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useState, useSyncExternalStore } from "react";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell, Mail } from "lucide-react";
+import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell, Mail, ChevronDown, Check, Briefcase } from "lucide-react";
 import {
   useSubscriptionStatus,
   useCancelSubscription,
@@ -22,6 +22,7 @@ import {
 import {
   ApiError,
   ApiUser,
+  type DeletionReason,
   ProfileAutoSync,
   cancelEmailChange,
   confirmEmailChange,
@@ -43,7 +44,7 @@ import {
 import { CancelPlanModal } from "@/components/dashboard/CancelPlanModal";
 import { ChangePlanModal } from "@/components/dashboard/ChangePlanModal";
 import { ICON_TONES, OptionTone } from "@/components/dashboard/create-flow/OptionCard";
-import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
+import { ProfessionsInput, addProfession } from "@/components/dashboard/ProfessionsInput";
 import { useToast } from "@/components/Toaster";
 import { EmailCodeEntry } from "@/components/EmailCodeEntry";
 
@@ -63,12 +64,12 @@ const PLAN_PRICE_LABEL: Record<SubscriptionPlan, string> = {
 };
 
 const SECTIONS = [
-  { id: "profile", label: "Profile" },
-  { id: "security", label: "Sign-in & security" },
-  { id: "plan", label: "Plan & usage" },
-  { id: "notifications", label: "Notifications" },
-  { id: "career-profiles", label: "Career profiles" },
-  { id: "danger", label: "Delete account" },
+  { id: "profile", label: "Profile", icon: User },
+  { id: "security", label: "Sign-in & security", icon: Shield },
+  { id: "plan", label: "Plan & usage", icon: CreditCard },
+  { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "career-profiles", label: "Career profiles", icon: Briefcase },
+  { id: "danger", label: "Delete account", icon: AlertTriangle },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -156,16 +157,21 @@ function ProfileForm({ me }: { me: ApiUser }) {
     firstName: seeded.first,
     lastName: seeded.last,
     phone: me.phone ?? "",
-    profession: me.occupationTitle ?? "",
   };
+  const savedProfessions = me.professions?.length ? me.professions : me.occupationTitle ? [me.occupationTitle] : [];
   const [form, setForm] = useState(saved);
+  const [professions, setProfessions] = useState<string[]>(savedProfessions);
+  // Typed but not added yet: saved along with the list.
+  const [professionDraft, setProfessionDraft] = useState("");
+  const allProfessions = addProfession(professions, professionDraft);
+  const professionsChanged = allProfessions.join("|") !== savedProfessions.join("|");
   const [error, setError] = useState<string | null>(null);
   const [changingEmail, setChangingEmail] = useState(false);
   const toast = useToast();
 
   const set = (key: keyof typeof form) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }));
   const changed = (key: keyof typeof form) => form[key].trim() !== saved[key];
-  const isDirty = (Object.keys(form) as (keyof typeof form)[]).some(changed);
+  const isDirty = (Object.keys(form) as (keyof typeof form)[]).some(changed) || professionsChanged;
   const phoneInvalid = !PHONE_PATTERN.test(form.phone);
   const isValid = form.firstName.trim() !== "" && form.lastName.trim() !== "" && !phoneInvalid;
 
@@ -178,7 +184,7 @@ function ProfileForm({ me }: { me: ApiUser }) {
       await updateProfile.mutateAsync({
         ...(namesChanged ? { firstName: form.firstName.trim(), lastName: form.lastName.trim() } : {}),
         ...(changed("phone") ? { phone: form.phone.trim() } : {}),
-        ...(changed("profession") && form.profession.trim() ? { occupationTitle: form.profession.trim() } : {}),
+        ...(professionsChanged ? { professions: allProfessions } : {}),
       });
       toast.success("Changes saved");
     } catch (err) {
@@ -249,10 +255,15 @@ function ProfileForm({ me }: { me: ApiUser }) {
         </div>
         <div className="sm:col-span-2">
           <label htmlFor="profession" className={LABEL_CLASS}>
-            Profession
+            Professions <span className="font-normal text-neutral-400">· the starred one is your main one</span>
           </label>
-          <ProfessionInput id="profession" value={form.profession} onChange={set("profession")} />
-          <p className="mt-1.5 text-xs text-neutral-500">Pick from the list or type your own.</p>
+          <ProfessionsInput
+            id="profession"
+            value={professions}
+            onChange={setProfessions}
+            draft={professionDraft}
+            onDraftChange={setProfessionDraft}
+          />
         </div>
       </div>
 
@@ -264,6 +275,8 @@ function ProfileForm({ me }: { me: ApiUser }) {
               type="button"
               onClick={() => {
                 setForm(saved);
+                setProfessions(savedProfessions);
+                setProfessionDraft("");
                 setError(null);
               }}
               className={SECONDARY_BUTTON}
@@ -650,7 +663,7 @@ function PlanSection() {
   }
 
   const isChapa = subscription.subscriptionProvider === "CHAPA";
-  // Pro given by the FitCV team rather than paid for — nothing to cancel or renew.
+  // Pro given by the GoMoxie team rather than paid for — nothing to cancel or renew.
   const isGrant = subscription.isPro && subscription.proSource === "grant";
   const freeTabs: { key: "freeCreateUsed" | "freeTailorUsed" | "freeImproveUsed"; flow: "create" | "tailor" | "improve"; label: string }[] = [
     { key: "freeCreateUsed", flow: "create", label: "Create" },
@@ -716,7 +729,7 @@ function PlanSection() {
 
           <p className="mt-1 text-sm text-neutral-500 max-w-xl">
             {isGrant
-              ? `Pro access from the Resumate team${
+              ? `Pro access from the GoMoxie team${
                   subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""
                 }. You aren't being charged for it.`
               : subscription.isPro
@@ -825,10 +838,23 @@ function PlanSection() {
 
 /* ---------------- Delete account ---------------- */
 
+const DELETION_REASONS: { value: DeletionReason; label: string }[] = [
+  { value: "got_the_job", label: "I got the job" },
+  { value: "not_useful", label: "It wasn't useful" },
+  { value: "poor_results", label: "The CVs weren't good enough" },
+  { value: "too_expensive", label: "Too expensive" },
+  { value: "other_service", label: "I'm using something else" },
+  { value: "privacy", label: "Privacy concerns" },
+  { value: "other", label: "Something else" },
+];
+
 function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void }) {
   const deleteAccount = useDeleteAccount();
   const [password, setPassword] = useState("");
   const [confirmEmail, setConfirmEmail] = useState("");
+  // Optional, and stored without anything that identifies them.
+  const [reason, setReason] = useState<DeletionReason | null>(null);
+  const [comment, setComment] = useState("");
 
   const canDelete = me.hasPassword
     ? password.length > 0
@@ -836,7 +862,8 @@ function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    deleteAccount.mutate(me.hasPassword ? { password } : { confirmEmail: confirmEmail.trim() });
+    const feedback = { ...(reason ? { reason } : {}), ...(comment.trim() ? { comment: comment.trim() } : {}) };
+    deleteAccount.mutate(me.hasPassword ? { password, ...feedback } : { confirmEmail: confirmEmail.trim(), ...feedback });
   };
 
   const error = deleteAccount.error;
@@ -869,6 +896,44 @@ function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void 
           <p className="mt-1.5 text-sm text-neutral-500 leading-relaxed">
             This permanently deletes your resumes, career profiles and payment history. It can&apos;t be undone.
           </p>
+
+          <fieldset className="mt-5">
+            <legend className={LABEL_CLASS}>
+              Mind telling us why? <span className="font-normal text-neutral-400">· optional</span>
+            </legend>
+            <div className="flex flex-wrap gap-1.5">
+              {DELETION_REASONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={reason === value}
+                  onClick={() => setReason(reason === value ? null : value)}
+                  className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors cursor-pointer ${
+                    reason === value ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300 text-neutral-700 hover:border-neutral-400"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {reason && (
+              <>
+                <label htmlFor="deleteComment" className="sr-only">
+                  Anything you&apos;d like to add?
+                </label>
+                <textarea
+                  id="deleteComment"
+                  rows={2}
+                  maxLength={1000}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="Anything you'd like to add? (optional)"
+                  className={`${INPUT_CLASS} mt-2.5 resize-none`}
+                />
+              </>
+            )}
+            <p className="mt-1.5 text-[11px] text-neutral-400">Kept without your name or email, only to improve GoMoxie.</p>
+          </fieldset>
 
           <div className="mt-5">
             {me.hasPassword ? (
@@ -992,7 +1057,7 @@ function CareerProfilesSection({ me }: { me: ApiUser }) {
       </fieldset>
       {!isPro && (
         <p className="mt-4 text-xs text-neutral-500">
-          Career profiles are part of FitCV Pro.{" "}
+          Career profiles are part of GoMoxie Pro.{" "}
           <Link href="/dashboard/upgrade" className="font-semibold text-accent-strong hover:text-accent">
             Upgrade
           </Link>
@@ -1081,9 +1146,9 @@ function NotificationsSection() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-semibold text-neutral-900">Product announcements by email</div>
+          <div className="text-sm font-semibold text-neutral-900">Product news and tips by email</div>
           <p className="mt-0.5 text-xs text-neutral-500 max-w-md">
-            New features and occasional news. Account, security and billing emails are always sent.
+            New features, occasional news, and a few tips while you&apos;re getting started. Account, security and billing emails are always sent.
           </p>
         </div>
         <label className="inline-flex items-center gap-2 shrink-0 cursor-pointer">
@@ -1108,7 +1173,7 @@ function NotificationsSection() {
                 ? PUSH_BLOCKED_MESSAGES[support]
                 : permission === "denied"
                   ? "Notifications are blocked for this site. Allow them in your browser's site settings, then try again."
-                  : "Get important updates even when Resumate isn't open. You can turn this off any time."}
+                  : "Get important updates even when GoMoxie isn't open. You can turn this off any time."}
           </p>
           {prefs.data.push.subscribedDevices > 0 && (
             <p className="mt-1 text-xs text-neutral-400">
@@ -1132,6 +1197,86 @@ function NotificationsSection() {
   );
 }
 
+/* ---------------- Section picker (small screens) ---------------- */
+
+// Below lg the tab column doesn't fit, so the sections collapse into one
+// dropdown: the button names the open section and the menu always lists
+// every section, so none of them is hidden off-screen.
+function SectionPicker({ active }: { active: SectionId }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = SECTIONS.find((s) => s.id === active) ?? SECTIONS[0];
+  const CurrentIcon = current.icon;
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative lg:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left shadow-sm transition-colors hover:border-neutral-300 cursor-pointer"
+      >
+        <CurrentIcon className={`w-4 h-4 shrink-0 ${active === "danger" ? "text-red-500" : "text-neutral-500"}`} />
+        <span className={`flex-1 text-sm font-semibold ${active === "danger" ? "text-red-600" : "text-neutral-950"}`}>
+          {current.label}
+        </span>
+        <span className="text-xs text-neutral-400">
+          {SECTIONS.indexOf(current) + 1} of {SECTIONS.length}
+        </span>
+        <ChevronDown className={`w-4 h-4 shrink-0 text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg animate-in fade-in duration-100"
+        >
+          {SECTIONS.map((s) => {
+            const Icon = s.icon;
+            const isActive = s.id === active;
+            const danger = s.id === "danger";
+            return (
+              <React.Fragment key={s.id}>
+                {danger && <div className="my-1.5 h-px bg-neutral-100" aria-hidden />}
+                <a
+                  href={`#${s.id}`}
+                  role="menuitem"
+                  onClick={() => setOpen(false)}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors ${
+                    isActive ? "bg-neutral-100 font-semibold" : "font-medium hover:bg-neutral-50"
+                  } ${danger ? "text-red-600" : isActive ? "text-neutral-950" : "text-neutral-700"}`}
+                >
+                  <Icon className={`w-4 h-4 shrink-0 ${danger ? "text-red-500" : "text-neutral-400"}`} />
+                  <span className="flex-1">{s.label}</span>
+                  {isActive && <Check className="w-4 h-4 text-neutral-500" />}
+                </a>
+              </React.Fragment>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Page ---------------- */
 
 export function SettingsView() {
@@ -1151,9 +1296,10 @@ export function SettingsView() {
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-6xl mx-auto w-full">
       <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr] gap-8 lg:gap-12">
-        {/* Tabs: a row on small screens, a sticky column on large ones. */}
-        <nav aria-label="Settings sections" className="-mx-1 px-1 overflow-x-auto lg:overflow-visible">
-          <div className="flex lg:flex-col gap-1 lg:sticky lg:top-8">
+        {/* Sections: a dropdown on small screens, a sticky tab column on large ones. */}
+        <nav aria-label="Settings sections">
+          <SectionPicker active={active} />
+          <div className="hidden lg:flex flex-col gap-1 sticky top-8">
             {SECTIONS.map((s) => (
               <a
                 key={s.id}
@@ -1171,7 +1317,7 @@ export function SettingsView() {
           {active === "profile" && (
             <Section id="profile" icon={User} tone="accent" title="Profile" description="Your details, used as the defaults on every new resume.">
               {me ? (
-                <ProfileForm key={[me.id, me.firstName, me.lastName, me.email, me.phone, me.occupationTitle].join("|")} me={me} />
+                <ProfileForm key={[me.id, me.firstName, me.lastName, me.email, me.phone, ...(me.professions ?? [])].join("|")} me={me} />
               ) : (
                 <div className="h-20 rounded-lg bg-neutral-100 animate-pulse" />
               )}
@@ -1199,7 +1345,7 @@ export function SettingsView() {
           {active === "career-profiles" && (
             <Section
               id="career-profiles"
-              icon={User}
+              icon={Briefcase}
               tone="emerald"
               title="Career profiles"
               description="How new CVs keep your role profiles up to date."

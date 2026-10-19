@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useRegister, useLogin, useResendVerification } from "@/hooks/use-auth";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
@@ -48,7 +48,7 @@ const COLOURFUL_FIRST = [
 type WallItem = { kind: "cv"; slot: number } | { kind: "tile"; tile: number };
 
 const TILES = [
-  { className: "bg-accent text-white", eyebrow: "Resumate", text: "Land the interview." },
+  { className: "bg-accent text-white", eyebrow: "GoMoxie", text: "Land the interview." },
   { className: "bg-accent-soft text-neutral-950", eyebrow: "AI tailoring", text: "Made for every job you apply to." },
   { className: "bg-neutral-800 text-white", eyebrow: "ATS-friendly", text: "Passes the scan.", accent: true },
   { className: "bg-[#ffe3d1] text-neutral-950", eyebrow: "Templates", text: "Simple to academic." },
@@ -258,9 +258,6 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
         <div className="pointer-events-none absolute left-1/2 top-1/3 h-[320px] w-[480px] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(closest-side,rgba(255,122,46,0.10),transparent)] blur-3xl" />
 
         <div className="relative mx-auto my-auto w-full max-w-[380px] py-10">
-          <Link href="/" aria-label="Resumate home" className="group mx-auto mb-6 flex h-11 w-11 items-center justify-center rounded-[13px] bg-white text-neutral-950 transition-transform duration-200 hover:scale-105">
-            <FileText className="h-5 w-5 stroke-[2.2]" />
-          </Link>
           {sentToEmail ? (
             <EmailCodeEntry
               email={sentToEmail}
@@ -352,7 +349,7 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
           </form>
 
           <p className="mt-6 text-center text-[14px] text-neutral-500">
-            {isSignup ? "Already have an account? " : "New to Resumate? "}
+            {isSignup ? "Already have an account? " : "New to GoMoxie? "}
             <Link href={isSignup ? "/login" : "/signup"} className="font-semibold text-accent-light transition-colors hover:text-accent-mid">
               {isSignup ? "Log in" : "Create an account"}
             </Link>

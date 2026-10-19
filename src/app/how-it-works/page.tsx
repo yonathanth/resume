@@ -1,5 +1,6 @@
 import React from "react";
 import { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
@@ -7,11 +8,12 @@ import { CtaButton } from "@/components/CtaButton";
 import { Reveal } from "@/components/Reveal";
 import { EditorVisual, JobVisual, SourceVisual } from "@/components/HowItWorks";
 
-export const metadata: Metadata = {
-  title: "How it works – Resumate",
+export const metadata: Metadata = pageMetadata({
+  title: "How it works",
   description:
-    "Share your details, tailor your resume to the job, then download and apply. Here's what happens at each step.",
-};
+    "From your story to a finished CV: share your details, let AI write it, tailor it to the job, then download a polished PDF.",
+  path: "/how-it-works",
+});
 
 // The full version of the home page's How it works section — same three
 // steps and animations, each with room for a fuller explanation
@@ -58,15 +60,16 @@ export default function HowItWorksPage() {
               key={title}
               className={`grid grid-cols-1 items-center gap-8 lg:gap-14 ${i % 2 === 1 ? "lg:grid-cols-[3fr_2fr]" : "lg:grid-cols-[2fr_3fr]"}`}
             >
-              <Reveal className={i % 2 === 1 ? "lg:order-2 lg:pl-4" : "lg:pr-4"}>
-                <div className="flex items-center gap-3">
+              {/* Centred on phones and tablets; from lg it sits beside its visual, left-aligned. */}
+              <Reveal className={`text-center lg:text-left ${i % 2 === 1 ? "lg:order-2 lg:pl-4" : "lg:pr-4"}`}>
+                <div className="flex items-center justify-center gap-3 lg:justify-start">
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-[15px] font-semibold text-accent-strong">
                     {i + 1}
                   </span>
                   <span className="text-[13px] font-medium uppercase tracking-[0.12em] text-neutral-400">Step {i + 1}</span>
                 </div>
                 <h2 className="mt-5 text-3xl font-bold tracking-tight text-neutral-950 sm:text-4xl">{title}</h2>
-                <p className="mt-4 max-w-md text-[17px] leading-relaxed text-neutral-500 sm:text-lg">{lead}</p>
+                <p className="mx-auto mt-4 max-w-md text-[17px] leading-relaxed text-neutral-500 sm:text-lg lg:mx-0">{lead}</p>
               </Reveal>
 
               <Reveal delay={120} className={i % 2 === 1 ? "lg:order-1" : ""}>

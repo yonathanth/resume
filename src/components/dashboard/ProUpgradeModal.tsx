@@ -71,13 +71,13 @@ export function ProUpgradeModal({ isOpen, onClose, reason }: ProUpgradeModalProp
         <Moxie animation="upgrade" size={112} decorative ticklish shadow={false} className="mx-auto -mt-3 mb-1" />
 
         <h2 id="pro-upgrade-title" className="text-xl font-bold tracking-tight text-neutral-950">
-          {subscription?.isExpired ? "Your FitCV Pro plan has expired" : "Upgrade to FitCV Pro"}
+          {subscription?.isExpired ? "Your GoMoxie Pro plan has expired" : "Upgrade to GoMoxie Pro"}
         </h2>
         <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">
           {reason ??
             (subscription?.isExpired
               ? "Renew to keep unlimited AI tailoring. Your free generations are already used up."
-              : "You've already used your free generation on this tab. Upgrade to FitCV Pro for unlimited AI tailoring.")}
+              : "You've already used your free generation on this tab. Upgrade to GoMoxie Pro for unlimited AI tailoring.")}
         </p>
 
         <ul className="my-6 space-y-2.5 text-left">

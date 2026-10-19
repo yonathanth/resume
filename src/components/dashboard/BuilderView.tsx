@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDashboard } from "./DashboardContext";
 import { isFlowClosed, readOpenFlow } from "@/lib/flow-url";
 import {
@@ -18,6 +18,7 @@ import { CvEditorWorkspace } from "./create-flow/CvEditorWorkspace";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ResumeCard } from "./ResumeCard";
 import { DashboardMoxie } from "./DashboardMoxie";
+import { GettingStartedChecklist } from "./GettingStartedChecklist";
 import {
   CvData,
   PastProjectOption,
@@ -53,7 +54,6 @@ const ACTION_CARD_COLORS = {
 
 interface BuilderViewProps {
   onOpenStudio?: (draftId?: string) => void;
-  onNavigateToTemplates?: () => void;
   onNavigateToPastProjects?: () => void;
   drafts?: ResumeDraft[];
   setDrafts?: React.Dispatch<React.SetStateAction<ResumeDraft[]>>;
@@ -67,7 +67,6 @@ interface BuilderViewProps {
 
 export function BuilderView({
   onOpenStudio,
-  onNavigateToTemplates,
   onNavigateToPastProjects,
   drafts: externalDrafts,
   setDrafts: externalSetDrafts,
@@ -100,12 +99,20 @@ export function BuilderView({
   const searchParams = useSearchParams();
   const urlFlow = readOpenFlow(new URLSearchParams(searchParams.toString()));
   const openFlowNow = urlFlow && !isFlowClosed(urlFlow.session) ? urlFlow : null;
-  const staleFlowUrl = Boolean(urlFlow) && !openFlowNow;
+  // Only when the URL itself lands on a closed flow (opening the page, or
+  // Back). Not when a flow is closed while its URL is still showing: finishing
+  // one marks it closed and then navigates to the editor, and rewriting the
+  // URL to /dashboard mid-navigation would cancel that and strand you here.
+  const urlSession = urlFlow?.session ?? null;
+  const urlFrom = urlFlow?.from ?? "/dashboard";
+  const router = useRouter();
   useEffect(() => {
-    if (staleFlowUrl) window.history.replaceState(null, "", "/dashboard");
-  }, [staleFlowUrl]);
+    if (!urlSession || !isFlowClosed(urlSession)) return;
+    if (urlFrom === "/dashboard") window.history.replaceState(null, "", "/dashboard");
+    else router.replace(urlFrom, { scroll: false });
+  }, [urlSession, urlFrom, router]);
   const finishFlow = (cvData: CvData) => {
-    if (openFlowNow) void openFinishedCv(cvData, openFlowNow.session);
+    if (openFlowNow) void openFinishedCv(cvData, openFlowNow.session, openFlowNow.kind);
   };
   const [pendingAction, setPendingAction] = useState<{
     type: "delete" | "duplicate";
@@ -228,7 +235,7 @@ export function BuilderView({
 
       {/* ACTIONS: creating a resume leads; tailoring and improving sit beside it. */}
       {/* Create stays a little wider (~55/45) without crowding out the other two. */}
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 mb-14">
+      <div data-tour="builder-actions" className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 mb-14">
         <div
           className={`flex rounded-lg border ${ACTION_CARD_COLORS.create} ${CARD_SHADOW} ${CARD_HOVER}`}
         >
@@ -241,8 +248,12 @@ export function BuilderView({
               <FilePlus className="w-6 h-6" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-lg font-semibold tracking-tight text-neutral-950">Create a new resume</span>
-              <span className="block mt-0.5 text-sm text-neutral-500">Build one in minutes. We&apos;ll ask only what we need.</span>
+              <span className="block text-base sm:text-lg font-semibold tracking-tight text-neutral-950">Create a new resume</span>
+              <span className="block mt-0.5 text-[13px] sm:text-sm text-neutral-500">Start fresh, ready in minutes</span>
+            </span>
+            {/* Small screens: the same round arrow as Tailor / Improve; sm+: a "Start" button. */}
+            <span className="sm:hidden w-8 h-8 shrink-0 rounded-full flex items-center justify-center bg-accent text-white shadow-[0_4px_10px_-4px_rgba(249,115,22,0.6)] group-hover:bg-accent-strong transition-colors">
+              <ChevronRight className="w-4 h-4 group-hover:translate-x-px transition-transform" />
             </span>
             <span className="hidden sm:inline-flex shrink-0 items-center gap-1.5 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold group-hover:bg-accent-strong transition-colors">
               Start
@@ -279,10 +290,13 @@ export function BuilderView({
         </div>
       </div>
 
+      {/* First steps for a new account (hidden once done, or closed). */}
+      <GettingStartedChecklist />
+
       {/* RECENT RESUMES SECTION HEADER WITH 'SEE ALL' BUTTON */}
-      <div className="flex items-center justify-between gap-4 mb-5">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-neutral-600">
+      <div data-tour="recent-resumes" className="flex items-center justify-between gap-4 mb-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="whitespace-nowrap text-sm font-semibold text-neutral-600">
             Recent resumes
           </h2>
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500">
@@ -290,25 +304,15 @@ export function BuilderView({
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => onNavigateToTemplates?.()}
-            className="text-xs font-medium text-neutral-500 hover:text-accent-strong transition-colors cursor-pointer"
-          >
-            Browse templates
-          </button>
-          <span className="h-3 w-px bg-neutral-300" aria-hidden />
-          {/* See All link redirecting to Past Projects */}
-          <button
-            type="button"
-            onClick={onNavigateToPastProjects}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-500 hover:text-accent-strong transition-colors cursor-pointer group"
-          >
-            <span>See all</span>
-            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-          </button>
-        </div>
+        {/* See All link redirecting to Past Projects */}
+        <button
+          type="button"
+          onClick={onNavigateToPastProjects}
+          className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-xs font-medium text-neutral-500 hover:text-accent-strong transition-colors cursor-pointer group"
+        >
+          <span>See all</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </button>
       </div>
 
       {/* RESUMES WORKSPACE GRID */}
@@ -340,7 +344,7 @@ export function BuilderView({
         <CreateCvModal
           key={openFlowNow.session}
           isOpen
-          onClose={() => closeFlow(openFlowNow.session)}
+          onClose={() => closeFlow(openFlowNow.session, openFlowNow.from)}
           onComplete={finishFlow}
           initialTemplate={openFlowNow.template as TemplateId | undefined}
           initialProfileId={openFlowNow.profile ?? null}
@@ -350,7 +354,7 @@ export function BuilderView({
         <TailorCvModal
           key={openFlowNow.session}
           isOpen
-          onClose={() => closeFlow(openFlowNow.session)}
+          onClose={() => closeFlow(openFlowNow.session, openFlowNow.from)}
           onComplete={finishFlow}
           pastProjects={pastProjectsList}
         />
@@ -359,7 +363,7 @@ export function BuilderView({
         <EnhanceCvModal
           key={openFlowNow.session}
           isOpen
-          onClose={() => closeFlow(openFlowNow.session)}
+          onClose={() => closeFlow(openFlowNow.session, openFlowNow.from)}
           onComplete={finishFlow}
           pastProjects={pastProjectsList}
         />

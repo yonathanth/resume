@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Crown, FilePlus, FileText, History, Loader2, RotateCcw, Trash2, User } from "lucide-react";
+import { ArrowLeft, Crown, FilePlus, FileText, History, MoreHorizontal, RotateCcw, Trash2, User } from "lucide-react";
 import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO } from "@/lib/api";
 import { useDeleteProfile, useProfile, useRevertProfileChange, useUpdateProfile } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
@@ -15,6 +15,7 @@ import { ICON_TONES } from "@/components/dashboard/create-flow/OptionCard";
 import { DashboardMoxie } from "@/components/dashboard/DashboardMoxie";
 import { ChipListEditor, INPUT_CLASS, LABEL_CLASS, ProfileSectionEditor } from "./ProfileSectionEditor";
 import { ItemRecord, PROFILE_SECTIONS, describeChangeCounts, missingRequired, tempId, toSavePayload } from "./profile-sections";
+import { CenteredSpinner } from "@/components/CenteredSpinner";
 
 type Tab = "profile" | "resumes" | "history";
 
@@ -78,13 +79,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [isDirty]);
 
-  if (isLoading || (!draft && !error)) {
-    return (
-      <div className="flex items-center justify-center py-32 text-neutral-400">
-        <Loader2 className="w-5 h-5 animate-spin" />
-      </div>
-    );
-  }
+  if (isLoading || (!draft && !error)) return <CenteredSpinner label="Loading this profile…" className="py-32" />;
   if (error || !profile || !draft) {
     return (
       <div className="max-w-md mx-auto py-24 text-center">
@@ -164,14 +159,14 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
         <ArrowLeft className="w-3.5 h-3.5" /> All profiles
       </Link>
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-6">
-        <div className="flex items-start gap-3.5 min-w-0">
+      {/* Header: name on the left; actions on the right (a ⋯ menu on phones). */}
+      <div className="flex items-start gap-3 mb-6">
+        <div className="flex flex-1 items-start gap-3.5 min-w-0">
           <span className={`w-11 h-11 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.violet}`}>
             <User className="w-5 h-5" />
           </span>
           <div className="min-w-0">
-            <h1 className="text-xl font-bold tracking-tight text-neutral-950 truncate">{profile.title}</h1>
+            <h1 className="text-xl font-bold leading-tight tracking-tight text-neutral-950 break-words sm:truncate">{profile.title}</h1>
             <p className="text-xs text-neutral-500">
               {[profile.occupationCategory, profile.seniority && `${profile.seniority} level`, `${profile.documentCount} linked CV${profile.documentCount === 1 ? "" : "s"}`]
                 .filter(Boolean)
@@ -179,25 +174,30 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="p-2.5 rounded-lg border border-neutral-300 text-neutral-500 hover:text-red-600 hover:border-red-200 cursor-pointer"
-            title="Delete profile"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
-            disabled={isDirty}
-            title={isDirty ? "Save your changes first" : undefined}
-            onClick={() => (isPro ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FilePlus className="w-4 h-4 text-accent-light" /> Create a CV
-          </button>
-        </div>
+        {/* Phones: both actions tucked into a ⋯ menu. */}
+        <ProfileActionsMenu
+          createDisabled={isDirty}
+          onCreateCv={() => (isPro ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
+          onDelete={() => setConfirmDelete(true)}
+        />
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          className="max-sm:hidden shrink-0 p-2.5 rounded-lg border border-neutral-300 text-neutral-500 hover:text-red-600 hover:border-red-200 cursor-pointer"
+          title="Delete profile"
+          aria-label="Delete profile"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          disabled={isDirty}
+          title={isDirty ? "Save your changes first" : undefined}
+          onClick={() => (isPro ? handleCreateCvFromProfile(profile.id) : setPaywallOpen(true))}
+          className="max-sm:hidden shrink-0 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold whitespace-nowrap hover:bg-neutral-800 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <FilePlus className="w-4 h-4 text-accent-light" /> Create a CV
+        </button>
       </div>
 
       {readOnly && (
@@ -456,7 +456,85 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
           }
         }}
       />
-      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Editing career profiles is part of FitCV Pro." />
+      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Editing career profiles is part of GoMoxie Pro." />
+    </div>
+  );
+}
+
+/** Phones only: "Create a CV" and "Delete profile" behind a ⋯ button. */
+function ProfileActionsMenu({
+  createDisabled,
+  onCreateCv,
+  onDelete,
+}: {
+  createDisabled: boolean;
+  onCreateCv: () => void;
+  onDelete: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const pick = (action: () => void) => () => {
+    setOpen(false);
+    action();
+  };
+
+  return (
+    <div ref={ref} className="relative shrink-0 sm:hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Profile actions"
+        className={`p-2.5 rounded-lg border bg-white transition-colors cursor-pointer ${
+          open ? "border-neutral-400 text-neutral-900" : "border-neutral-300 text-neutral-500 hover:text-neutral-900"
+        }`}
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+
+      {open && (
+        <div role="menu" className="absolute right-0 top-full z-30 mt-2 w-48 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg animate-in fade-in duration-100">
+          <button
+            type="button"
+            role="menuitem"
+            disabled={createDisabled}
+            onClick={pick(onCreateCv)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-neutral-800 hover:bg-neutral-50 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FilePlus className="w-4 h-4 text-accent" />
+            <span className="flex-1">Create a CV</span>
+          </button>
+          {createDisabled && <p className="px-3 pb-1.5 -mt-1 text-[11px] text-neutral-400">Save your changes first</p>}
+          <div className="my-1.5 h-px bg-neutral-100" aria-hidden />
+          <button
+            type="button"
+            role="menuitem"
+            onClick={pick(onDelete)}
+            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-medium text-red-600 hover:bg-red-50 cursor-pointer"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete profile
+          </button>
+        </div>
+      )}
     </div>
   );
 }

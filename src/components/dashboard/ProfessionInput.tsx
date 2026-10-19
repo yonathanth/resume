@@ -7,6 +7,11 @@ import { useOccupationSearch } from "@/hooks/use-occupations";
 interface ProfessionInputProps {
   value: string;
   onChange: (value: string) => void;
+  /**
+   * Picking a suggestion, or Enter on what's typed: hands the title over (for
+   * a list of professions — see ProfessionsInput) instead of just filling the field.
+   */
+  onCommit?: (title: string) => void;
   id?: string;
   autoFocus?: boolean;
   placeholder?: string;
@@ -21,6 +26,7 @@ interface ProfessionInputProps {
 export function ProfessionInput({
   value,
   onChange,
+  onCommit,
   id,
   autoFocus,
   placeholder = "e.g. Software Engineer, Nurse, Accountant",
@@ -36,8 +42,13 @@ export function ProfessionInput({
   const showList = open && (suggestions.length > 0 || trimmed.length > 0);
 
   const choose = (title: string) => {
-    onChange(title);
-    setOpen(false);
+    if (onCommit) {
+      onCommit(title);
+      onChange("");
+    } else {
+      onChange(title);
+      setOpen(false);
+    }
     setHighlight(-1);
   };
 
@@ -55,6 +66,10 @@ export function ProfessionInput({
     } else if (e.key === "Enter" && showList && highlight >= 0 && suggestions[highlight]) {
       e.preventDefault();
       choose(suggestions[highlight].title);
+    } else if (e.key === "Enter" && onCommit) {
+      // In a list, Enter adds what's typed (and never submits the surrounding form).
+      e.preventDefault();
+      if (trimmed) choose(trimmed);
     } else if (e.key === "Escape") {
       setOpen(false);
     }

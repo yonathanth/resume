@@ -1,9 +1,12 @@
 import { Metadata } from "next";
+import { NO_INDEX } from "@/lib/metadata";
 import { UnsubscribeView } from "@/components/AccountRecoveryViews";
 
 export const metadata: Metadata = {
-  title: "Unsubscribe – Resumate",
-  description: "Stop product announcement emails from Resumate.",
+  title: "Unsubscribe",
+  description: "Stop product announcement emails from GoMoxie.",
+  // Account and token pages: not for search results.
+  robots: NO_INDEX,
 };
 
 export default async function UnsubscribePage({

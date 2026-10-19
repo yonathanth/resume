@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import Link from "next/link";
-import { FileText, Menu, X } from "lucide-react";
 import { CtaButton } from "@/components/CtaButton";
+import { MenuToggleIcon } from "@/components/MenuToggleIcon";
 
 interface NavbarProps {
   onOpenEditor?: () => void;
@@ -16,12 +17,49 @@ const NAV_LINKS = [
   { href: "/pricing", label: "Pricing" },
 ];
 
+// The phone menu: a plain list in sections — what we'd most like people to
+// do first (straight into a flow, no account needed until the AI runs — see
+// /try), then the rest.
+const MENU_SECTIONS = [
+  {
+    title: "Start now",
+    links: [
+      { href: "/try/create", label: "Build a resume" },
+      { href: "/try/tailor", label: "Tailor to a job" },
+      { href: "/try/improve", label: "Improve my resume" },
+    ],
+  },
+  {
+    title: "Explore",
+    links: [
+      { href: "/templates", label: "Templates" },
+      { href: "/how-it-works", label: "How it works" },
+      { href: "/#results", label: "Before & after" },
+      { href: "/pricing", label: "Pricing" },
+      { href: "/help", label: "Help center" },
+    ],
+  },
+];
+
 // Full-width bar: logo and links on the left, account actions on the right.
 // Transparent over the hero; frosts with a hairline border once scrolled.
 export function Navbar({ theme = "light" }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const isDark = theme === "dark";
+
+  // The phone menu covers the page: hold the page still and let Escape close it.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMobileMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previous;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -30,11 +68,17 @@ export function Navbar({ theme = "light" }: NavbarProps) {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const surface = scrolled || mobileMenuOpen
+  const surface = mobileMenuOpen
     ? isDark
-      ? "bg-[#0a0a0a]/80 border-neutral-800/80 backdrop-blur-xl"
-      : "bg-white/80 border-neutral-200/70 backdrop-blur-xl"
-    : "bg-transparent border-transparent";
+      ? "bg-[#0a0a0a] border-neutral-800/80"
+      : "bg-[#f5f5f4] border-neutral-200/70"
+    : scrolled
+      ? isDark
+        ? "bg-[#0a0a0a]/80 border-neutral-800/80 backdrop-blur-xl"
+        : "bg-white/80 border-neutral-200/70 backdrop-blur-xl"
+      : "bg-transparent border-transparent";
+
+  const close = () => setMobileMenuOpen(false);
 
   const linkClass = isDark
     ? "text-white hover:text-neutral-300"
@@ -48,16 +92,10 @@ export function Navbar({ theme = "light" }: NavbarProps) {
       >
         {/* Logo + primary links */}
         <div className="flex items-center gap-10">
-          <Link href="/" className="flex items-center gap-2 group" aria-label="Resumate home">
-            <div
-              className={`w-8 h-8 rounded-[10px] flex items-center justify-center group-hover:scale-105 transition-transform duration-200 ${
-                isDark ? "bg-white text-neutral-950" : "bg-neutral-950 text-white"
-              }`}
-            >
-              <FileText className="w-4 h-4 stroke-[2.2]" />
-            </div>
+          <Link href="/" className="flex items-center gap-2 group" aria-label="GoMoxie home">
+            <BrandMark size={36} className="transition-transform duration-200 group-hover:scale-105" />
             <span className={`text-[17px] font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-950"}`}>
-              Resumate
+              GoMoxie
             </span>
           </Link>
 
@@ -86,50 +124,63 @@ export function Navbar({ theme = "light" }: NavbarProps) {
           type="button"
           onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           className={`md:hidden p-1.5 rounded-lg focus:outline-none ${linkClass}`}
-          aria-label="Toggle Menu"
+          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
           aria-expanded={mobileMenuOpen}
         >
-          {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          <MenuToggleIcon open={mobileMenuOpen} className="h-6 w-6" />
         </button>
       </nav>
 
-      {/* Mobile dropdown */}
+      {/* Phone menu: the whole screen under the bar */}
       {mobileMenuOpen && (
         <div
-          className={`md:hidden border-t px-4 pb-5 pt-3 flex flex-col gap-1 ${
-            isDark ? "border-neutral-800 text-white" : "border-neutral-100 text-neutral-900"
+          className={`menu-in md:hidden fixed inset-x-0 bottom-0 top-20 sm:top-24 flex flex-col overflow-y-auto ${
+            isDark ? "bg-[#0a0a0a] text-white" : "bg-[#f5f5f4] text-neutral-950"
           }`}
         >
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              onClick={() => setMobileMenuOpen(false)}
-              className={`px-3 py-2.5 rounded-lg text-[15px] font-medium ${
-                isDark ? "text-neutral-300 hover:bg-neutral-800/80" : "text-neutral-700 hover:bg-neutral-100"
-              }`}
-            >
-              {link.label}
-            </Link>
+          <div className="flex-1 px-6 pt-6 sm:px-8">
+          {MENU_SECTIONS.map((section, s) => (
+            <div key={section.title} className="mb-6">
+              <div className="menu-item-in mb-1.5 text-[13px] font-medium text-neutral-500" style={{ animationDelay: `${s * 120}ms` }}>
+                {section.title}
+              </div>
+              <ul className="flex flex-col gap-2">
+                {section.links.map((link, i) => (
+                  <li key={link.href} className="menu-item-in" style={{ animationDelay: `${s * 120 + (i + 1) * 35}ms` }}>
+                    <Link href={link.href} onClick={close} className="text-[18px] font-medium tracking-tight">
+                      {link.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-          <div className={`pt-3 mt-2 border-t flex flex-col gap-2 ${isDark ? "border-neutral-800" : "border-neutral-100"}`}>
+          </div>
+
+          {/* Account, kept at the bottom */}
+          <div
+            style={{ animationDelay: "180ms" }}
+            className={`menu-item-in sticky bottom-0 grid grid-cols-2 gap-2.5 border-t px-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 sm:px-8 ${
+              isDark ? "border-neutral-800 bg-[#0a0a0a]" : "border-neutral-200/70 bg-[#f5f5f4]"
+            }`}
+          >
             <Link
               href="/login"
-              onClick={() => setMobileMenuOpen(false)}
-              className={`px-3 py-2.5 rounded-lg text-[15px] font-medium text-center ${
-                isDark ? "text-neutral-300 hover:bg-neutral-800/80" : "text-neutral-700 hover:bg-neutral-100"
+              onClick={close}
+              className={`rounded-full border py-3 text-center text-[15px] font-semibold ${
+                isDark ? "border-neutral-700 text-white" : "border-neutral-300 bg-white text-neutral-950"
               }`}
             >
               Log in
             </Link>
             <Link
               href="/signup"
-              onClick={() => setMobileMenuOpen(false)}
-              className={`w-full py-2.5 rounded-full text-center text-[15px] font-semibold ${
-                isDark ? "bg-white text-neutral-950 hover:bg-neutral-200" : "bg-neutral-950 text-white hover:bg-neutral-800"
+              onClick={close}
+              className={`rounded-full py-3 text-center text-[15px] font-semibold ${
+                isDark ? "bg-white text-neutral-950" : "bg-neutral-950 text-white"
               }`}
             >
-              Get started free
+              Get started
             </Link>
           </div>
         </div>

@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Award,
   BadgeCheck,
-  Check,
   BookOpen,
   Briefcase,
   CheckCircle2,
@@ -101,6 +100,8 @@ interface CvEditorWorkspaceProps {
   initialData: CvData;
   onBack: () => void;
   onSave: (data: CvData) => void;
+  /** After a PDF download succeeds, with the CV's document id. */
+  onDownloaded?: (cvDocumentId: string) => void;
 }
 
 // "personal" (the contact form) plus any section key from the backend's
@@ -477,10 +478,10 @@ function OverflowRow({ children }: { children: React.ReactNode }) {
       <button
         type="button"
         onClick={() => scrollBy(side === "left" ? -1 : 1)}
-        className="pointer-events-auto inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-700 hover:text-neutral-950 hover:border-neutral-400 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-colors cursor-pointer"
+        className="pointer-events-auto inline-flex items-center px-2 py-1.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-700 hover:text-neutral-950 hover:border-neutral-400 shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-colors cursor-pointer"
         aria-label={side === "left" ? "Show earlier sections" : "Show more sections"}
       >
-        {side === "left" ? <ChevronRight className="w-4 h-4 rotate-180" /> : <>More<ChevronRight className="w-4 h-4" /></>}
+        <ChevronRight className={`w-4 h-4 ${side === "left" ? "rotate-180" : ""}`} />
       </button>
     </div>
   );
@@ -571,7 +572,7 @@ function TemplateGalleryCard({
   );
 }
 
-export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorkspaceProps) {
+export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }: CvEditorWorkspaceProps) {
   const toast = useToast();
   const isPro = useSubscriptionStatus().data?.isPro ?? false;
   const [cv, setCv] = useState<CvData>(initialData);
@@ -644,6 +645,29 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
     formScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
   // The spotlight tour: starts by itself on the first visit, or from the Tour button.
+  // Below lg the preview column (and its Show gaps switch) is hidden, so the
+  // tour points at the floating "Preview CV" button instead.
+  const narrowScreen = typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches;
+  const previewSteps: TourStep[] = narrowScreen
+    ? [
+        {
+          target: "editor-mobile-preview",
+          title: "See your CV",
+          body: "Tap Preview CV to see exactly what your PDF will look like. Anything still missing is highlighted there.",
+        },
+      ]
+    : [
+        {
+          target: "editor-preview",
+          title: "Click the preview to edit",
+          body: "This is exactly what your PDF will look like. Click any line, or any highlighted gap, and its field opens in the form.",
+        },
+        {
+          target: "editor-gaps",
+          title: "Show gaps or the clean view",
+          body: "Show gaps highlights what's still missing. Switch to PDF view to see the finished page.",
+        },
+      ];
   const editorTour: TourStep[] = [
     {
       target: "editor-tabs",
@@ -654,18 +678,9 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
     {
       target: "editor-form",
       title: "Type here",
-      body: "The form for the open tab. Everything you type appears on the preview straight away and saves as you go.",
+      body: "The form for the open tab. Everything you type goes straight onto your CV and saves as you go.",
     },
-    {
-      target: "editor-preview",
-      title: "Click the preview to edit",
-      body: "This is exactly what your PDF will look like. Click any line, or any highlighted gap, and its field opens in the form.",
-    },
-    {
-      target: "editor-gaps",
-      title: "Show gaps or the clean view",
-      body: "Show gaps highlights what's still missing. Switch to As downloaded to see the finished page.",
-    },
+    ...previewSteps,
     {
       target: "editor-polish",
       title: "Let AI polish your summary",
@@ -693,7 +708,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
   // The preview is the real template rendered by the backend — the same HTML
   // the PDF download is printed from (plus the missing-detail placeholders).
   const content = useMemo(() => toCVContentPatch(cv), [cv]);
-  // "Show gaps" (clickable placeholders for what's missing) by default; "As downloaded" is the clean PDF view.
+  // "Show gaps" (clickable placeholders for what's missing) by default; "PDF view" is the clean, as-downloaded page.
   const [showGaps, setShowGaps] = useState(true);
   const preview = useCvPreview(cv.templateStyle, content, showGaps);
 
@@ -910,6 +925,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       URL.revokeObjectURL(url);
 
       toast.success("Your PDF is ready", { description: `Saved as ${fileName}`, moxie: "downloaded", placement: "top" });
+      onDownloaded?.(id);
     } catch (err) {
       // One message at a time — retrying replaces it instead of stacking another.
       toast.error("Couldn't create the PDF", {
@@ -1044,7 +1060,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       <div data-tour={inModal ? undefined : "editor-gaps"} className="inline-flex p-1 rounded-lg bg-white border border-neutral-300 shadow-[0_1px_2px_rgba(0,0,0,0.05)]" role="group" aria-label="Preview view">
         {(
           [
-            { gaps: false, label: "As downloaded", icon: Eye, hint: "Exactly what your PDF will contain" },
+            { gaps: false, label: "PDF view", icon: Eye, hint: "Exactly what your downloaded PDF will look like" },
             { gaps: true, label: "Show gaps", icon: ListChecks, hint: "Highlight what's missing, then click a highlight to fill it in" },
           ] as const
         ).map(({ gaps, label, icon: Icon, hint }) => {
@@ -1156,11 +1172,12 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Below lg the preview column is hidden — this opens it full screen. */}
+          {/* Below lg the preview column is hidden — this opens it full screen.
+              Phones use the floating "Preview CV" button instead. */}
           <button
             type="button"
             onClick={() => setMobilePreviewOpen(true)}
-            className={`${secondaryButtonClass} lg:hidden`}
+            className={`${secondaryButtonClass} max-sm:hidden lg:hidden`}
             title="See your CV"
           >
             <Eye className="w-4 h-4 text-neutral-500" />
@@ -1181,10 +1198,10 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
             type="button"
             onClick={() => setTemplateGalleryOpen(true)}
             className={secondaryButtonClass}
-            title="Change template"
+            title={currentTemplate ? `Change template (now: ${currentTemplate.name})` : "Change template"}
           >
             <LayoutTemplate className="w-4 h-4 text-neutral-500" />
-            <span className="hidden sm:inline">{currentTemplate?.name ?? "Template"}</span>
+            <span className="hidden sm:inline">Templates</span>
             <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
           </button>
 
@@ -1192,18 +1209,6 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
           <button type="button" onClick={handlePreviewPdf} className={`${secondaryButtonClass} max-sm:hidden`} title="Open the real PDF to check page breaks">
             <FileText className="w-4 h-4 text-neutral-500" />
             <span className="hidden md:inline">Preview PDF</span>
-          </button>
-
-          {/* Same as the back arrow: saves anything pending, then returns to the dashboard. */}
-          <button
-            type="button"
-            onClick={handleDone}
-            disabled={isSaving}
-            className={secondaryButtonClass}
-            title="Save and go back to the dashboard"
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4 text-neutral-500" />}
-            <span className="hidden sm:inline">Done</span>
           </button>
 
           <div className="relative">
@@ -1437,7 +1442,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
                     <div className="inline-flex p-1 rounded-lg bg-neutral-100 border border-neutral-200">
                       {(
                         [
-                          ["Your version", prePolishSummary],
+                          ["Previous", prePolishSummary],
                           ["AI polished", polishedSummary],
                         ] as const
                       ).map(([label, text]) => (
@@ -2075,6 +2080,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave }: CvEditorWorks
       <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
         <button
           type="button"
+          data-tour="editor-mobile-preview"
           onClick={() => setMobilePreviewOpen(true)}
           className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-neutral-950 text-white font-semibold text-sm shadow-2xl shadow-neutral-950/40 hover:bg-neutral-800 transition-all active:scale-95 cursor-pointer border border-neutral-800"
         >

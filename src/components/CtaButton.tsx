@@ -10,7 +10,8 @@ interface CtaButtonProps {
   onClick?: () => void;
   /** primary: black pill. secondary: white pill with a hairline border. */
   variant?: "primary" | "secondary";
-  size?: "sm" | "md";
+  /** sm: nav. md: sections. hero: compact on phones (two fit side by side), md from sm up. */
+  size?: "sm" | "md" | "hero";
   /** Keep the arrow neutral instead of the brand colour. */
   plainArrow?: boolean;
   className?: string;
@@ -22,7 +23,11 @@ export function CtaButton({ children, href, onClick, variant = "primary", size =
 
   const shell = [
     "group inline-flex cursor-pointer items-center justify-center gap-2 rounded-full font-semibold tracking-[-0.01em] transition-colors duration-200 active:scale-[0.98]",
-    size === "sm" ? "px-5 py-2.5 text-[14px]" : "px-8 py-4 text-[15.5px]",
+    size === "sm"
+      ? "px-5 py-2.5 text-[14px]"
+      : size === "hero"
+        ? "px-[18px] py-3.5 text-[14.5px] sm:px-8 sm:py-4 sm:text-[15.5px]"
+        : "px-8 py-4 text-[15.5px]",
     primary
       ? "bg-neutral-950 text-white hover:bg-neutral-800"
       : "border border-neutral-200 bg-white text-neutral-950 hover:border-neutral-300 hover:bg-neutral-50",

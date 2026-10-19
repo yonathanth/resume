@@ -38,6 +38,7 @@ import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { WordingReviewStep } from "./WordingReviewStep";
+import { peekPendingUpload, takePendingUpload } from "@/lib/pending-upload";
 
 interface EnhanceCvModalProps {
   isOpen: boolean;
@@ -131,6 +132,8 @@ export function EnhanceCvModal({
   // Progress kept across a refresh (or a trip to checkout): see useSaveFlowDraft below.
   const saved = useRestoredFlowDraft<EnhanceDraft>("improve");
   const firstStep: EnhanceStep = isGuest ? "upload-file" : "select-source";
+  // A CV they picked during onboarding: the flow starts with it, at the template step (no second pick).
+  const [handedOver] = useState<File | null>(() => (saved ? null : peekPendingUpload()));
   // The step lives in the URL, so Back / Forward move between steps (see flow-steps).
   const [step, setStep, trackStepData] = useFlowStep<EnhanceStep, EnhanceDraft>(
     enhanceSteps(firstStep),
@@ -138,12 +141,16 @@ export function EnhanceCvModal({
   );
   // The template is chosen right before the first AI call (the AI only writes
   // the sections it shows). What to run once it's picked, and where Back goes.
-  const [templateNext, setTemplateNext] = useState<TemplateNext | null>(saved?.templateNext ?? null);
-  const [templateBackStep, setTemplateBackStep] = useState<EnhanceStep>(saved?.templateBackStep ?? "select-source");
+  const [templateNext, setTemplateNext] = useState<TemplateNext | null>(
+    saved?.templateNext ?? (handedOver ? { kind: "upload", file: handedOver } : null)
+  );
+  const [templateBackStep, setTemplateBackStep] = useState<EnhanceStep>(
+    saved?.templateBackStep ?? (handedOver ? "upload-file" : "select-source")
+  );
 
   // Source state: 'upload' | 'profile' | 'past-project'
   const [sourceType, setSourceType] = useState<"upload" | "past-project">(saved?.sourceType ?? "upload");
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(saved?.uploadedFileName ?? null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(saved?.uploadedFileName ?? handedOver?.name ?? null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
     saved?.selectedProjectId ?? (pastProjects[0]?.id || "draft-1")
   );
@@ -202,6 +209,15 @@ export function EnhanceCvModal({
   // Back / Forward check the step they land on against this.
   useEffect(() => trackStepData(draft));
   useSaveFlowDraft<EnhanceDraft>("improve", draft, step !== firstStep);
+
+  // The handed-over CV is this flow's now; move on to choosing its template.
+  useEffect(() => {
+    if (!handedOver) return;
+    takePendingUpload();
+    setStep("choose-template");
+    // Once, when the flow opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!isOpen) return null;
 
@@ -416,7 +432,7 @@ export function EnhanceCvModal({
         <ProUpgradeModal
           isOpen={proGate.isPaywallOpen}
           onClose={proGate.closePaywall}
-          reason="You've already used your free Improve generation. Upgrade to FitCV Pro for unlimited AI tailoring."
+          reason="You've already used your free Improve generation. Upgrade to GoMoxie Pro for unlimited AI tailoring."
         />
       }
     >

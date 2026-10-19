@@ -1,11 +1,21 @@
 "use client";
 
 import React from "react";
+import { BrandMark } from "@/components/BrandMark";
 import Link from "next/link";
-import { ArrowUp, FileText } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 
 // Only pages and sections that exist.
 const LINK_COLUMNS = [
+  {
+    // Straight into a flow, no account needed until the AI runs (see /try).
+    title: "Quick start",
+    links: [
+      { label: "Build a resume", href: "/try/create" },
+      { label: "Tailor to a job", href: "/try/tailor" },
+      { label: "Improve my resume", href: "/try/improve" },
+    ],
+  },
   {
     title: "Product",
     links: [
@@ -50,14 +60,12 @@ export function Footer() {
       </svg>
 
       <div className="max-w-6xl mx-auto">
-        {/* Top: brand on the left, two link columns on the right */}
+        {/* Top: brand on the left, link columns on the right */}
         <div className="flex flex-col md:flex-row justify-between gap-12 lg:gap-16">
           <div className="max-w-sm">
             <Link href="/" className="inline-flex items-center gap-2.5 group">
-              <div className="w-8 h-8 rounded-[10px] bg-white text-neutral-950 flex items-center justify-center group-hover:scale-105 transition-transform duration-200">
-                <FileText className="w-4 h-4 stroke-[2.2]" />
-              </div>
-              <span className="text-lg font-bold tracking-tight text-white">Resumate</span>
+              <BrandMark size={36} className="transition-transform duration-200 group-hover:scale-105" />
+              <span className="text-lg font-bold tracking-tight text-white">GoMoxie</span>
             </Link>
             <p className="mt-5 flex items-start gap-2.5 text-sm sm:text-base text-neutral-400 leading-relaxed">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
@@ -65,7 +73,7 @@ export function Footer() {
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-12 sm:gap-20 lg:gap-24">
+          <div className="grid grid-cols-2 gap-x-12 gap-y-10 sm:grid-cols-3 sm:gap-x-14 lg:gap-x-20">
             {LINK_COLUMNS.map((column) => (
               <div key={column.title}>
                 <div className="mb-4 text-[12px] font-semibold uppercase tracking-[0.14em] text-neutral-500">{column.title}</div>
@@ -83,18 +91,20 @@ export function Footer() {
           </div>
         </div>
 
-        {/* Bottom: divider with a warm start, copyright, back to top */}
-        <div className="relative mt-20 sm:mt-24 pt-8 border-t border-neutral-900 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        {/* Bottom: divider with a warm start, copyright, back to top.
+            Mobile: legal links + back to top share a row, copyright below.
+            sm+: copyright, legal links, then back to top on the right. */}
+        <div className="relative mt-14 sm:mt-24 pt-8 border-t border-neutral-900 flex flex-wrap items-center justify-between gap-x-6 gap-y-5 sm:flex-nowrap text-[13px] text-neutral-500">
           <div className="absolute -top-px left-0 h-px w-40 bg-gradient-to-r from-accent/70 to-transparent" />
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-[13px] text-neutral-500">
-            <span>© Resumate 2026. All rights reserved.</span>
+          <div className="order-1 sm:order-2 sm:mr-auto flex items-center gap-6">
             <Link href="/terms" className="hover:text-accent-light transition-colors duration-150">Terms</Link>
             <Link href="/privacy" className="hover:text-accent-light transition-colors duration-150">Privacy</Link>
           </div>
-          <Link href="#" className="group inline-flex items-center gap-1.5 text-[13px] text-neutral-500 hover:text-accent-light transition-colors duration-150">
+          <Link href="#" className="order-2 sm:order-3 group inline-flex items-center gap-1.5 hover:text-accent-light transition-colors duration-150">
             Back to top
             <ArrowUp className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
           </Link>
+          <span className="order-3 sm:order-1 w-full sm:w-auto text-neutral-600 sm:text-neutral-500">© GoMoxie 2026. All rights reserved.</span>
         </div>
       </div>
     </footer>

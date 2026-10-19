@@ -239,16 +239,18 @@ export function TemplateStep({
         }}
       />
 
-      <div className="sticky -bottom-7 sm:-bottom-9 -mx-7 sm:-mx-9 -mb-7 sm:-mb-9 mt-8 px-7 sm:px-9 py-4 bg-white/80 backdrop-blur-md border-t border-neutral-200 flex items-center justify-between gap-4">
+      <div className="sticky -bottom-7 sm:-bottom-9 -mx-7 sm:-mx-9 -mb-7 sm:-mb-9 mt-8 px-7 sm:px-9 py-4 bg-white/80 backdrop-blur-md border-t border-neutral-200 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-4 gap-y-3">
         {error ? (
-          <p className="text-sm font-medium text-red-600">{error}</p>
+          <p className="w-full sm:w-auto text-sm font-medium text-red-600">{error}</p>
         ) : (
-          <p className="text-sm text-neutral-500 truncate">
+          // Hidden on phones: no room beside the buttons, and the picked card is already highlighted.
+          <p className="hidden sm:block text-sm text-neutral-500 truncate">
             Selected: <span className="font-semibold text-neutral-950">{templateLabel(selectedId)}</span>
             <span className="hidden sm:inline"> · You can change it later in the editor</span>
           </p>
         )}
-        <div className="flex shrink-0 items-center gap-2">
+        {/* Phones: Back at the left edge, Continue at the right. */}
+        <div className="flex flex-1 sm:flex-none shrink-0 items-center justify-between sm:justify-end gap-2">
           {onBack && (
             <button
               type="button"
@@ -263,7 +265,7 @@ export function TemplateStep({
             type="button"
             onClick={() => onContinue(selectedId)}
             disabled={busy}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait"
+            className="ml-auto sm:ml-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-70 disabled:cursor-wait"
           >
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             {busy ? "Working..." : "Continue"}
@@ -279,13 +281,16 @@ export function TemplateStep({
  * What the job asks for that the CV doesn't show (the AI's "no match"
  * requirements — it never invents them). Renders nothing when there are none.
  */
-export function JobGaps({ gaps }: { gaps: string[] }) {
+/** `afterReview`: the user already went through these (Tailor's gap review) and left them out. */
+export function JobGaps({ gaps, afterReview = false }: { gaps: string[]; afterReview?: boolean }) {
   if (gaps.length === 0) return null;
   return (
     <div className="mb-6 rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 text-left">
-      <p className="text-sm font-semibold text-neutral-900">Not covered by your CV</p>
+      <p className="text-sm font-semibold text-neutral-900">{afterReview ? "Still not covered by your CV" : "Not covered by your CV"}</p>
       <p className="mt-0.5 text-xs leading-relaxed text-neutral-500">
-        The job asks for these, but your CV doesn&apos;t show them. If you have any of them, add them in the editor.
+        {afterReview
+          ? "You didn't add these. If you do have any of them, you can still add them in the editor."
+          : "The job asks for these, but your CV doesn't show them. If you have any of them, add them in the editor."}
       </p>
       <ul className="mt-3 space-y-1.5">
         {gaps.map((gap) => (

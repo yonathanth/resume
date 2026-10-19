@@ -41,7 +41,7 @@ type StatusKind = "ok" | "user" | "provider" | "app" | "platform";
 const STATUS_INFO: { status: string; kind: StatusKind; meaning: string }[] = [
   { status: "success", kind: "ok", meaning: "The call completed and returned usable output." },
   { status: "limit_reached", kind: "user", meaning: "Refused before calling the provider: the user has used all free uses for this flow." },
-  { status: "app_rate_limited", kind: "user", meaning: "Refused before calling the provider: the user went over FitCV's per-minute or per-day AI request limit." },
+  { status: "app_rate_limited", kind: "user", meaning: "Refused before calling the provider: the user went over GoMoxie's per-minute or per-day AI request limit." },
   { status: "paused", kind: "platform", meaning: "Refused because AI generation is paused in Platform Settings." },
   { status: "provider_rate_limited", kind: "provider", meaning: "The AI provider rejected the call for rate limits or quota on our API key." },
   { status: "timeout", kind: "provider", meaning: "The AI provider didn't answer in time." },

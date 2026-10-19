@@ -2,7 +2,7 @@ import { Metadata } from "next";
 import { AdminLoginView } from "@/components/admin/AdminLoginView";
 
 export const metadata: Metadata = {
-  title: "Admin sign-in – FitCV",
+  title: "Admin sign-in",
   robots: { index: false, follow: false },
 };
 

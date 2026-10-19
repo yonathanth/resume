@@ -12,10 +12,12 @@ import {
   CreditCard,
   KeyRound,
   LogOut,
+  MessageSquare,
   Menu,
   ScrollText,
   Settings,
   Shield,
+  TrendingUp,
   Users,
   X,
   ArrowUpRight,
@@ -42,6 +44,8 @@ export function useCan(permission: Permission): boolean {
 
 const NAV: { href: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { href: "/admin", label: "Overview", icon: BarChart3 },
+  { href: "/admin/insights", label: "Insights", icon: TrendingUp },
+  { href: "/admin/feedback", label: "Feedback", icon: MessageSquare },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/billing", label: "Subscriptions & Payments", icon: CreditCard },
   { href: "/admin/plans", label: "Plans & Entitlements", icon: KeyRound },
@@ -94,7 +98,7 @@ function Brand() {
         <Shield className="w-4 h-4" />
       </span>
       <div className="leading-tight">
-        <div className="text-[15px] font-bold tracking-tight text-neutral-950">FitCV Admin</div>
+        <div className="text-[15px] font-bold tracking-tight text-neutral-950">GoMoxie Admin</div>
         <div className="text-[11px] text-neutral-500">Management console</div>
       </div>
     </div>

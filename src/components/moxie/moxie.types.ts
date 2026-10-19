@@ -25,6 +25,8 @@ export const MOXIE_ANIMATIONS = [
   "paid",
   "onboarded",
   "saved",
+  // A new loader to compare with "loading": presenting a "Did you know?" card — previewed on /dev/moxie.
+  "presenting",
   // Empty states (tier 3) — previewed on /dev/moxie.
   "searching",
   "emptyFolder",
@@ -157,6 +159,12 @@ export interface MoxieParts {
   /** A folder around the held sheet (saved to a profile): its back behind the sheet, its front over it. */
   folderBack: SVGGElement;
   folderFront: SVGGElement;
+  /** Folders clutched to her side, with its own copy of the small claw holding them (presenting loader). */
+  hugFiles: SVGGElement;
+  /** Just the folders — they slip, and get hitched back up. */
+  hugStack: SVGGElement;
+  /** That copy's pincer — taps the folders while she waits. */
+  hugPincer: SVGGElement;
   /** Half-moon reading glasses, one lens inside each eye so they follow the eyes. */
   glassesL: SVGGElement;
   glassesR: SVGGElement;

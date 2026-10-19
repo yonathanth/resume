@@ -11,7 +11,7 @@ export const PAYMENT_CONFIRMED_REDIRECT_MS = 3000;
 
 const COPY: Record<PaymentReturnState, { line: string; note?: string }> = {
   pending: { line: "Confirming your payment…" },
-  confirmed: { line: "You're on FitCV Pro!", note: "Taking you to your dashboard…" },
+  confirmed: { line: "You're on GoMoxie Pro!", note: "Taking you to your dashboard…" },
   timeout: {
     line: "Still confirming your payment",
     note: "This can take a moment. We'll update your account as soon as it's confirmed.",

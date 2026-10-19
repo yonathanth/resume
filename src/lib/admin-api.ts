@@ -202,6 +202,49 @@ export interface Overview {
 
 export const getOverview = (days: number) => get<Overview>("/overview", { days });
 
+// ---------------------------------------------------------------- insights
+
+export interface InsightsSegment {
+  value: string;
+  users: number;
+  onboarded: number;
+  firstCv: number;
+  downloaded: number;
+  pro: number;
+}
+
+export interface Insights {
+  days: number;
+  generatedAt: string;
+  /** When the first product event was recorded; event-based numbers start here. */
+  trackingSince: string | null;
+  funnel: { key: string; label: string; count: number; of: number }[];
+  segments: Record<"intent" | "careerStage" | "source" | "surface", InsightsSegment[]>;
+  attribution: Record<"utmSource" | "utmCampaign" | "referrer" | "quickLink", { value: string; count: number }[]>;
+  onboarding: { steps: { step: string; viewed: number; skipped: number }[] };
+  tryFlows: { flow: FlowKey; started: number; askedToSignUp: number; signedUp: number }[];
+  tourStarts: number;
+  feedback: {
+    cvRating: { count: number; average: number | null; distribution: number[] };
+    aiDraft: { byFlow: { flow: string; up: number; down: number }[]; downReasons: { reason: string; count: number }[] };
+    deletion: { count: number; reasons: { reason: string; count: number }[] };
+    recentComments: {
+      id: string;
+      kind: string;
+      rating: number | null;
+      reason: string | null;
+      comment: string | null;
+      flowType: string | null;
+      userId: string | null;
+      userEmail: string | null;
+      createdAt: string;
+    }[];
+  };
+  lifecycleEmails: { kind: string; sent: number; failed: number }[];
+}
+
+export const getInsights = (days: number) => get<Insights>("/insights", { days });
+
 // ---------------------------------------------------------------- users
 
 export interface UserListItem {
@@ -310,6 +353,7 @@ export interface UserDetail {
     lastName: string | null;
     phone: string | null;
     occupationTitle: string | null;
+    professions: string[];
     role: string;
     status: "ACTIVE" | "SUSPENDED";
     suspendedAt: string | null;
@@ -320,6 +364,12 @@ export interface UserDetail {
     lastLoginAt: string | null;
     lastActiveAt: string | null;
     onboardingCompletedAt: string | null;
+    signupIntent: string | null;
+    careerStage: string | null;
+    acquisitionSource: string | null;
+    acquisitionDetail: string | null;
+    signupSurface: string | null;
+    signupAttribution: Record<string, string> | null;
     hasPassword: boolean;
     hasGoogle: boolean;
     emailAnnouncementsOptOut: boolean;
@@ -522,6 +572,7 @@ export interface SettingsValues {
   platform: { registrationEnabled: boolean; aiGenerationPaused: boolean; banner: { enabled: boolean; message: string; tone: "info" | "warning" } };
   aiPricing: { models: { model: string; inputPerMillionUsd: number; outputPerMillionUsd: number }[] };
   notifications: { maxEmailRecipients: number };
+  lifecycleEmails: { enabled: boolean };
 }
 export type SettingKey = keyof SettingsValues;
 
@@ -656,3 +707,42 @@ export const listAiEvents = (query: { page?: number; pageSize?: number; status?:
 
 export const listAudit = (query: { page?: number; pageSize?: number; action?: string; actor?: string; targetId?: string; from?: string; to?: string }) =>
   get<Paged<AuditEntry> & { actions: string[] }>("/audit", query);
+
+// ---------------------------------------------------------------- feedback
+
+export type FeedbackKind = "cv_rating" | "ai_draft" | "account_deletion";
+
+export interface FeedbackEntry {
+  id: string;
+  kind: FeedbackKind;
+  /** cv_rating: 1–5. ai_draft: 1 (thumbs up) or -1 (down). account_deletion: null. */
+  rating: number | null;
+  reason: string | null;
+  comment: string | null;
+  flowType: string | null;
+  cvDocumentId: string | null;
+  context: Record<string, unknown> | null;
+  createdAt: string;
+  /** Null for account deletions (stored without the user) and for accounts deleted since. */
+  user: { id: string; email: string; fullName: string | null } | null;
+}
+
+export interface FeedbackSummary {
+  cvRatings: number;
+  averageRating: number | null;
+  aiDrafts: number;
+  thumbsUp: number;
+  deletions: number;
+}
+
+export const listFeedback = (query: {
+  page?: number;
+  pageSize?: number;
+  kind?: FeedbackKind;
+  rating?: number;
+  withComment?: boolean;
+  q?: string;
+  userId?: string;
+  from?: string;
+  to?: string;
+}) => get<Paged<FeedbackEntry> & { summary: FeedbackSummary }>("/feedback", query);

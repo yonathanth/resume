@@ -11,7 +11,7 @@ const POLL_INTERVAL_MS = 1500;
 const MAX_POLLS = 6; // ~9s before giving up and sending the user on anyway
 
 // This is CHAPA_RETURN_URL's target — Chapa lands the browser here after a
-// FitCV Pro checkout, regardless of outcome. It never assumes success
+// GoMoxie Pro checkout, regardless of outcome. It never assumes success
 // itself: unlike Polar, Chapa's payment confirmation is only finalized by
 // GET /api/v1/payments/:id/status actually re-verifying against Chapa (the
 // same call that grants the 1-month Pro period on success — see the

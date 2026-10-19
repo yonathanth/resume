@@ -16,6 +16,9 @@ import {
   GLASSES,
   GROUND_POST,
   groundPoint,
+  HUG_FILES,
+  HUG_PINCER_TURN,
+  HUG_WRIST,
   INK_STYLE,
   lensCorner,
   LID_PARK_GAP,
@@ -59,6 +62,8 @@ const ZED = "M-6 -6 H6 L-6 6 H6";
 /** The big and small pincers' outlines (pointing up, at rest). */
 const BIG_PINCER =
   "M215 297 C165 302 143 257 158 214 C163 198 180 198 184 214 L194 246 L200 213 C205 192 232 196 234 224 C238 266 232 292 215 297 Z";
+/** The hugging claw's arm (presenting loader): from the small claw's shoulder, round to its wrist past the folders. */
+const HUG_ARM = `M368 328 Q 408 348 ${HUG_WRIST.x} ${HUG_WRIST.y}`;
 const SMALL_PINCER = "M404 325 C392 322 386 303 395 292 C398 287 404 288 405 294 L408 305 L412 294 C415 286 425 288 426 297 C428 312 418 327 404 325 Z";
 const SWEAT = "M0 -9 C4 -3 6 1 6 4 A6 6 0 0 1 -6 4 C-6 1 -4 -3 0 -9 Z";
 
@@ -147,6 +152,61 @@ function PdfFile() {
       <text x={mid} y={y + h - 4.8} textAnchor="middle" fontSize="8.5" fontWeight="800" fill={C.cream} fontFamily="system-ui, sans-serif">
         PDF
       </text>
+    </g>
+  );
+}
+
+/**
+ * A stack of folders hugged to her side (the "presenting" loader). Her small
+ * claw is drawn behind her body, so this brings its own copy of it (the same
+ * arm and pincer): the arm wraps round behind the folders and out past their
+ * far edge, and the pincer turns back in over their front corner, holding
+ * them to her. The real small claw is hidden while it shows.
+ */
+function HugFiles() {
+  const { x, y, width: w, height: h, tilt } = HUG_FILES;
+  const r = x + w;
+  const b = y + h;
+  const cx = x + w / 2;
+  return (
+    <g data-part="hugFiles" style={{ opacity: 0 }}>
+      {/* The arm, round behind the folders and out past their far edge. */}
+      <path d={HUG_ARM} fill="none" stroke={C.ink} strokeWidth="18" strokeLinecap="round" />
+      <path d={HUG_ARM} fill="none" stroke={C.coral} strokeWidth="10" strokeLinecap="round" />
+      <g data-part="hugStack">
+        <g transform={`rotate(${tilt} ${cx} ${b})`}>
+          {/* The folder's back, with its tab. */}
+          <path
+            d={`M${x} ${y + 6} Q${x} ${y + 2} ${x + 4} ${y + 2} H${x + 14} L${x + 18} ${y - 4} H${x + 32} L${x + 36} ${y + 2} H${r - 4} Q${r} ${y + 2} ${r} ${y + 6} V${b - 4} Q${r} ${b} ${r - 4} ${b} H${x + 4} Q${x} ${b} ${x} ${b - 4} Z`}
+            fill="#E7B458"
+            stroke={C.ink}
+            strokeWidth="2.4"
+            strokeLinejoin="round"
+          />
+          {/* Papers sticking out of the top: one behind, one in front with a few lines on it. */}
+          <rect x={x + 6} y={y - 10} width={w - 14} height={50} rx="1.5" fill="#EADFD0" stroke={C.ink} strokeWidth="2.2" transform={`rotate(-5 ${cx} ${y + 15})`} />
+          <g transform={`rotate(4 ${cx} ${y + 18})`}>
+            <rect x={x + 8} y={y - 6} width={w - 14} height={48} rx="1.5" fill={C.cream} stroke={C.ink} strokeWidth="2.4" />
+            <path d={`M${x + 14} ${y + 2} H${x + 32}`} stroke={C.coral} strokeWidth="3" strokeLinecap="round" />
+            <path d={`M${x + 14} ${y + 9} H${x + 40} M${x + 14} ${y + 15} H${x + 34}`} stroke={C.ink} strokeWidth="2" strokeLinecap="round" opacity="0.35" />
+          </g>
+          {/* The folder's front, flaring slightly toward its top edge. */}
+          <path
+            d={`M${x - 3} ${y + 22} H${r + 3} L${r - 1} ${b - 4} Q${r - 1} ${b + 1} ${r - 6} ${b + 1} H${x + 6} Q${x + 1} ${b + 1} ${x + 1} ${b - 4} Z`}
+            fill="#F6CF7E"
+            stroke={C.ink}
+            strokeWidth="2.6"
+            strokeLinejoin="round"
+          />
+          <rect x={cx - 12} y={y + 32} width="24" height="9" rx="2" fill="#FFFFFF" fillOpacity="0.65" stroke={C.ink} strokeWidth="1.2" strokeOpacity="0.5" />
+        </g>
+      </g>
+      {/* The pincer, turned back in over the folders' front corner. */}
+      <g data-part="hugPincer">
+        <g transform={`translate(${HUG_WRIST.x - 404} ${HUG_WRIST.y - 322}) rotate(${HUG_PINCER_TURN} 404 322)`}>
+          <path d={SMALL_PINCER} fill={C.coral} stroke={C.ink} strokeWidth="4" strokeLinejoin="round" />
+        </g>
+      </g>
     </g>
   );
 }
@@ -738,6 +798,9 @@ export const MoxieArt = React.forwardRef<SVGSVGElement, MoxieArtProps>(function 
           <ellipse cx="258" cy="321" rx="14" ry="8.5" fill={`url(#${idPrefix}-blush)`} />
           <ellipse cx="352" cy="314" rx="14" ry="8.5" fill={`url(#${idPrefix}-blush)`} />
         </g>
+
+        {/* Folders clutched to her side, over her body (and its own copy of the small claw). */}
+        <HugFiles />
 
         {/* Over the small claw, which grips its corner from behind; under the stalks
             and the big claw, so her eyes and the pencil stay in front of it. */}

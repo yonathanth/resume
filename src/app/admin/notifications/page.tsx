@@ -72,7 +72,7 @@ const AUDIENCE_OPTIONS: { type: AudienceType; label: string; hint: string }[] = 
 const CHANNEL_LABELS: Record<Channel, string> = { in_app: "In-app", email: "Email", push: "Push" };
 const CHANNEL_ORDER: Channel[] = ["in_app", "email", "push"];
 
-const EMAIL_KINDS = ["verification", "email_change", "password_reset", "announcement", "subscription", "test"] as const;
+const EMAIL_KINDS = ["verification", "email_change", "password_reset", "announcement", "subscription", "lifecycle", "test"] as const;
 const EMAIL_STATUSES: EmailLogRow["status"][] = ["sent", "failed", "skipped"];
 
 function audienceLabel(audience: Audience | null | undefined): string {

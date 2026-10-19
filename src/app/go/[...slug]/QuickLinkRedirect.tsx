@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken, refreshAccessToken } from "@/lib/api";
 import { saveQuickIntent, type QuickIntent } from "@/lib/quick-links";
+import { CenteredSpinner } from "@/components/CenteredSpinner";
+import { noteQuickLink } from "@/lib/analytics";
 
 /** Signed out, where a link's flow can be tried without an account (see /try). */
 function tryPath(intent: QuickIntent): string | null {
@@ -22,6 +24,8 @@ export function QuickLinkRedirect({ intent }: { intent: QuickIntent }) {
 
   useEffect(() => {
     let cancelled = false;
+    // Which link brought them here, for the admin's attribution (kept with the first touch).
+    noteQuickLink(intent.kind === "template" ? `template/${intent.templateId}` : intent.kind);
     (async () => {
       const token = getAccessToken() ?? (await refreshAccessToken());
       if (cancelled) return;
@@ -38,9 +42,5 @@ export function QuickLinkRedirect({ intent }: { intent: QuickIntent }) {
     };
   }, [intent, router]);
 
-  return (
-    <div className="h-screen w-full flex items-center justify-center bg-[#fbfbfb]">
-      <div className="h-6 w-6 rounded-full border-2 border-neutral-300 border-t-neutral-900 animate-spin" />
-    </div>
-  );
+  return <CenteredSpinner label="Opening…" className="h-screen w-full bg-[#fbfbfb]" />;
 }

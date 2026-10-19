@@ -3,7 +3,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { notFound } from "next/navigation";
 import { Moxie, MOXIE_ANIMATIONS, MOXIE_SEAT, type MoxieAnimation, type MoxieHandle } from "@/components/moxie";
+import { MOXIE_LOGOS } from "@/components/moxie/MoxieLogos";
+import { MoxieDidYouKnow } from "@/components/moxie/MoxieDidYouKnow";
 import { AiWaitLoader, type AiWait } from "@/components/dashboard/create-flow/FlowUI";
+import { useHasMounted } from "@/hooks/use-has-mounted";
 
 const WAITS: AiWait[] = ["read-file", "read-story", "read-cv", "write", "improve", "tailor"];
 
@@ -62,7 +65,7 @@ function SidebarPreview({ crowned, spot, collapsed = false }: { crowned: boolean
         }`}
       >
         {spot === "top" && <SittingMoxie size={collapsed ? 52 : 58} crowned={crowned} style={{ top: "100%", left: collapsed ? 8 : 12 }} />}
-        {!collapsed && "Resumate"}
+        {!collapsed && "GoMoxie"}
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {!collapsed && <div className="px-2 pb-2 text-xs font-semibold text-neutral-400">Workspace</div>}
@@ -105,6 +108,7 @@ export default function MoxiePlayground() {
   const [moment, setMoment] = useState<MoxieAnimation | null>(null);
   // Preview a Pro account: she wears the crown through everything.
   const [crowned, setCrowned] = useState(false);
+  const hasMounted = useHasMounted();
   const momentRef = useRef<MoxieHandle>(null);
   const [tierFour, setTierFour] = useState<MoxieAnimation>("lost");
   const tierFourRef = useRef<MoxieHandle>(null);
@@ -143,6 +147,48 @@ export default function MoxiePlayground() {
       </div>
 
       <section className="mt-8">
+        <h2 className="text-sm font-semibold text-neutral-500">Logo concepts</h2>
+        <p className="mt-1 text-xs text-neutral-400">Still marks drawn from Moxie, at 96 / 48 / 32 / 16px on light and dark, and next to the name.</p>
+        {([3, 2, 1] as const).map((round) => (
+        <div key={round} className="mt-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+          {round === 3 ? "Round 3 — Peepers, as a crab" : round === 2 ? "Round 2 — simple, and about the app" : "Round 1 — simplified Moxie"}
+        </h3>
+        <div className="mt-2 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {MOXIE_LOGOS.filter((logo) => logo.round === round).map(({ name, note, Mark, mono }) => (
+            <div key={name} className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+              <div className="flex items-end gap-5 px-5 pb-5 pt-6 text-neutral-950">
+                {[96, 48, 32, 16].map((size) => (
+                  <Mark key={size} size={size} />
+                ))}
+              </div>
+              <div className={`flex items-end gap-5 bg-[#0a0a0a] px-5 py-5 ${mono ? "text-white" : ""}`}>
+                {[96, 48, 32, 16].map((size) => (
+                  <Mark key={size} size={size} />
+                ))}
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t border-neutral-100 px-5 py-3">
+                <span className="flex items-center gap-2 text-neutral-950">
+                  <Mark size={32} />
+                  <span className="text-[17px] font-bold tracking-tight">GoMoxie</span>
+                </span>
+                <span className="flex items-center gap-2 rounded-lg bg-[#0a0a0a] px-2.5 py-1.5 text-white">
+                  <Mark size={26} />
+                  <span className="text-[14px] font-bold tracking-tight">GoMoxie</span>
+                </span>
+              </div>
+              <div className="border-t border-neutral-100 px-5 py-3">
+                <div className="text-sm font-semibold text-neutral-900">{name}</div>
+                <div className="mt-0.5 text-xs text-neutral-500">{note}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        </div>
+        ))}
+      </section>
+
+      <section className="mt-10">
         <h2 className="text-sm font-semibold text-neutral-500">Animation</h2>
         <div className="mt-3 flex flex-wrap gap-2">
           {MOXIE_ANIMATIONS.map((name) => (
@@ -162,6 +208,35 @@ export default function MoxiePlayground() {
           <Moxie animation={animation} size={320} crowned={crowned} />
           <Moxie animation={animation} size={156} crowned={crowned} />
           <Moxie animation={animation} size={64} crowned={crowned} />
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <h2 className="text-sm font-semibold text-neutral-500">Loading: current vs new</h2>
+        <p className="mt-1 text-sm text-neutral-500">
+          Left, today&apos;s scuttle. Right, the new one: glasses on, folders clutched to her side, presenting a &ldquo;Did you know?&rdquo;
+          card — a new fact every round. Then her moves alone, big, medium and at loader-chip size.
+        </p>
+        <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="flex items-center justify-center rounded-2xl border border-neutral-200 bg-white p-6">
+            <Moxie animation="loading" size={220} ticklish crowned={crowned} />
+          </div>
+          <div className="flex items-center justify-center rounded-2xl border border-neutral-200 bg-white p-6">
+            {/* Browser only: the facts come in a random order. */}
+            {hasMounted && <MoxieDidYouKnow crowned={crowned} />}
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {(["loading", "presenting"] as const).map((name) => (
+            <div key={name} className="rounded-2xl border border-neutral-200 bg-white p-6">
+              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{name}</div>
+              <div className="mt-4 flex items-end justify-center gap-8">
+                <Moxie animation={name} size={300} ticklish crowned={crowned} />
+                <Moxie animation={name} size={120} crowned={crowned} />
+                <Moxie animation={name} size={56} crowned={crowned} />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 

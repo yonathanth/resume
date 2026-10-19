@@ -397,7 +397,7 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
 
       <Card
         title="Manual grants"
-        description="FitCV-side access given by an admin. Grants are never payments and never touch the subscription — billing lives in the Billing tab."
+        description="GoMoxie-side access given by an admin. Grants are never payments and never touch the subscription — billing lives in the Billing tab."
         padded={false}
         actions={
           canGrant && (

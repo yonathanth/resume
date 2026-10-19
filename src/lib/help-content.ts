@@ -2,7 +2,7 @@
 // page. Answers describe how the app actually behaves — keep them in sync with
 // the product.
 
-export const SUPPORT_EMAIL = "support@resumate.ai";
+export const SUPPORT_EMAIL = "support@gomoxie.app";
 
 export type Faq = { q: string; a: string };
 
@@ -16,7 +16,7 @@ export const FAQ_GROUPS: { topic: string; faqs: Faq[] }[] = [
       },
       {
         q: "What is a career profile?",
-        a: "A profile holds everything about you for one role you're going for, say \"Backend Engineer\" or \"Product Manager\": your experience, skills, education and projects. You get one per role. Fill it in yourself or save a CV to it, then every new CV for that role starts from all of it. Details you edit by hand are never overwritten by a later CV. A CV tailored to a job only adds facts (roles, skills, education), never its job-specific wording, and Improve a CV shows you the before and after before saving any reworded text to a profile. Career profiles are part of FitCV Pro; if you downgrade, they stay saved and readable.",
+        a: "A profile holds everything about you for one role you're going for, say \"Backend Engineer\" or \"Product Manager\": your experience, skills, education and projects. You get one per role. Fill it in yourself or save a CV to it, then every new CV for that role starts from all of it. Details you edit by hand are never overwritten by a later CV. A CV tailored to a job only adds facts (roles, skills, education), never its job-specific wording, and Improve a CV shows you the before and after before saving any reworded text to a profile. Career profiles are part of GoMoxie Pro; if you downgrade, they stay saved and readable.",
       },
       {
         q: "Can I tailor a resume to a specific job?",

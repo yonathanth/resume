@@ -174,6 +174,18 @@ export const TAILOR_CUT_ROW = 4;
 /** The small claw's shoulder. */
 export const SMALL_SHOULDER = { x: 368, y: 328 } as const;
 
+/**
+ * The folders she clutches to her side with her small claw (the "presenting"
+ * loader): a stack leaning against her body, the claw's arm wrapped round
+ * behind it and out past its far edge, and the pincer tucked back in across
+ * its front corner — a hug. `tilt` leans its top in toward her.
+ */
+export const HUG_FILES = { x: 350, y: 266, width: 56, height: 72, tilt: -9 } as const;
+/** The hugging arm's wrist, just past the folders' far edge — where the pincer turns back in over their front. */
+export const HUG_WRIST = { x: 418, y: 328 } as const;
+/** How far that pincer is turned from pointing up: round to point back in at her. */
+export const HUG_PINCER_TURN = -100;
+
 /** Half-moon reading glasses, worn low: lens corners relative to each eye's centre. */
 export const GLASSES = { halfWidth: 27, top: 12, bottom: 35, bridgeLift: 6 } as const;
 
@@ -233,6 +245,9 @@ export const PIVOTS = {
   mouthO: `${MOUTH.x} ${MOUTH.y}`,
   paperBack: `${SMALL_SHOULDER.x} ${SMALL_SHOULDER.y}`, // held in the small claw, so it shares that claw's pivot
   paperSheet: `${READ_PAPER.x + READ_PAPER.width / 2} ${READ_PAPER.y + READ_PAPER.height / 2}`, // turns over around its middle
+  hugFiles: `${SMALL_SHOULDER.x} ${SMALL_SHOULDER.y}`, // the hugging claw swings from the small claw's shoulder
+  hugPincer: `${HUG_WRIST.x} ${HUG_WRIST.y}`, // its pincer squeezes from the wrist
+  hugStack: `${HUG_FILES.x + HUG_FILES.width / 2} ${HUG_FILES.y + HUG_FILES.height}`, // the folders slip and tip about their bottom edge
 } as const;
 
 /**

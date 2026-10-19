@@ -13,7 +13,7 @@ import { useHasMounted } from "./use-has-mounted";
 
 export const NOTIFICATIONS_QUERY_KEY = ["notifications"] as const;
 
-// In-app notifications from the FitCV team. Polled gently while the
+// In-app notifications from the GoMoxie team. Polled gently while the
 // dashboard is open; push (when the user opted in) is a separate channel.
 export function useNotifications() {
   const hasMounted = useHasMounted();

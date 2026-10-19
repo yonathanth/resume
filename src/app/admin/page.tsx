@@ -15,6 +15,8 @@ import {
   Mono,
   Note,
   PageHeader,
+  PeriodPicker,
+  periodLabel,
   SourceTag,
   StatCard,
   StatusBadge,
@@ -25,37 +27,11 @@ import { errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, f
 // source (database / Polar API / tracked) and nothing is filled in when a
 // source has no data.
 
-const PERIODS = [7, 30, 90, 365] as const;
 const FLOWS: { key: FlowKey; label: string }[] = [
   { key: "create", label: "Create" },
   { key: "tailor", label: "Tailor" },
   { key: "improve", label: "Improve" },
 ];
-
-function periodLabel(days: number) {
-  return days === 365 ? "1y" : `${days}d`;
-}
-
-function PeriodPicker({ value, onChange }: { value: number; onChange: (days: number) => void }) {
-  return (
-    <div role="group" aria-label="Period" className="inline-flex rounded-lg border border-neutral-300 bg-white p-0.5">
-      {PERIODS.map((d) => (
-        <button
-          key={d}
-          type="button"
-          aria-pressed={value === d}
-          title={`Last ${d} days`}
-          onClick={() => onChange(d)}
-          className={`px-2.5 py-1 rounded-md text-xs font-semibold cursor-pointer transition-colors ${
-            value === d ? "bg-neutral-950 text-white" : "text-neutral-600 hover:text-neutral-950 hover:bg-neutral-100"
-          }`}
-        >
-          {periodLabel(d)}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /** "2026-10-13" (UTC day bucket) → "Oct 13". */
 function dayLabel(day: string) {
@@ -369,7 +345,7 @@ function RecentActivity({ data }: { data: Overview }) {
             Recent payments <SourceTag source="database" />
           </span>
         }
-        description="Chapa payments recorded by FitCV"
+        description="Chapa payments recorded by GoMoxie"
         actions={<CardLink href="/admin/billing">Billing</CardLink>}
         padded={false}
       >

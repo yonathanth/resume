@@ -211,7 +211,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
 
       <Card
         title="Subscription"
-        description="FitCV's mirror of the processor's subscription, updated by webhooks or by syncing."
+        description="GoMoxie's mirror of the processor's subscription, updated by webhooks or by syncing."
         actions={
           <>
             <SourceTag source="synced" />
@@ -292,7 +292,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
 
       <Card
         title="Chapa payments"
-        description="Stored in FitCV's database. Only Chapa's own answer can move a payment to SUCCESS."
+        description="Stored in GoMoxie's database. Only Chapa's own answer can move a payment to SUCCESS."
         padded={false}
         actions={<SourceTag source="database" />}
       >

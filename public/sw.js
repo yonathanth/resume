@@ -1,4 +1,4 @@
-// FitCV service worker — browser push notifications only (no caching).
+// GoMoxie service worker — browser push notifications only (no caching).
 // Registered from Settings → Notifications when the user opts in.
 
 self.addEventListener("install", () => self.skipWaiting());
@@ -9,9 +9,9 @@ self.addEventListener("push", (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: "Resumate", body: event.data ? event.data.text() : "" };
+    data = { title: "GoMoxie", body: event.data ? event.data.text() : "" };
   }
-  const title = data.title || "Resumate";
+  const title = data.title || "GoMoxie";
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || "",

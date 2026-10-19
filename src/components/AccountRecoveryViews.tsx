@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, FileText } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { ApiError, RESEND_COOLDOWN_SECONDS, forgotPassword, resendRetryAfter, resetPassword, unsubscribeFromAnnouncements } from "@/lib/api";
 import { useCooldown } from "@/hooks/use-cooldown";
 
@@ -20,13 +20,6 @@ function Frame({ title, children }: { title: string; children: React.ReactNode }
   return (
     <div className="flex min-h-screen w-full items-center justify-center bg-[#0a0a0a] px-6 font-sans text-white">
       <div className="w-full max-w-[380px] py-10 text-center">
-        <Link
-          href="/"
-          aria-label="Resumate home"
-          className="mx-auto mb-6 flex h-11 w-11 items-center justify-center rounded-[13px] bg-white text-neutral-950 transition-transform duration-200 hover:scale-105"
-        >
-          <FileText className="h-5 w-5 stroke-[2.2]" />
-        </Link>
         <h1 className="text-[28px] font-bold leading-tight tracking-tight sm:text-[32px]">{title}</h1>
         {children}
         <p className="mt-8 text-[14px] text-neutral-500">

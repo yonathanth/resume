@@ -63,7 +63,7 @@ function NotificationItem({ item, onOpen, onDismiss }: { item: ApiNotification; 
   );
 }
 
-/** The dashboard's in-app notification inbox (messages from the FitCV team). */
+/** The dashboard's in-app notification inbox (messages from the GoMoxie team). */
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -104,19 +104,31 @@ export function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-lg border border-neutral-300 bg-white shadow-xl z-50">
+        // Phones: the bell isn't at the screen's edge, so the panel spans the screen under the top bar instead of hanging off it.
+        <div className="fixed inset-x-4 top-[4.5rem] sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-[22rem] rounded-lg border border-neutral-300 bg-white shadow-xl z-50">
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-neutral-200">
             <span className="text-sm font-semibold text-neutral-950">Notifications</span>
-            {unread > 0 && (
+            <div className="flex items-center gap-2">
+              {unread > 0 && (
+                <button
+                  type="button"
+                  onClick={() => markAllRead.mutate()}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-accent-strong hover:text-accent cursor-pointer"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  Mark all read
+                </button>
+              )}
               <button
                 type="button"
-                onClick={() => markAllRead.mutate()}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-accent-strong hover:text-accent cursor-pointer"
+                onClick={() => setOpen(false)}
+                title="Close"
+                aria-label="Close notifications"
+                className="p-1 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
               >
-                <CheckCheck className="w-3.5 h-3.5" />
-                Mark all read
+                <X className="w-4 h-4" />
               </button>
-            )}
+            </div>
           </div>
           <div className="max-h-[60vh] overflow-y-auto p-1.5">
             {isLoading ? (

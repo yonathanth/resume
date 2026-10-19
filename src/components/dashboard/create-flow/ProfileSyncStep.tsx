@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookmarkPlus, Check, ChevronDown, Loader2, RotateCcw, User } from "lucide-react";
+import { BookmarkPlus, Check, ChevronDown, RotateCcw, User } from "lucide-react";
 import {
   ApiError,
+  ProfileChangeDetail,
   ProfileChangeSummary,
   revertProfileChange,
   suggestProfileForCv,
@@ -15,6 +16,8 @@ import { useUpdateProfile as useUpdateAccount } from "@/hooks/use-auth";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { MoxieMoment } from "@/components/moxie";
 import { describeChangeCounts, isEmptyChange, sectionLabel } from "@/components/dashboard/career-profiles/profile-sections";
+import { ProfileChangeList } from "@/components/dashboard/career-profiles/ProfileChangeList";
+import { CenteredSpinner } from "@/components/CenteredSpinner";
 
 // The last step of making a CV: offer to keep the matching career profile up
 // to date (or start one). Shown after the CV is ready, so it never stands
@@ -41,12 +44,44 @@ interface ProfileSyncStepProps {
   onProRequired: (err: unknown) => boolean;
 }
 
-type Applied = { profileId: string; title: string; changeId: string | null; version: number; summary: ProfileChangeSummary };
+type Applied = {
+  profileId: string;
+  title: string;
+  changeId: string | null;
+  version: number;
+  summary: ProfileChangeSummary;
+  details: ProfileChangeDetail[] | null;
+};
 
 const BUTTON_PRIMARY =
   "w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed";
 const BUTTON_SECONDARY =
   "w-full py-2.5 rounded-xl border border-neutral-200 text-neutral-600 font-semibold text-sm hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
+
+/** "See what changes": the item-by-item list, or per-section counts from a server that doesn't send items. */
+function ChangeDetails({ summary, details }: { summary: ProfileChangeSummary; details: ProfileChangeDetail[] | null | undefined }) {
+  if (details && details.length > 0) return <ProfileChangeList details={details} />;
+  return <SummaryDetails summary={summary} />;
+}
+
+/** Collapsed by default, so the card stays short; one tap shows every item. */
+function DetailsToggle({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 mb-4">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between text-xs font-semibold text-neutral-700 cursor-pointer"
+      >
+        {label}
+        <ChevronDown className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && children}
+    </div>
+  );
+}
 
 function SummaryDetails({ summary }: { summary: ProfileChangeSummary }) {
   const rows = new Map<string, string[]>();
@@ -83,9 +118,10 @@ export function ProfileSyncStep({
   // update to the matching profile right away (the card then offers Undo).
   // Cached per CV with no refetching, so the update happens at most once.
   const suggestion = useQuery({
-    queryKey: ["profile-suggestion", cvDocumentId, factsOnly],
+    queryKey: ["profile-suggestion", cvDocumentId, factsOnly, sourceProfile?.id ?? null],
     queryFn: async () => {
-      const found = await suggestProfileForCv({ cvDocumentId, factsOnly });
+      // A CV written from a profile goes back to it: ask for the change against that profile.
+      const found = await suggestProfileForCv({ cvDocumentId, factsOnly, targetProfileId: sourceProfile?.id });
       if (sourceProfile || found.autoSync !== "always" || !found.match || isEmptyChange(found.match.preview)) {
         return { found, autoApplied: null };
       }
@@ -97,6 +133,7 @@ export function ProfileSyncStep({
         changeId: result.changeId,
         version: result.profile.version,
         summary: result.summary,
+        details: result.details ?? null,
       };
       return { found, autoApplied };
     },
@@ -109,7 +146,6 @@ export function ProfileSyncStep({
 
   const [newTitle, setNewTitle] = useState(roleTitle);
   const [alwaysUpdate, setAlwaysUpdate] = useState(false);
-  const [showDetails, setShowDetails] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
@@ -120,9 +156,14 @@ export function ProfileSyncStep({
   const applied = suggestion.data?.autoApplied ?? null;
   // A CV written from a profile goes back to that profile, whatever its role matched.
   const target = sourceProfile
-    ? { profileId: sourceProfile.id, title: sourceProfile.title, preview: data?.match?.profileId === sourceProfile.id ? data.match.preview : null }
+    ? {
+        profileId: sourceProfile.id,
+        title: sourceProfile.title,
+        preview: data?.target?.preview ?? (data?.match?.profileId === sourceProfile.id ? data.match.preview : null),
+        details: data?.target?.details ?? (data?.match?.profileId === sourceProfile.id ? data.match.details : undefined),
+      }
     : data?.match
-      ? { profileId: data.match.profileId, title: data.match.title, preview: data.match.preview }
+      ? { profileId: data.match.profileId, title: data.match.title, preview: data.match.preview, details: data.match.details }
       : null;
 
   // Saves to a profile, then opens the editor.
@@ -204,14 +245,7 @@ export function ProfileSyncStep({
   }
 
   // ---- loading
-  if (suggestion.isLoading) {
-    return (
-      <div className="py-16 flex flex-col items-center gap-3 text-sm text-neutral-500">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        Checking your career profiles…
-      </div>
-    );
-  }
+  if (suggestion.isLoading) return <CenteredSpinner caption="Checking your career profiles…" className="py-16" />;
 
   // ---- applied automatically ("always")
   if (applied) {
@@ -219,6 +253,11 @@ export function ProfileSyncStep({
       <div>
         {header(`Updated your ${applied.title} profile`, describeChangeCounts(applied.summary) || "It already had everything in this CV.")}
         <p className="text-xs text-neutral-500 text-center -mt-2 mb-4">Profile updates are set to automatic. You can change that in Account Settings.</p>
+        {!isEmptyChange(applied.summary) && (
+          <DetailsToggle label="See what was added">
+            <ChangeDetails summary={applied.summary} details={applied.details} />
+          </DetailsToggle>
+        )}
         {children}
         {footer}
         <div className="space-y-2">
@@ -276,19 +315,17 @@ export function ProfileSyncStep({
           nothingNew ? "Your CV is ready" : `Update your ${target.title} profile?`,
           nothingNew
             ? `Your ${target.title} profile already has everything in this CV.`
-            : counts && !sourceProfile
-              ? `This CV adds ${counts}.`
+            : counts
+              ? sourceProfile
+                ? `What's new in this CV goes back to it: ${counts}.`
+                : `This CV adds ${counts}.`
               : undefined
         )}
 
         {target.preview && !nothingNew && (
-          <div className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-4 mb-4">
-            <button type="button" onClick={() => setShowDetails((v) => !v)} className="w-full flex items-center justify-between text-xs font-semibold text-neutral-700 cursor-pointer">
-              Review what changes
-              <ChevronDown className={`w-4 h-4 transition-transform ${showDetails ? "rotate-180" : ""}`} />
-            </button>
-            {showDetails && <SummaryDetails summary={target.preview} />}
-          </div>
+          <DetailsToggle label="See exactly what changes">
+            <ChangeDetails summary={target.preview} details={target.details} />
+          </DetailsToggle>
         )}
 
         {children}
@@ -331,6 +368,12 @@ export function ProfileSyncStep({
         <label className="block text-xs font-bold text-neutral-700">Role</label>
         <ProfessionInput value={newTitle} onChange={setNewTitle} placeholder="e.g. Backend Developer" />
       </div>
+
+      {data && !isEmptyChange(data.newProfilePreview) && (
+        <DetailsToggle label="See what it will include">
+          <ChangeDetails summary={data.newProfilePreview} details={data.newProfileDetails} />
+        </DetailsToggle>
+      )}
 
       {children}
       {footer}

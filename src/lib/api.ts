@@ -89,7 +89,16 @@ export interface ApiUser {
   occupationTitle: string | null;
   /** Set only when occupationTitle matches the catalog. */
   occupationId: string | null;
+  /** Every profession they gave (up to 5), main one first; occupationTitle is the first. */
+  professions: string[];
   onboardingCompleted: boolean;
+  /** Onboarding answers (null until given). */
+  signupIntent: SignupIntent | null;
+  careerStage: CareerStage | null;
+  acquisitionSource: AcquisitionSource | null;
+  acquisitionDetail: string | null;
+  /** "try" when they signed up in the middle of a /try flow. */
+  signupSurface: "dashboard" | "try" | null;
   /** What happens to a matching career profile when a new CV is made. */
   profileAutoSync: ProfileAutoSync;
   /** False for a Google-only account (it can set a first password). */
@@ -99,6 +108,9 @@ export interface ApiUser {
 }
 
 export type ProfileAutoSync = "ask" | "always" | "never";
+export type SignupIntent = "create" | "tailor" | "improve";
+export type CareerStage = "student" | "entry" | "mid" | "senior" | "career_change";
+export type AcquisitionSource = "search" | "social" | "telegram" | "friend" | "school" | "ad" | "other";
 
 export interface AuthResponse {
   user: ApiUser;
@@ -136,6 +148,7 @@ const SESSIONLESS_PATHS = new Set([
   "/api/v1/admin/auth/login",
   "/api/v1/platform/status",
   "/api/v1/notifications/unsubscribe",
+  "/api/v1/events/anonymous",
 ]);
 
 /**
@@ -437,14 +450,100 @@ export interface UpdateMeInput {
   /** "" clears it. */
   phone?: string;
   occupationTitle?: string;
+  /** Replaces the whole list (main first); occupationTitle follows its first entry. */
+  professions?: string[];
   completeOnboarding?: true;
   profileAutoSync?: ProfileAutoSync;
+  signupIntent?: SignupIntent | null;
+  careerStage?: CareerStage | null;
+  acquisitionSource?: AcquisitionSource | null;
+  acquisitionDetail?: string | null;
+  signupSurface?: "dashboard" | "try";
+  /** First-touch attribution; the server keeps only the first one it gets. */
+  signupAttribution?: Record<string, string>;
 }
 
 export function updateMe(input: UpdateMeInput) {
   return apiFetch<ApiUser>("/api/v1/auth/me", {
     method: "PATCH",
     body: JSON.stringify(input),
+  });
+}
+
+/**
+ * A first CV from someone who hasn't finished onboarding (a /try sign-up, or
+ * an upload during onboarding): the server fills their empty account details
+ * from it and finishes onboarding once name and profession are there.
+ */
+export function completeOnboardingFromCv(input: {
+  cvDocumentId: string;
+  flow: SignupIntent;
+  surface: "try" | "dashboard";
+  signupAttribution?: Record<string, string>;
+}) {
+  return apiFetch<ApiUser>("/api/v1/auth/me/onboarding/from-cv", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+// ---- First-run state, feedback and analytics (backend: routes/activation.routes.ts) ----
+
+/** cv_rating: they rated (completed). cv_rating_exit / cv_rating_download: asked at that moment. */
+export type PromptKey = "checklist" | "tour_offer" | "cv_rating" | "cv_rating_exit" | "cv_rating_download";
+export type RatingTrigger = "editor_exit" | "download";
+export interface PromptState {
+  shownAt: string | null;
+  dismissedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface Activation {
+  steps: { firstCv: boolean; pdfDownloaded: boolean; careerProfile: boolean; tailoredCv: boolean };
+  /** Career profiles are Pro: without them the checklist's last step is a tailored CV. */
+  canUseCareerProfiles: boolean;
+  prompts: Record<PromptKey, PromptState | null>;
+}
+
+export function getActivation() {
+  return apiFetch<Activation>("/api/v1/me/activation");
+}
+
+export function updatePrompt(key: PromptKey, action: "shown" | "dismissed" | "completed") {
+  return apiFetch<PromptState & { key: PromptKey }>(`/api/v1/me/prompts/${key}`, {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export type AiDraftReason = "wrong_details" | "too_generic" | "missing_experience" | "bad_wording" | "too_long" | "other";
+
+export type FeedbackInput =
+  | { kind: "cv_rating"; rating: 1 | 2 | 3 | 4 | 5; comment?: string; cvDocumentId?: string; trigger?: RatingTrigger }
+  | {
+      kind: "ai_draft";
+      rating: 1 | -1;
+      reason?: AiDraftReason;
+      comment?: string;
+      cvDocumentId: string;
+      flowType?: CvFlowType;
+    };
+
+export function sendFeedback(input: FeedbackInput) {
+  return apiFetch<{ id: string }>("/api/v1/feedback", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function sendClientEvent(name: string, props: object, anonymousId?: string) {
+  return apiFetch<{ recorded: boolean }>("/api/v1/events", {
+    method: "POST",
+    body: JSON.stringify({ name, props, anonymousId }),
+  });
+}
+
+export function sendAnonymousEvent(name: string, props: object, anonymousId: string) {
+  return apiFetch<{ recorded: boolean }>("/api/v1/events/anonymous", {
+    method: "POST",
+    body: JSON.stringify({ name, props, anonymousId }),
   });
 }
 
@@ -495,7 +594,16 @@ export function changePassword(input: { currentPassword?: string; newPassword: s
 
 // Permanently deletes the account. Re-confirm with the password, or — for a
 // Google-only account — by typing the account email back.
-export function deleteAccount(input: { password?: string; confirmEmail?: string }) {
+export type DeletionReason =
+  | "got_the_job"
+  | "not_useful"
+  | "too_expensive"
+  | "poor_results"
+  | "privacy"
+  | "other_service"
+  | "other";
+
+export function deleteAccount(input: { password?: string; confirmEmail?: string; reason?: DeletionReason; comment?: string }) {
   return apiFetch<{ success: boolean }>("/api/v1/auth/me", {
     method: "DELETE",
     body: JSON.stringify(input),
@@ -568,6 +676,21 @@ export interface ProfileChangeSummary {
   added: Partial<Record<string, number>>;
   updated: Partial<Record<string, number>>;
   removed: Partial<Record<string, number>>;
+}
+
+/** One item of a profile update, for "see what changes" (backend: ProfileChangeDetail). */
+export interface ProfileChangeDetail {
+  section: string;
+  /** added: new item. updated: gains details. kept_edited / kept_removed: left alone on purpose. */
+  change: "added" | "updated" | "kept_edited" | "kept_removed";
+  label: string;
+  sublabel?: string;
+  /** Fields that were empty and get a value. */
+  filled?: string[];
+  newBullets?: string[];
+  newValues?: string[];
+  /** Headline / summary / location text. */
+  text?: string;
 }
 
 export interface ApiCareerProfile {
@@ -853,16 +976,27 @@ export function applyCvWording(profileId: string, input: { cvDocumentId: string;
 export interface ProfileSuggestion {
   roleTitle: string | null;
   /** The profile this CV is the same role as, and what merging would change. */
-  match: { profileId: string; title: string; via: "role" | "occupation" | "ai"; preview: ProfileChangeSummary } | null;
+  match: {
+    profileId: string;
+    title: string;
+    via: "role" | "occupation" | "ai";
+    preview: ProfileChangeSummary;
+    /** The same change, item by item (older servers don't send it). */
+    details?: ProfileChangeDetail[];
+  } | null;
   /** Related roles — offered as "add to this instead", never merged automatically. */
   related: { profileId: string; title: string }[];
   newProfilePreview: ProfileChangeSummary;
+  /** What a new profile would hold, item by item. */
+  newProfileDetails?: ProfileChangeDetail[];
   linkedProfileId: string | null;
+  /** The change against the profile asked about (targetProfileId), whatever the role match says. */
+  target?: { profileId: string; title: string; preview: ProfileChangeSummary; details: ProfileChangeDetail[] } | null;
   autoSync: ProfileAutoSync;
 }
 
 /** Which profile a new CV belongs to, and what saving it would change. Read-only. Pro only. */
-export function suggestProfileForCv(input: { cvDocumentId: string; factsOnly?: boolean }) {
+export function suggestProfileForCv(input: { cvDocumentId: string; factsOnly?: boolean; targetProfileId?: string }) {
   return apiFetch<ProfileSuggestion>("/api/v1/profiles/suggest-for-cv", {
     method: "POST",
     body: JSON.stringify(input),
@@ -881,7 +1015,13 @@ export function syncCvIntoProfile(input: {
   occupationId?: string;
   factsOnly?: boolean;
 }) {
-  return apiFetch<{ profile: ApiCareerProfileDetail; summary: ProfileChangeSummary; created: boolean; changeId: string | null }>(
+  return apiFetch<{
+    profile: ApiCareerProfileDetail;
+    summary: ProfileChangeSummary;
+    details?: ProfileChangeDetail[];
+    created: boolean;
+    changeId: string | null;
+  }>(
     "/api/v1/profiles/from-cv",
     { method: "POST", body: JSON.stringify(input) }
   );
@@ -1011,7 +1151,7 @@ export function finalizeCvDocument(cvId: string) {
 
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED";
 
-// A Chapa payment record — today only "PRO_SUBSCRIPTION" (a 1-month FitCV
+// A Chapa payment record — today only "PRO_SUBSCRIPTION" (a 1-month GoMoxie
 // Pro period; Chapa can't auto-renew, see the backend's grantChapaProPeriod).
 export interface ApiPayment {
   id: string;
@@ -1034,7 +1174,7 @@ export function getPaymentStatus(paymentId: string) {
 }
 
 // Mirrors the backend's Polar SubscriptionStatus verbatim, plus "revoked"
-// for a hard revocation — see fitcv-backend's entitlement.service.ts. Null
+// for a hard revocation — see the backend's entitlement.service.ts. Null
 // until the user's first Polar subscription event has synced.
 export type SubscriptionStatus =
   | "incomplete"
@@ -1072,7 +1212,7 @@ export interface SubscriptionStatusResult {
   // first-time upgrade pitch.
   isExpired: boolean;
   // Where Pro comes from: the paid subscription, or a complimentary grant
-  // from the FitCV team (then the subscription fields above stay as billing
+  // from the GoMoxie team (then the subscription fields above stay as billing
   // left them). Optional so an older backend still type-checks.
   proSource?: "subscription" | "grant" | null;
   proGrantExpiresAt?: string | null;
@@ -1102,7 +1242,7 @@ export interface CheckoutResult {
   paymentId?: string;
 }
 
-// Starts a checkout with the chosen provider for FitCV Pro. `plan` only
+// Starts a checkout with the chosen provider for GoMoxie Pro. `plan` only
 // matters for Polar (weekly $4.99 / monthly $9.99 / quarterly $24.99 — each
 // a distinct Polar product) and defaults to "monthly"; Chapa ignores it and
 // always sells its single fixed-period local product (80 ETB, no

@@ -16,7 +16,6 @@ export default function BuilderPage() {
     handleDeleteDraft,
     updateDraftFromSavedCv,
     goToPastProjects,
-    goToTemplates,
   } = useDashboard();
 
   // The dashboard is a persistent layout (DashboardProvider never remounts
@@ -42,7 +41,6 @@ export default function BuilderPage() {
         onDeleteDraft={handleDeleteDraft}
         onUpdateDraftFromSavedCv={updateDraftFromSavedCv}
         onNavigateToPastProjects={goToPastProjects}
-        onNavigateToTemplates={goToTemplates}
       />
     </Suspense>
   );

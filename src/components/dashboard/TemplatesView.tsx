@@ -86,6 +86,10 @@ interface TemplatesViewProps {
   onUseTemplate: (templateId: TemplateId) => void;
 }
 
+// One to four to a row (gap-x-6 is 1.5rem between cards). A wrapping row
+// rather than a grid, so a last row that isn't full sits centred.
+const CARD_WIDTH = "w-full sm:w-[calc((100%-1.5rem)/2)] lg:w-[calc((100%-3rem)/3)] xl:w-[calc((100%-4.5rem)/4)]";
+
 export function TemplatesView({ onUseTemplate }: TemplatesViewProps) {
   const { data: templates, isLoading, isError, refetch, isRefetching } = useCvTemplates();
   const [category, setCategory] = useState<string>(ALL);
@@ -195,9 +199,9 @@ export function TemplatesView({ onUseTemplate }: TemplatesViewProps) {
           </button>
         </div>
       ) : isLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
+        <div className="flex flex-wrap justify-center gap-x-6 gap-y-10">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex flex-col gap-3">
+            <div key={i} className={`${CARD_WIDTH} flex flex-col gap-3`}>
               <div className="aspect-[4/5] rounded-lg bg-neutral-100 animate-pulse" />
               <div className="h-10 rounded-lg bg-neutral-100 animate-pulse" />
             </div>
@@ -231,9 +235,11 @@ export function TemplatesView({ onUseTemplate }: TemplatesViewProps) {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
+            <div className="flex flex-wrap justify-center gap-x-6 gap-y-10">
               {visible.map((template) => (
-                <TemplateCard key={template.id} template={template} onUse={() => onUseTemplate(template.id)} />
+                <div key={template.id} className={CARD_WIDTH}>
+                  <TemplateCard template={template} onUse={() => onUseTemplate(template.id)} />
+                </div>
               ))}
             </div>
           )}

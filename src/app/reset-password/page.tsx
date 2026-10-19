@@ -1,9 +1,12 @@
 import { Metadata } from "next";
+import { NO_INDEX } from "@/lib/metadata";
 import { ResetPasswordView } from "@/components/AccountRecoveryViews";
 
 export const metadata: Metadata = {
-  title: "Choose a new password – Resumate",
-  description: "Set a new password for your Resumate account.",
+  title: "Choose a new password",
+  description: "Set a new password for your GoMoxie account.",
+  // Account and token pages: not for search results.
+  robots: NO_INDEX,
 };
 
 export default async function ResetPasswordPage({

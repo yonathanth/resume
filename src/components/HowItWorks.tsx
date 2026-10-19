@@ -1,8 +1,7 @@
 "use client";
 
-import React from "react";
-import { ArrowRight, Check, Download, FileText, Loader2, MousePointer2, PenLine, UploadCloud, UserRound } from "lucide-react";
-import { useCvTemplates } from "@/hooks/use-cv-templates";
+import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { ArrowRight, Check, Download, FileText, MousePointer2, PenLine, UploadCloud, UserRound } from "lucide-react";
 import { Reveal } from "@/components/Reveal";
 import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
 import { Moxie } from "@/components/moxie";
@@ -10,20 +9,12 @@ import { Moxie } from "@/components/moxie";
 // The create flow, in the order the dashboard runs it (CreateCvModal):
 // the user's info, an optional job post, then the editor (CvEditorWorkspace).
 // Each card replays its step as a few quick scenes in one panel — the click,
-// the work being done, then a tick — on a shared 7.5s loop (globals.css,
-// "How it works").
+// Moxie doing the work, then the result — on a 5s loop (globals.css,
+// "How it works"). On the home page they take turns (see HowItWorks).
 
-function Thumb({ index, className = "" }: { index: number; className?: string }) {
-  const { data: templates } = useCvTemplates();
-  const template = templates?.[index] ?? templates?.[0];
-  if (!template) return <div className={`aspect-[210/297] animate-pulse rounded-[5px] bg-neutral-200/70 ${className}`} />;
-  return (
-    <TemplateThumbnail
-      templateId={template.id}
-      title={`${template.name} template example`}
-      className={`aspect-[210/297] rounded-[5px] border border-neutral-200 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)] ${className}`}
-    />
-  );
+/** What each visual takes: whether it's playing (Moxie pauses with it). */
+interface VisualProps {
+  playing?: boolean;
 }
 
 // Each visual is a fixed-size panel (280×200) so the cursor can be steered to
@@ -44,19 +35,43 @@ function Cursor({ className }: { className: string }) {
   );
 }
 
-/** "Doing it…" with three bouncing dots, over the working scene. */
-function WorkingCaption({ children }: { children: React.ReactNode }) {
+/**
+ * The working scene: a one-line caption with bouncing dots, and Moxie doing
+ * that step's job. `className` sets its timing (cards 1 and 2 share
+ * `hiw-work`; card 3's runs later).
+ */
+function Work({
+  caption,
+  animation,
+  playing,
+  className = "hiw-work",
+}: {
+  caption: string;
+  animation: "read" | "write" | "stamp";
+  playing: boolean;
+  className?: string;
+}) {
   return (
-    <div className="hiw-caption absolute inset-x-0 top-[26px] flex items-end justify-center gap-[3px] text-[12.5px] font-semibold text-neutral-700">
-      {children}
-      {[0, 1, 2].map((d) => (
-        <span key={d} className="hiw-dot mb-[3px] h-[3px] w-[3px] rounded-full bg-accent" style={{ animationDelay: `${d * 0.15}s` }} />
-      ))}
+    <div className={`${className} absolute inset-0`}>
+      <div className="hiw-caption absolute inset-x-0 top-[26px] flex items-end justify-center gap-[3px] text-[12.5px] font-semibold text-neutral-700">
+        {caption}
+        {[0, 1, 2].map((d) => (
+          <span key={d} className="hiw-dot mb-[3px] h-[3px] w-[3px] rounded-full bg-accent" style={{ animationDelay: `${d * 0.15}s` }} />
+        ))}
+      </div>
+      <Moxie
+        animation={animation}
+        size={100}
+        paused={!playing}
+        decorative
+        ticklish
+        className="absolute left-1/2 top-[64px] -translate-x-1/2"
+      />
     </div>
   );
 }
 
-/** The last scene of every card: a tick pops in and a short line fades up. */
+/** The closing scene of cards 1 and 2: a tick pops in and a short line fades up. */
 function Done({ children }: { children: React.ReactNode }) {
   return (
     <div className="hiw-done absolute inset-0 flex flex-col items-center justify-center gap-2">
@@ -69,15 +84,14 @@ function Done({ children }: { children: React.ReactNode }) {
 }
 
 // 1 — pick "Upload old CV" in the start dialog, the file drops in, Moxie
-// reads it (she stays in her reading scene the whole loop, so she's already
-// mid-read when she shows), and it's sorted into your resume.
+// reads it, and it's sorted into your resume.
 const START_OPTIONS = [
   { label: "Start from scratch", hint: "Answer a few questions", Icon: PenLine },
   { label: "Upload old CV", hint: "PDF or DOCX", Icon: UploadCloud },
   { label: "Career profile", hint: "Reuse saved info", Icon: UserRound },
 ];
 
-export function SourceVisual() {
+export function SourceVisual({ playing = true }: VisualProps) {
   return (
     <Stage>
       {/* A: "How do you want to start?" */}
@@ -110,20 +124,16 @@ export function SourceVisual() {
         </div>
       </div>
 
-      {/* M: Moxie reads it — worded to fit all three starts */}
-      <div className="hiw-work absolute inset-0">
-        <WorkingCaption>Reading your details</WorkingCaption>
-        <Moxie animation="read" size={100} decorative ticklish className="absolute left-1/2 top-[64px] -translate-x-1/2" />
-      </div>
-
+      {/* Worded to fit all three starts: an uploaded CV, answers, or a profile */}
+      <Work caption="Reading your details" animation="read" playing={playing} />
       <Done>Sorted into your resume</Done>
       <Cursor className="hiw1-cursor" />
     </Stage>
   );
 }
 
-// 2 — paste the job post (its keywords light up), press "Tailor my CV", a
-// bullet is rewritten around those keywords, and it's tailored.
+// 2 — paste the job post (its keywords light up), press "Tailor my CV",
+// Moxie writes it up for the job, and it's done.
 function Kw({ i, children }: { i: number; children: React.ReactNode }) {
   return (
     <span className="hiw2-kw rounded-[3px] px-0.5" style={{ animationDelay: `${i * 0.3}s` }}>
@@ -132,7 +142,7 @@ function Kw({ i, children }: { i: number; children: React.ReactNode }) {
   );
 }
 
-export function JobVisual() {
+export function JobVisual({ playing = true }: VisualProps) {
   return (
     <Stage>
       {/* A: the pasted job description */}
@@ -147,80 +157,217 @@ export function JobVisual() {
         </span>
       </div>
 
-      {/* B: a bullet is rewritten around them */}
-      <div className="hiw-work absolute inset-0">
-        <WorkingCaption>Tailoring to the job</WorkingCaption>
-        <div className="absolute inset-x-4 top-[62px] rounded-lg border border-neutral-200 bg-neutral-50/60 p-2.5">
-          <div className="text-[9px] font-semibold uppercase tracking-wide text-neutral-400">Experience · Awash Bank</div>
-          <div className="relative mt-1 h-[48px] text-[10.5px] leading-[1.5]">
-            <p className="hiw2-before absolute inset-0 text-neutral-400">• Did reconciliations for branch accounts.</p>
-            <p className="hiw2-after absolute inset-0 text-neutral-800">
-              • Ran <b className="font-semibold text-accent-strong">IFRS</b> reconciliations across 40+ branches; cut{" "}
-              <b className="font-semibold text-accent-strong">month-end close</b> from 6 to 4 days.
-            </p>
-          </div>
-        </div>
-      </div>
-
+      <Work caption="Tailoring to the job" animation="write" playing={playing} />
       <Done>Tailored to the job</Done>
       <Cursor className="hiw2-cursor" />
     </Stage>
   );
 }
 
-// 3 — the editor's preview flags a missing detail; click it, type it in,
-// press Download PDF, and it's ready.
-export function EditorVisual() {
+// 3 — the editor's preview (Spark) flags a missing detail; click it, type it
+// in, press Download PDF, Moxie stamps the PDF, and it drops into your
+// downloads.
+export function EditorVisual({ playing = true }: VisualProps) {
   return (
     <Stage>
-      {/* A: the editor */}
+      {/* A: the editor — its toolbar on top (Download PDF counts what's
+          missing, as the real one does), the preview centred below */}
       <div className="hiw3-scene-a absolute inset-0">
-        <div className="absolute left-[14px] top-[15px] w-[120px]">
-          <Thumb index={3} />
+        <div className="absolute inset-x-0 top-0 flex h-[36px] items-center justify-between border-b border-neutral-100 px-2.5">
+          <span className="flex items-center gap-1 text-[10px] font-medium text-neutral-400">
+            <Check className="h-3 w-3" /> Saved
+          </span>
+          <span className="hiw3-btn flex h-[24px] items-center gap-1 rounded-md bg-accent px-2 text-[10px] font-semibold text-white">
+            <Download className="h-3 w-3" /> Download PDF
+            <span className="hiw3-count ml-0.5 flex h-[14px] min-w-[14px] items-center justify-center rounded-full bg-white px-[3px] text-[8.5px] font-bold text-accent-strong">
+              1
+            </span>
+          </span>
         </div>
-        <div className="absolute left-[20px] top-[52px] h-[17px] w-[104px]">
-          <span className="hiw3-gap absolute inset-0 flex items-center justify-center rounded-[4px] border border-dashed border-accent bg-accent-soft text-[9px] font-semibold text-accent-strong">
+
+        <div className="absolute left-[88px] top-[45px] w-[104px]">
+          <TemplateThumbnail
+            templateId="spark"
+            title="Spark template example"
+            className="aspect-[210/297] rounded-[5px] border border-neutral-200 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)]"
+          />
+        </div>
+        <div className="absolute left-[92px] top-[78px] h-[16px] w-[96px]">
+          <span className="hiw3-gap absolute inset-0 flex items-center justify-center rounded-[4px] border border-dashed border-accent bg-accent-soft text-[8.5px] font-semibold text-accent-strong">
             + Add phone number
           </span>
-          <span className="hiw3-filled absolute inset-0 flex items-center justify-center rounded-[4px] border border-emerald-200 bg-emerald-50 font-mono text-[8.5px] font-medium text-emerald-700">
+          <span className="hiw3-filled absolute inset-0 flex items-center justify-center rounded-[4px] border border-emerald-200 bg-emerald-50 font-mono text-[8px] font-medium text-emerald-700">
             +251 91 234 5678
           </span>
         </div>
 
-        {/* The field the gap opens */}
-        <div className="hiw3-field absolute left-[146px] top-[20px] w-[120px] rounded-lg border border-neutral-200 bg-white p-2 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)]">
+        {/* The field the gap opens, popping over the preview */}
+        <div className="hiw3-field absolute left-[72px] top-[102px] w-[136px] rounded-lg border border-neutral-200 bg-white p-2 shadow-[0_10px_22px_-12px_rgba(15,17,21,0.35)]">
           <div className="text-[9px] font-semibold text-neutral-500">Phone</div>
           <div className="mt-1 flex h-[22px] items-center rounded-md border border-accent px-1.5 ring-2 ring-accent/15">
             <span className="hiw3-type inline-block overflow-hidden whitespace-nowrap font-mono text-[9px] text-neutral-900">+251 91 234 5678</span>
             <span className="hiw3-caret ml-px h-3 w-px bg-neutral-900" />
           </div>
         </div>
-
-        <span className="hiw3-btn absolute left-[146px] top-[150px] grid h-[30px] w-[120px] rounded-lg bg-neutral-950 text-[10.5px] font-semibold text-white">
-          <span className="hiw3-label-idle col-start-1 row-start-1 flex items-center justify-center gap-1.5">
-            <Download className="h-3.5 w-3.5 text-accent-light" /> Download PDF
-          </span>
-          <span className="hiw3-label-busy col-start-1 row-start-1 flex items-center justify-center gap-1.5">
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Preparing…
-          </span>
-        </span>
       </div>
 
-      <Done>Your PDF is ready</Done>
+      <Work caption="Making your PDF" animation="stamp" playing={playing} className="hiw3-work" />
+
+      {/* Done: the PDF drops into the downloads tray */}
+      <div className="hiw3-done absolute inset-0 flex flex-col items-center justify-center">
+        <div className="relative flex h-[74px] w-[120px] items-end justify-center">
+          <div className="hiw3-pdf relative mb-[6px] flex h-[58px] w-[46px] flex-col items-center justify-center gap-1 rounded-[6px] border border-neutral-200 bg-white shadow-[0_8px_16px_-10px_rgba(15,17,21,0.45)]">
+            <FileText className="h-5 w-5 text-accent" />
+            <span className="rounded-[3px] bg-accent px-1 text-[7.5px] font-bold leading-[12px] text-white">PDF</span>
+            <span className="hiw3-badge absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-accent text-white ring-2 ring-white">
+              <Check className="h-3 w-3 stroke-[3]" />
+            </span>
+          </div>
+          {/* the tray */}
+          <div className="absolute inset-x-0 bottom-0 h-[16px] rounded-b-lg border-x-2 border-b-2 border-neutral-300" />
+        </div>
+        <span className="hiw3-done-text mt-3 text-[13.5px] font-bold tracking-tight text-neutral-950">my-cv.pdf downloaded</span>
+      </div>
+
       <Cursor className="hiw3-cursor" />
     </Stage>
   );
 }
 
-const STEPS: { title: string; body: string; Visual: React.ComponentType }[] = [
+const STEPS: { title: string; body: string; Visual: React.ComponentType<VisualProps> }[] = [
   { title: "Share your details", body: "Upload an old CV, answer a few questions, or reuse a saved career profile.", Visual: SourceVisual },
   { title: "Tailor it to the job", body: "Add the job post and we work in the keywords recruiters scan for.", Visual: JobVisual },
   { title: "Download and apply", body: "Fill in any gaps it flags, tweak what you like, then download a PDF.", Visual: EditorVisual },
 ];
 
+/**
+ * Plays or holds a visual's CSS animations. Held, every one is paused on its
+ * first frame; played, every one restarts from the top — so a card always
+ * starts its story from the beginning. (Done through the animations
+ * themselves rather than remounting, so the template preview doesn't reload.)
+ */
+function Playback({ playing, run, children }: { playing: boolean; run: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el?.getAnimations) return;
+    for (const animation of el.getAnimations({ subtree: true })) {
+      animation.currentTime = 0;
+      if (playing) animation.play();
+      else animation.pause();
+    }
+  }, [playing, run]);
+  return <div ref={ref}>{children}</div>;
+}
+
+/** One full loop of a card (the CSS animations' duration). */
+const LOOP_MS = 5_000;
+
+// A real mouse (not touch). Server snapshot is false; the client's takes over.
+const HOVER_QUERY = "(hover: hover) and (pointer: fine)";
+function subscribeHover(onChange: () => void) {
+  const media = window.matchMedia(HOVER_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+function useCanHover() {
+  return useSyncExternalStore(subscribeHover, () => window.matchMedia(HOVER_QUERY).matches, () => false);
+}
+
 export function HowItWorks() {
+  // The cards take turns: each plays its loop once, then hands on to the
+  // next, round and round. With a mouse they play only while the pointer is
+  // over the section — coming back in starts over from the first card, and
+  // leaving puts them all back on their first frame. On touch they play
+  // while the section is on screen. Clicking a card — or, on a phone,
+  // scrolling one to the middle of the screen — jumps to it, and the turns
+  // carry on from there.
+  const canHover = useCanHover();
+  const [hovering, setHovering] = useState(false);
+  const [active, setActive] = useState(0);
+  // Bumped on every jump, so clicking the playing card restarts it.
+  const [run, setRun] = useState(0);
+  const [inView, setInView] = useState(false);
+  const section = useRef<HTMLElement>(null);
+  const cards = useRef<(HTMLDivElement | null)[]>([]);
+
+  const play = (i: number) => {
+    setActive(i);
+    setRun((r) => r + 1);
+  };
+
+  useEffect(() => {
+    const el = section.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const engaged = canHover ? hovering : inView;
+
+  const enter = () => {
+    if (!canHover) return;
+    setHovering(true);
+    play(0);
+  };
+  const leave = () => {
+    if (canHover) setHovering(false);
+  };
+
+  // Hand on to the next card when this one's loop ends.
+  useEffect(() => {
+    if (!engaged) return;
+    const timer = window.setTimeout(() => {
+      setActive((a) => (a + 1) % STEPS.length);
+      setRun((r) => r + 1);
+    }, LOOP_MS);
+    return () => window.clearTimeout(timer);
+  }, [active, run, engaged]);
+
+  // Phones (one card per row): the card scrolled nearest the middle of the
+  // screen takes over when it changes.
+  useEffect(() => {
+    const stacked = window.matchMedia("(max-width: 1023px)");
+    let frame = 0;
+    let centered: number | null = null;
+    const measure = () => {
+      frame = 0;
+      if (!stacked.matches) return;
+      const mid = window.innerHeight / 2;
+      let best: number | null = null;
+      let bestDistance = Infinity;
+      cards.current.forEach((card, i) => {
+        if (!card) return;
+        const rect = card.getBoundingClientRect();
+        if (rect.bottom <= 0 || rect.top >= window.innerHeight) return;
+        const distance = Math.abs(rect.top + rect.height / 2 - mid);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = i;
+        }
+      });
+      if (best !== null && best !== centered) {
+        centered = best;
+        setActive(best);
+        setRun((r) => r + 1);
+      }
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+    measure();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   return (
-    <section id="how-it-works" className="mx-auto w-full max-w-6xl px-4 py-24 sm:px-6 sm:py-28 lg:px-8">
+    <section ref={section} id="how-it-works" onMouseEnter={enter} onMouseLeave={leave} className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
       {/* Header */}
       <Reveal className="mx-auto max-w-2xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">How it works</h2>
@@ -229,29 +376,41 @@ export function HowItWorks() {
 
       {/* Steps */}
       <div className="mt-14 grid grid-cols-1 gap-5 lg:grid-cols-3 lg:gap-6">
-        {STEPS.map(({ title, body, Visual }, i) => (
-          <Reveal key={title} delay={i * 100}>
-          <div
-            className="group h-full rounded-3xl border border-neutral-200 bg-white p-2.5 shadow-[0_12px_32px_-20px_rgba(15,17,21,0.22)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_-24px_rgba(15,17,21,0.3)]"
-          >
-            <div className="relative flex h-[260px] items-center justify-center overflow-hidden rounded-[18px] border border-neutral-100 bg-neutral-50">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.05)_1px,transparent_1px)] [background-size:16px_16px]" />
-              <div className="relative lg:scale-90 xl:scale-100">
-                <Visual />
+        {STEPS.map(({ title, body, Visual }, i) => {
+          const playing = engaged && active === i;
+          return (
+            <Reveal key={title} delay={i * 100}>
+            <div
+              ref={(el) => {
+                cards.current[i] = el;
+              }}
+              onClick={() => {
+                if (canHover) setHovering(true);
+                play(i);
+              }}
+              className="group h-full cursor-pointer rounded-3xl border border-neutral-200 bg-white p-2.5 shadow-[0_12px_32px_-20px_rgba(15,17,21,0.22)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_-24px_rgba(15,17,21,0.3)]"
+            >
+              <div className="relative flex h-[260px] items-center justify-center overflow-hidden rounded-[18px] border border-neutral-100 bg-neutral-50">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.05)_1px,transparent_1px)] [background-size:16px_16px]" />
+                <div className="relative lg:scale-90 xl:scale-100">
+                  <Playback playing={playing} run={run}>
+                    <Visual playing={playing} />
+                  </Playback>
+                </div>
+              </div>
+              <div className="px-3.5 pb-4 pt-5">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent-strong">
+                    {i + 1}
+                  </span>
+                  <h3 className="text-[18px] font-semibold tracking-tight text-neutral-950">{title}</h3>
+                </div>
+                <p className="mt-2.5 text-[14.5px] leading-relaxed text-neutral-500">{body}</p>
               </div>
             </div>
-            <div className="px-3.5 pb-4 pt-5">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-[13px] font-semibold text-accent-strong">
-                  {i + 1}
-                </span>
-                <h3 className="text-[18px] font-semibold tracking-tight text-neutral-950">{title}</h3>
-              </div>
-              <p className="mt-2.5 text-[14.5px] leading-relaxed text-neutral-500">{body}</p>
-            </div>
-          </div>
-          </Reveal>
-        ))}
+            </Reveal>
+          );
+        })}
       </div>
     </section>
   );

@@ -45,7 +45,7 @@ export function AdminLoginView({ notice }: { notice: string | null }) {
         <div className="mx-auto mb-6 flex h-11 w-11 items-center justify-center rounded-[13px] bg-white text-neutral-950">
           <Shield className="h-5 w-5" />
         </div>
-        <h1 className="text-center text-[26px] font-bold tracking-tight">FitCV Admin</h1>
+        <h1 className="text-center text-[26px] font-bold tracking-tight">GoMoxie Admin</h1>
         <p className="mt-2 text-center text-[14px] text-neutral-400">Administrator accounts only. Sign-in attempts are logged.</p>
 
         <form onSubmit={submit} className="mt-8 flex flex-col gap-3">

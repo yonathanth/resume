@@ -50,8 +50,8 @@ import { dateInputToIso, errorText, formatDate, formatDateTime, formatMinorMoney
 // Subscriptions & Payments. What lives where:
 //   Polar — source of truth for Polar subscriptions, orders, refunds and
 //           disputes (orders/refunds/disputes are read live from Polar's API).
-//   FitCV — mirrors each user's subscription from Polar webhooks; Chapa
-//           payments live in FitCV's own table.
+//   GoMoxie — mirrors each user's subscription from Polar webhooks; Chapa
+//           payments live in GoMoxie's own table.
 // Nothing on this page marks a payment successful or edits subscription
 // status by hand. The only actions ask the provider for the real answer:
 // "Re-verify with Chapa" and "Retry sync" (re-fetch from Polar).
@@ -188,7 +188,7 @@ function PolarIntro({ links }: { links: PolarLinks | undefined }) {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <p>
-            Polar is the source of truth for Polar subscriptions, orders, refunds and disputes. FitCV mirrors subscription state from Polar webhooks. Refunds,
+            Polar is the source of truth for Polar subscriptions, orders, refunds and disputes. GoMoxie mirrors subscription state from Polar webhooks. Refunds,
             disputes and full billing management happen in the Polar dashboard.
           </p>
           <p>
@@ -370,7 +370,7 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
   return (
     <CardShell
       title="Subscriptions"
-      description="FitCV's mirror of each user's subscription, as last synced from Polar webhooks (or Chapa payments). Polar holds the authoritative record."
+      description="GoMoxie's mirror of each user's subscription, as last synced from Polar webhooks (or Chapa payments). Polar holds the authoritative record."
       source="synced"
       sourceTitle="Local mirror of the provider's subscription state"
     >
@@ -543,7 +543,7 @@ function ChapaTab() {
   return (
     <CardShell
       title="Chapa payments"
-      description="Payments recorded in FitCV's own payment table. A payment only becomes SUCCESS when Chapa confirms it."
+      description="Payments recorded in GoMoxie's own payment table. A payment only becomes SUCCESS when Chapa confirms it."
       source="database"
     >
       <FilterBar>
@@ -621,12 +621,12 @@ function ChapaTab() {
           verifyTarget && (
             <div className="space-y-2">
               <p>
-                FitCV will ask Chapa for the real status of this {formatMoney(verifyTarget.amount, verifyTarget.currency)} payment
+                GoMoxie will ask Chapa for the real status of this {formatMoney(verifyTarget.amount, verifyTarget.currency)} payment
                 {verifyTarget.userEmail ? ` by ${verifyTarget.userEmail}` : ""}.
               </p>
               <p>
                 Only if Chapa confirms the payment succeeded does it become <b>SUCCESS</b> and grant the 30-day Pro period. If Chapa reports it failed, cancelled
-                or still pending, FitCV records that answer and grants nothing. Nothing changes on Chapa&apos;s side.
+                or still pending, GoMoxie records that answer and grants nothing. Nothing changes on Chapa&apos;s side.
               </p>
               <p className="text-xs text-neutral-500">
                 Merchant reference: <Mono>{verifyTarget.merchantReference}</Mono>
@@ -666,7 +666,7 @@ function OrdersTab({ links }: { links: PolarLinks | undefined }) {
           <div className="break-all">{r.customerEmail ?? <Mono>{r.customerId}</Mono>}</div>
           {r.externalCustomerId && (
             <Link href={`/admin/users/${r.externalCustomerId}`} className="text-xs font-semibold text-accent-strong hover:underline">
-              FitCV user →
+              GoMoxie user →
             </Link>
           )}
         </div>
@@ -869,7 +869,7 @@ function DisputesTab({ links }: { links: PolarLinks | undefined }) {
   return (
     <div className="space-y-4">
       <Note>
-        Refunds and disputes are handled in the Polar dashboard — FitCV can&apos;t issue refunds or answer disputes. When Polar revokes a subscription after a
+        Refunds and disputes are handled in the Polar dashboard — GoMoxie can&apos;t issue refunds or answer disputes. When Polar revokes a subscription after a
         refund or lost dispute, the webhook updates the user&apos;s access here.
         {links && (
           <>
@@ -915,10 +915,10 @@ function WebhooksTab() {
     const result = await retryWebhookEvent(event.id);
     const detail = describePolarResult(result.polar);
     if (result.status === "processed") {
-      toast.success("Re-synced: processed", { description: detail ? `Applied to the matching FitCV user. ${detail}` : "Applied to the matching FitCV user." });
+      toast.success("Re-synced: processed", { description: detail ? `Applied to the matching GoMoxie user. ${detail}` : "Applied to the matching GoMoxie user." });
     } else {
       toast.info(`Re-synced: ${result.status}`, {
-        description: `Polar returned the subscription, but no FitCV user matches it yet.${detail ? ` ${detail}` : ""}`,
+        description: `Polar returned the subscription, but no GoMoxie user matches it yet.${detail ? ` ${detail}` : ""}`,
       });
     }
     await Promise.all([
@@ -976,7 +976,7 @@ function WebhooksTab() {
   ];
 
   return (
-    <CardShell title="Webhook log" description="Every incoming provider webhook and what FitCV did with it." source="database">
+    <CardShell title="Webhook log" description="Every incoming provider webhook and what GoMoxie did with it." source="database">
       <FilterBar>
         <Field label="Outcome">
           <select
@@ -997,8 +997,8 @@ function WebhooksTab() {
         </Field>
         <div className="sm:col-span-1 lg:col-span-3">
           <Note>
-            <b>Retry sync</b> re-fetches the subscription from Polar&apos;s API and applies its current state to the matching FitCV user. The original payload
-            isn&apos;t replayed. <b>Unmatched</b> means no FitCV user could be linked to the Polar customer.
+            <b>Retry sync</b> re-fetches the subscription from Polar&apos;s API and applies its current state to the matching GoMoxie user. The original payload
+            isn&apos;t replayed. <b>Unmatched</b> means no GoMoxie user could be linked to the Polar customer.
           </Note>
         </div>
       </FilterBar>
@@ -1022,8 +1022,8 @@ function WebhooksTab() {
             <div className="space-y-2">
               <p>Re-fetches this subscription from Polar&apos;s API and applies its current state. The original payload isn&apos;t replayed.</p>
               <p>
-                Nothing changes in Polar. In FitCV, the matching user&apos;s subscription mirror (status, period end, cancel-at-period-end) is updated to what
-                Polar reports now, and this event is marked processed — or stays unmatched if no FitCV user matches.
+                Nothing changes in Polar. In GoMoxie, the matching user&apos;s subscription mirror (status, period end, cancel-at-period-end) is updated to what
+                Polar reports now, and this event is marked processed — or stays unmatched if no GoMoxie user matches.
               </p>
               <p className="text-xs text-neutral-500">
                 Subscription: <Mono>{retryTarget.resourceId}</Mono>

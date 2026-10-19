@@ -1,13 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, Copy, Download, LayoutGrid, List, Plus, Search, Trash2, X } from "lucide-react";
-import { ResumeDraft, TemplateId, templateLabel } from "./create-flow/types";
+import { Plus, Search, X } from "lucide-react";
+import { ResumeDraft, TemplateId } from "./create-flow/types";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { CvThumbnail, ResumeCard, downloadDraftPdf, downloadErrorMessage } from "./ResumeCard";
-import { useToast } from "@/components/Toaster";
-import { getCvFileName } from "@/lib/utils";
+import { ResumeCard } from "./ResumeCard";
 import { DashboardMoxie } from "./DashboardMoxie";
+import { SortMenu } from "./SortMenu";
 
 interface PastProjectsViewProps {
   drafts?: ResumeDraft[];
@@ -26,10 +25,12 @@ const FIELD_CLASS =
   "rounded-lg border border-neutral-300 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 transition";
 const PRIMARY_BUTTON =
   "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer";
-const ICON_BUTTON = "p-2 rounded-lg text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer disabled:opacity-50";
 
 type SortBy = "edited" | "title";
-type ViewMode = "grid" | "list";
+const SORT_OPTIONS = [
+  { value: "edited", label: "Last edited" },
+  { value: "title", label: "A–Z" },
+] as const;
 
 export function PastProjectsView({
   drafts = [],
@@ -41,12 +42,9 @@ export function PastProjectsView({
 }: PastProjectsViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("edited");
-  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [pendingAction, setPendingAction] = useState<{ type: "delete" | "duplicate"; draft: ResumeDraft } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const toast = useToast();
 
   const requestAction = (type: "delete" | "duplicate", draft: ResumeDraft) => {
     setDeleteError(null);
@@ -60,25 +58,14 @@ export function PastProjectsView({
       sortBy === "title" ? a.title.localeCompare(b.title) : (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")
     );
 
-  const handleListDownload = async (draft: ResumeDraft) => {
-    setDownloadingId(draft.id);
-    try {
-      await downloadDraftPdf(draft);
-      toast.success("Your PDF is ready", { description: `Saved as ${getCvFileName(draft.fullName, draft.title)}`, moxie: "downloaded", placement: "top" });
-    } catch (err) {
-      toast.error(`Couldn't download "${draft.title}"`, { description: downloadErrorMessage(err) });
-    } finally {
-      setDownloadingId(null);
-    }
-  };
-
   const hasDrafts = drafts.length > 0;
 
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
-      {/* Toolbar: search on the left, view controls and the main action on the right. */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-8">
-        <div className="relative flex-1 lg:max-w-md">
+      {/* Toolbar, same as Career profiles: search, then "New resume" at the
+          right end (icon-only on phones). Sorting sits on the list's header. */}
+      <div className="flex items-center gap-2.5 mb-8">
+        <div className="relative min-w-0 flex-1 lg:max-w-md">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="search"
@@ -87,7 +74,7 @@ export function PastProjectsView({
             placeholder="Search by title or role"
             aria-label="Search resumes"
             disabled={!hasDrafts}
-            className={`${FIELD_CLASS} w-full pl-10 pr-9 py-2.5 disabled:bg-neutral-50`}
+            className={`${FIELD_CLASS} w-full h-10 pl-10 pr-9 disabled:bg-neutral-50`}
           />
           {searchQuery && (
             <button
@@ -101,46 +88,12 @@ export function PastProjectsView({
           )}
         </div>
 
-        <div className="flex items-center gap-2.5 lg:ml-auto">
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            aria-label="Sort resumes"
-            className={`${FIELD_CLASS} px-3 py-2.5 font-medium text-neutral-800 cursor-pointer`}
-          >
-            <option value="edited">Last edited</option>
-            <option value="title">A–Z</option>
-          </select>
-
-          <div role="group" aria-label="View" className="flex items-center p-1 rounded-lg border border-neutral-300 bg-white">
-            {(
-              [
-                { mode: "grid", Icon: LayoutGrid, label: "Grid view" },
-                { mode: "list", Icon: List, label: "List view" },
-              ] as const
-            ).map(({ mode, Icon, label }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setViewMode(mode)}
-                aria-pressed={viewMode === mode}
-                title={label}
-                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                  viewMode === mode ? "bg-neutral-950 text-white" : "text-neutral-500 hover:text-neutral-900"
-                }`}
-              >
-                <Icon className="w-4 h-4" />
-              </button>
-            ))}
-          </div>
-
-          {onNewResume && (
-            <button type="button" onClick={onNewResume} className={`${PRIMARY_BUTTON} ml-auto lg:ml-0`}>
-              <Plus className="w-4 h-4" />
-              New resume
-            </button>
-          )}
-        </div>
+        {onNewResume && (
+          <button type="button" onClick={onNewResume} aria-label="New resume" title="New resume" className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-neutral-950 text-sm font-semibold text-white hover:bg-neutral-800 transition-colors cursor-pointer sm:w-auto sm:px-4 lg:ml-auto">
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline whitespace-nowrap">New resume</span>
+          </button>
+        )}
       </div>
 
       {/* Section header, like the Builder's "Recent resumes". */}
@@ -150,6 +103,9 @@ export function PastProjectsView({
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500">
             {filteredDrafts.length}
           </span>
+          <div className="ml-auto">
+            <SortMenu compact value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} label="Sort resumes" />
+          </div>
         </div>
       )}
 
@@ -181,7 +137,7 @@ export function PastProjectsView({
             )
           )}
         </div>
-      ) : viewMode === "grid" ? (
+      ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10">
           {filteredDrafts.map((draft) => (
             <ResumeCard
@@ -194,61 +150,6 @@ export function PastProjectsView({
             />
           ))}
         </div>
-      ) : (
-        <ul className="rounded-lg border border-neutral-300 bg-white divide-y divide-neutral-200 overflow-hidden">
-          {filteredDrafts.map((draft) => (
-            <li key={draft.id} className="group flex items-center gap-4 px-4 py-3 hover:bg-neutral-50 transition-colors">
-              <button
-                type="button"
-                onClick={() => onOpenDraft?.(draft)}
-                className="w-11 shrink-0 aspect-[210/297] overflow-hidden rounded border border-neutral-200 cursor-pointer"
-                title="Open in editor"
-              >
-                <CvThumbnail draft={draft} />
-              </button>
-              <button type="button" onClick={() => onOpenDraft?.(draft)} className="min-w-0 flex-1 text-left cursor-pointer">
-                <span className="block text-sm font-semibold text-neutral-950 truncate group-hover:text-accent-strong transition-colors">
-                  {draft.title}
-                </span>
-                <span className="block text-xs text-neutral-500 mt-0.5 truncate">
-                  {templateLabel(draft.templateId)} · Edited {draft.lastEdited}
-                </span>
-              </button>
-              <div className="flex items-center gap-0.5 shrink-0">
-                <button
-                  type="button"
-                  disabled={downloadingId === draft.id}
-                  onClick={() => handleListDownload(draft)}
-                  className={ICON_BUTTON}
-                  title={downloadingId === draft.id ? "Preparing PDF..." : "Download PDF"}
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-                <button type="button" onClick={() => requestAction("duplicate", draft)} className={ICON_BUTTON} title="Duplicate">
-                  <Copy className="w-4 h-4" />
-                </button>
-                {onDeleteDraft && (
-                  <button
-                    type="button"
-                    onClick={() => requestAction("delete", draft)}
-                    className="p-2 rounded-lg text-neutral-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                    title="Delete"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onOpenDraft?.(draft)}
-                  className="ml-2 hidden sm:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-accent-border bg-accent-soft text-accent-strong text-xs font-semibold hover:bg-accent hover:border-accent hover:text-white transition-colors cursor-pointer"
-                >
-                  Open
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
       )}
 
       <ConfirmDialog

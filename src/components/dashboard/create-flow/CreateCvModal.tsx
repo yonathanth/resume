@@ -709,7 +709,7 @@ export function CreateCvModal({
                   description={
                     canUseProfiles
                       ? "Build from the experience and skills saved in one of your role profiles."
-                      : "A FitCV Pro feature: build from your saved role profiles."
+                      : "A GoMoxie Pro feature: build from your saved role profiles."
                   }
                   onClick={() => {
                     if (!canUseProfiles) {
@@ -1339,7 +1339,7 @@ export function CreateCvModal({
       <ProUpgradeModal
         isOpen={proGate.isPaywallOpen}
         onClose={proGate.closePaywall}
-        reason="You've already used your free Create generation. Upgrade to FitCV Pro for unlimited AI tailoring."
+        reason="You've already used your free Create generation. Upgrade to GoMoxie Pro for unlimited AI tailoring."
       />
     </div>
   );

@@ -29,7 +29,7 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
   if (isLoading) {
     return (
       <div className="@container">
-        <div className="grid grid-cols-2 @lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 @sm:grid-cols-2 @lg:grid-cols-3 gap-5">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="aspect-[4/5] rounded-lg bg-neutral-100 animate-pulse" />
           ))}
@@ -87,8 +87,11 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
               </span>
             ))}
           </div>
+          {/* Phones (one card per row): the name only. */}
           {tmpl.description && (
-            <p className="mt-1 text-xs text-neutral-600 leading-snug line-clamp-2">{tmpl.description}</p>
+            <div className="hidden @sm:block">
+              <p className="mt-1 text-xs text-neutral-600 leading-snug line-clamp-2">{tmpl.description}</p>
+            </div>
           )}
         </div>
 
@@ -126,7 +129,7 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
         </div>
       )}
 
-      <div className="grid grid-cols-2 @lg:grid-cols-3 gap-5">{visible.map(renderCard)}</div>
+      <div className="grid grid-cols-1 @sm:grid-cols-2 @lg:grid-cols-3 gap-5">{visible.map(renderCard)}</div>
     </div>
   );
 }

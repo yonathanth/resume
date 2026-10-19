@@ -41,8 +41,9 @@ import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { ProfileSyncStep } from "./ProfileSyncStep";
+import { useToast } from "@/components/Toaster";
 import { ProfilePicker } from "./ProfilePicker";
-import { ConfirmedGap, GapReviewStep, gapsNotInContent, withAddedSkills } from "./GapReviewStep";
+import { ConfirmedGap, GapOutcome, GapReviewStep, gapsNotInContent, withAddedSkills } from "./GapReviewStep";
 
 interface TailorCvModalProps {
   isOpen: boolean;
@@ -234,6 +235,8 @@ export function TailorCvModal({
   // Back / Forward check the step they land on against this.
   useEffect(() => trackStepData(draft));
   useSaveFlowDraft<TailorDraft>("tailor", draft, step !== "select-source");
+
+  const toast = useToast();
 
   if (!isOpen) return null;
 
@@ -531,9 +534,20 @@ export function TailorCvModal({
   const handleAddConfirmedGaps = async (added: ConfirmedGap[]) => {
     setFlowError(null);
     const all = [...confirmedGaps.filter((c) => !added.some((a) => a.gap === c.gap)), ...added];
+    // What's left is what they saw and chose not to add. The re-tailoring's
+    // own analysis can phrase gaps differently or raise new ones; those would
+    // look like requirements they were never asked about, so they're not shown.
+    const picked = new Set(added.map((a) => a.gap.toLowerCase()));
+    const notPicked = jobGaps.filter((gap) => !picked.has(gap.toLowerCase()));
     const result = await runTailoring(all);
     if (!result) return;
     setConfirmedGaps(all);
+    setJobGaps(notPicked);
+    // Said here too: without Pro there's no profile step to show it, the flow goes straight to the editor.
+    toast.success(`Added ${added.length === 1 ? "1 requirement" : `${added.length} requirements`} to your CV`, {
+      id: "gaps-added",
+      duration: 3500,
+    });
     await celebrate("tailor");
     toTheEnd(result.content);
   };
@@ -560,7 +574,7 @@ export function TailorCvModal({
         <ProUpgradeModal
           isOpen={proGate.isPaywallOpen}
           onClose={proGate.closePaywall}
-          reason="You've already used your free Tailor generation. Upgrade to FitCV Pro for unlimited AI tailoring."
+          reason="You've already used your free Tailor generation. Upgrade to GoMoxie Pro for unlimited AI tailoring."
         />
       }
     >
@@ -615,7 +629,7 @@ export function TailorCvModal({
                   description={
                     canUseProfiles
                       ? "Tailor everything a role profile holds to this job."
-                      : "A FitCV Pro feature: build from your saved role profiles."
+                      : "A GoMoxie Pro feature: build from your saved role profiles."
                   }
                   onClick={() => {
                     if (!canUseProfiles) {
@@ -1009,7 +1023,8 @@ export function TailorCvModal({
             onFinish={() => handleFinish()}
             onProRequired={proGate.isProRequired}
           >
-            <JobGaps gaps={jobGaps} />
+            <GapOutcome added={confirmedGaps.map((c) => c.gap)} />
+            <JobGaps gaps={jobGaps} afterReview={confirmedGaps.length > 0} />
           </ProfileSyncStep>
         )}
     </FlowModal>

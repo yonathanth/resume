@@ -3,28 +3,32 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, User, Crown, FilePlus, Loader2, Plus, Search, X } from "lucide-react";
+import { ArrowRight, User, Crown, FilePlus, Plus, Search, X } from "lucide-react";
 import { ApiCareerProfile, ApiError } from "@/lib/api";
 import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ICON_TONES, OptionTone } from "./create-flow/OptionCard";
 import { DashboardMoxie } from "./DashboardMoxie";
+import { SortMenu } from "./SortMenu";
 import { ProfessionInput } from "./ProfessionInput";
 import { ProUpgradeModal } from "./ProUpgradeModal";
 import { ChipListEditor, LABEL_CLASS } from "./career-profiles/ProfileSectionEditor";
 import { tempId } from "./career-profiles/profile-sections";
+import { CenteredSpinner } from "@/components/CenteredSpinner";
 
 interface CareerProfilesViewProps {
   onCreateCvFromProfile?: (profileId: string) => void;
 }
 
-// Same field and button styles as the other dashboard pages (Past Projects, Templates).
+// Same field style as the other dashboard pages (Past Projects, Templates).
 const FIELD_CLASS =
   "rounded-lg border border-neutral-300 bg-white text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 transition";
-const PRIMARY_BUTTON =
-  "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer";
 
 type SortBy = "updated" | "title";
+const SORT_OPTIONS = [
+  { value: "updated", label: "Last updated" },
+  { value: "title", label: "A–Z" },
+] as const;
 
 // Each profile gets a soft tile colour so the grid is easy to scan.
 const PROFILE_TONES: OptionTone[] = ["accent", "sky", "violet", "emerald"];
@@ -105,9 +109,10 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
 
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
-      {/* Toolbar, like Past Projects: search on the left, sorting and the main action on the right. */}
-      <div className="flex flex-col lg:flex-row lg:items-center gap-3 mb-8">
-        <div className="relative flex-1 lg:max-w-md">
+      {/* Toolbar, same as Past projects: search, then "New profile" at the
+          right end (icon-only on phones). Sorting sits on the list's header. */}
+      <div className="flex items-center gap-2.5 mb-8">
+        <div className="relative min-w-0 flex-1 lg:max-w-md">
           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
           <input
             type="search"
@@ -116,7 +121,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
             placeholder="Search by role"
             aria-label="Search profiles"
             disabled={!hasProfiles}
-            className={`${FIELD_CLASS} w-full pl-10 pr-9 py-2.5 disabled:bg-neutral-50`}
+            className={`${FIELD_CLASS} w-full h-10 pl-10 pr-9 disabled:bg-neutral-50`}
           />
           {searchQuery && (
             <button
@@ -130,22 +135,10 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
           )}
         </div>
 
-        <div className="flex items-center gap-2.5 lg:ml-auto">
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as SortBy)}
-            aria-label="Sort profiles"
-            className={`${FIELD_CLASS} px-3 py-2.5 font-medium text-neutral-800 cursor-pointer`}
-          >
-            <option value="updated">Last updated</option>
-            <option value="title">A–Z</option>
-          </select>
-
-          <button type="button" onClick={openNew} className={`${PRIMARY_BUTTON} ml-auto lg:ml-0`}>
-            {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
-            New profile
-          </button>
-        </div>
+        <button type="button" onClick={openNew} aria-label="New profile" title="New profile" className="inline-flex h-10 w-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-neutral-950 text-sm font-semibold text-white hover:bg-neutral-800 transition-colors cursor-pointer sm:w-auto sm:px-4 lg:ml-auto">
+          {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
+          <span className="hidden sm:inline whitespace-nowrap">New profile</span>
+        </button>
       </div>
 
       {!isPro && profiles.length > 0 && (
@@ -162,13 +155,14 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
         <div className="flex items-center gap-2 mb-5">
           <h2 className="text-sm font-semibold text-neutral-600">{query ? "Search results" : "All profiles"}</h2>
           <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-500">{shownProfiles.length}</span>
+          <div className="ml-auto">
+            <SortMenu compact value={sortBy} options={SORT_OPTIONS} onChange={setSortBy} label="Sort profiles" />
+          </div>
         </div>
       )}
 
       {isLoading ? (
-        <div className="flex justify-center py-24 text-neutral-400">
-          <Loader2 className="w-5 h-5 animate-spin" />
-        </div>
+        <CenteredSpinner label="Loading your career profiles…" className="py-24" />
       ) : hasProfiles && shownProfiles.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 px-6 py-16 text-center">
           <DashboardMoxie animation="searching" size={120} className="mx-auto -mt-4 mb-2" />
@@ -188,7 +182,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
           <p className="mt-1 text-sm text-neutral-500 max-w-md mx-auto leading-relaxed">
             {isPro
               ? "One profile per role you go for."
-              : "Career profiles are part of FitCV Pro. Keep everything for a role in one place and build tailored CVs from it."}
+              : "Career profiles are part of GoMoxie Pro. Keep everything for a role in one place and build tailored CVs from it."}
           </p>
           <button
             type="button"
@@ -368,7 +362,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
         </div>
       )}
 
-      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Career profiles are part of FitCV Pro." />
+      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Career profiles are part of GoMoxie Pro." />
     </div>
   );
 }

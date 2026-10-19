@@ -3,7 +3,8 @@
 // CV started from one) — so a refresh reopens it and Back closes it. The step
 // inside it is ?step=… (see flow-steps). `fs` names this one opening of the
 // flow: once it's closed or finished, Back onto its old steps shows the
-// dashboard instead of reopening it empty.
+// dashboard instead of reopening it empty. `from` is the dashboard page it was
+// opened from (e.g. /dashboard/past-projects), so closing it goes back there.
 
 import type { FlowKind } from "./flow-drafts";
 
@@ -11,6 +12,8 @@ export interface OpenFlow {
   kind: FlowKind;
   /** This opening of the flow. */
   session: string;
+  /** The dashboard page it was opened from; closing it returns there. */
+  from: string;
   template?: string;
   profile?: string;
 }
@@ -18,10 +21,20 @@ export interface OpenFlow {
 const KINDS: readonly FlowKind[] = ["create", "tailor", "improve"];
 const CLOSED_KEY = "closedFlowSessions";
 
-export function dashboardFlowHref(kind: FlowKind, options: { template?: string; profile?: string } = {}): string {
+// Only other dashboard pages — never an outside URL from a crafted link.
+function safeFrom(from: string | null | undefined): string {
+  return from && /^\/dashboard\/[\w\-/]+$/.test(from) ? from : "/dashboard";
+}
+
+export function dashboardFlowHref(
+  kind: FlowKind,
+  options: { template?: string; profile?: string; from?: string } = {}
+): string {
   const params = new URLSearchParams({ flow: kind, fs: Math.random().toString(36).slice(2, 10) });
   if (options.template) params.set("template", options.template);
   if (options.profile) params.set("profile", options.profile);
+  const from = safeFrom(options.from);
+  if (from !== "/dashboard") params.set("from", from);
   return `/dashboard?${params.toString()}`;
 }
 
@@ -29,7 +42,13 @@ export function readOpenFlow(params: URLSearchParams): OpenFlow | null {
   const kind = params.get("flow") as FlowKind | null;
   const session = params.get("fs");
   if (!kind || !KINDS.includes(kind) || !session) return null;
-  return { kind, session, template: params.get("template") ?? undefined, profile: params.get("profile") ?? undefined };
+  return {
+    kind,
+    session,
+    from: safeFrom(params.get("from")),
+    template: params.get("template") ?? undefined,
+    profile: params.get("profile") ?? undefined,
+  };
 }
 
 function closedSessions(): string[] {

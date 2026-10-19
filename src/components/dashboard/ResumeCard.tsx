@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Copy, Download, MoreVertical, PenLine, Trash2 } from "lucide-react";
 import { ApiError, downloadCvPdf, finalizeCvDocument, getCvThumbnail } from "@/lib/api";
+import { notifyCvDownloaded } from "@/lib/cv-rating";
 import { CvPreviewFrame } from "./create-flow/CvPreviewFrame";
 import { useToast } from "@/components/Toaster";
 import { getCvFileName } from "@/lib/utils";
@@ -95,6 +96,7 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
     setIsDownloading(true);
     try {
       await downloadDraftPdf(draft);
+      notifyCvDownloaded(draft.id);
       toast.success("Your PDF is ready", { description: `Saved as ${getCvFileName(draft.fullName, draft.title)}`, moxie: "downloaded", placement: "top" });
     } catch (err) {
       toast.error(`Couldn't download "${draft.title}"`, { description: downloadErrorMessage(err) });

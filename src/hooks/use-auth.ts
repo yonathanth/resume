@@ -21,7 +21,7 @@ import {
   UpdateMeInput,
 } from "@/lib/api";
 import { useHasMounted } from "./use-has-mounted";
-import { clearAllFlowDrafts } from "@/lib/flow-drafts";
+import { claimBrowserFor, releaseBrowser } from "@/lib/browser-account";
 
 function onAuthSuccess(data: AuthResponse, router: ReturnType<typeof useRouter>) {
   setAccessToken(data.accessToken);
@@ -79,7 +79,12 @@ export function useMe() {
   const hasMounted = useHasMounted();
   return useQuery({
     queryKey: ME_QUERY_KEY,
-    queryFn: getMe,
+    // Each load also checks this browser's saved state belongs to this account (see browser-account).
+    queryFn: async () => {
+      const me = await getMe();
+      claimBrowserFor(me.id);
+      return me;
+    },
     enabled: hasMounted && hasSession(),
   });
 }
@@ -104,7 +109,7 @@ export function useLogout() {
     mutationFn: () => logout(),
     onSettled: () => {
       clearAccessToken();
-      clearAllFlowDrafts();
+      releaseBrowser();
       queryClient.clear();
       router.push("/login");
     },
@@ -130,7 +135,7 @@ export function useLogoutAll() {
     mutationFn: () => logoutAll(),
     onSettled: () => {
       clearAccessToken();
-      clearAllFlowDrafts();
+      releaseBrowser();
       queryClient.clear();
       router.push("/login");
     },
@@ -143,9 +148,11 @@ export function useDeleteAccount() {
   const router = useRouter();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { password?: string; confirmEmail?: string }) => deleteAccount(input),
+    mutationFn: (input: Parameters<typeof deleteAccount>[0]) => deleteAccount(input),
     onSuccess: () => {
       clearAccessToken();
+      // Nothing saved in this browser belongs to anyone now (unfinished flows hold CV content).
+      releaseBrowser();
       queryClient.clear();
       router.push("/");
     },

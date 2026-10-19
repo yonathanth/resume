@@ -1,15 +1,18 @@
 import React from "react";
 import { Metadata } from "next";
+import { pageMetadata } from "@/lib/metadata";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { CtaButton } from "@/components/CtaButton";
 import { Reveal } from "@/components/Reveal";
 import { TemplatesGallery } from "@/components/TemplatesGallery";
 
-export const metadata: Metadata = {
-  title: "Resume templates – Resumate",
-  description: "Recruiter-tested resume templates that read cleanly in applicant tracking systems, from simple one-pagers to academic CVs.",
-};
+export const metadata: Metadata = pageMetadata({
+  title: "Free resume templates",
+  description:
+    "Free, recruiter-tested resume templates that read cleanly in applicant tracking systems — simple one-pagers, professional layouts, two-column designs and academic CVs.",
+  path: "/templates",
+});
 
 export default function TemplatesPage() {
   return (
