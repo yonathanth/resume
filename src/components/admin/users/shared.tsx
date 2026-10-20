@@ -21,6 +21,7 @@ export const FEATURE_LABELS: Record<GrantableFeature, string> = {
   careerProfiles: "Career profiles",
   polishSummary: "AI summary polish",
   cvImport: "CV upload import",
+  aiPolish: "AI polish (CV score)",
   beta: "Beta program",
 };
 

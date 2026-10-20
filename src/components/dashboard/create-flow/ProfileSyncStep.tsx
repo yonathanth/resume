@@ -120,8 +120,7 @@ export function ProfileSyncStep({
   const suggestion = useQuery({
     queryKey: ["profile-suggestion", cvDocumentId, factsOnly, sourceProfile?.id ?? null],
     queryFn: async () => {
-      // A CV written from a profile goes back to it: ask for the change against that profile.
-      const found = await suggestProfileForCv({ cvDocumentId, factsOnly, targetProfileId: sourceProfile?.id });
+      const found = await suggestProfileForCv({ cvDocumentId, factsOnly, profileId: sourceProfile?.id });
       if (sourceProfile || found.autoSync !== "always" || !found.match || isEmptyChange(found.match.preview)) {
         return { found, autoApplied: null };
       }
@@ -146,6 +145,7 @@ export function ProfileSyncStep({
 
   const [newTitle, setNewTitle] = useState(roleTitle);
   const [alwaysUpdate, setAlwaysUpdate] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
@@ -308,7 +308,8 @@ export function ProfileSyncStep({
   // ---- update an existing profile
   if (target) {
     const counts = target.preview ? describeChangeCounts(target.preview) : "";
-    const nothingNew = target.preview !== null && !counts;
+    // Nothing to add (or nothing we can show): don't ask to update the profile.
+    const nothingNew = !counts;
     return (
       <div>
         {header(

@@ -9,6 +9,9 @@ import {
   getCvDocument,
   getProfileCvContent,
   polishSummary,
+  analyzeJobRequirements,
+  reviewCv,
+  polishCv,
   updateCvContent,
   uploadCvImport,
   ApiCvDocument,
@@ -353,5 +356,25 @@ export function usePolishSummary() {
       skills?: string[];
       experienceBullets?: string[];
     }) => polishSummary(input),
+  });
+}
+
+// ---- CV score panel (lib/cv-score) ----
+
+export function useAnalyzeJobRequirements() {
+  return useMutation({
+    mutationFn: ({ cvId, jobDescription }: { cvId: string; jobDescription?: string }) => analyzeJobRequirements(cvId, jobDescription),
+  });
+}
+
+export function useReviewCv() {
+  return useMutation({
+    mutationFn: ({ cvId, content }: { cvId: string; content?: CVContentDTO }) => reviewCv(cvId, content),
+  });
+}
+
+export function usePolishCv() {
+  return useMutation({
+    mutationFn: ({ cvId, ...input }: { cvId: string } & Parameters<typeof polishCv>[1]) => polishCv(cvId, input),
   });
 }

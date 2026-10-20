@@ -15,7 +15,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowModal, TemplateStep, JobGaps, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowModal, JobGaps, TemplateStep, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -82,7 +82,6 @@ interface TailorDraft {
   uploadedFileName: string | null;
   targetRole: string;
   jobDescription: string;
-  alignmentLevel: number;
   selectedTemplate: TemplateId;
   cvDocumentId: string | null;
   latestContent: CVContentDTO | undefined;
@@ -175,9 +174,6 @@ export function TailorCvModal({
   const [targetRole, setTargetRole] = useState(saved?.targetRole ?? "");
   const [jobDescription, setJobDescription] = useState(saved?.jobDescription ?? "");
 
-  // 0 to 10 Scroll / Slider
-  const [alignmentLevel, setAlignmentLevel] = useState<number>(saved?.alignmentLevel ?? 7);
-
 
   // Template selection state
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? DEFAULT_TEMPLATE_ID);
@@ -228,7 +224,7 @@ export function TailorCvModal({
 
   const draft: TailorDraft = {
     step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, sourceType, selectedProjectId,
-    newCvMethod, freestyleStory, fullName, email, phone, uploadedFileName, targetRole, jobDescription, alignmentLevel,
+    newCvMethod, freestyleStory, fullName, email, phone, uploadedFileName, targetRole, jobDescription,
     selectedTemplate, cvDocumentId, latestContent, analyzedSourceText, clarifyingQuestions, questionAnswers, jobGaps,
     confirmedGaps, sourceProfileId,
   };
@@ -400,14 +396,6 @@ export function TailorCvModal({
     questionAnswers
   );
 
-  // How closely to tailor: three plain choices on the AI's 0–10 alignment scale.
-  const ALIGNMENT_OPTIONS = [
-    { value: 3, label: "Stay close", hint: "Keeps your own wording; only light changes toward the job." },
-    { value: 7, label: "Balanced", hint: "Your real achievements, in the job's language and keywords." },
-    { value: 10, label: "Match closely", hint: "Rewrites hard around what this employer is looking for." },
-  ];
-  const alignmentHint = ALIGNMENT_OPTIONS.find((o) => o.value === alignmentLevel)?.hint;
-
   // Generate finalized tailored CV
   // `content` is passed in when finishing straight after the AI pass, before its state update has landed.
   const buildTailoredCv = (content: CVContentDTO | undefined = latestContent): CvData => {
@@ -420,7 +408,6 @@ export function TailorCvModal({
       targetRole: role,
       templateStyle: selectedTemplate,
       jobDescription,
-      tailorAlignmentScore: alignmentLevel,
     };
 
     if (cvDocumentId && content) {
@@ -444,10 +431,9 @@ export function TailorCvModal({
     else handleFinish(content);
   };
 
-  // Folds the job description, alignment slider, the answers to the AI's
-  // questions and any gaps the user confirmed into the backend document via
-  // the same refine endpoint CreateCvModal uses (enhancementLevel here comes
-  // from the 0–10 alignment slider instead of a fixed default). Resolves to
+  // Folds the job description, the answers to the AI's questions and any
+  // gaps the user confirmed into the backend document via the same refine
+  // endpoint CreateCvModal uses. Resolves to
   // the gaps still left and the tailored content, or null when it didn't go through.
   const runTailoring = async (gapsToAdd: ConfirmedGap[]): Promise<{ remaining: string[]; content: CVContentDTO } | null> => {
     if (!cvDocumentId) return null;
@@ -475,7 +461,8 @@ export function TailorCvModal({
         personal,
         // Tailoring to the job description is the AI rewrite itself.
         requiresRewrite: true,
-        enhancementLevel: alignmentLevel / 10,
+        // Writing strength only — how far to tailor to the job is fixed in the backend's tailoring rules.
+        enhancementLevel: 0.7,
         focusInstructions: gapsToAdd.length
           ? "Work every requirement listed under \"Details the candidate confirmed\" into this CV where it belongs, " +
             "using only what the candidate wrote about it."
@@ -926,31 +913,6 @@ export function TailorCvModal({
               placeholder="Paste the job posting, or a job title like Senior Accountant"
               className="w-full p-3 mb-5 rounded-xl bg-white border border-neutral-300 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 resize-none"
             />
-
-            {/* How closely to tailor */}
-            <div className="mb-6">
-              <p className="mb-2 text-sm font-semibold text-neutral-900">How closely should we match it?</p>
-              <div className="grid grid-cols-3 gap-1 rounded-xl border border-neutral-200 bg-neutral-50 p-1" role="radiogroup">
-                {ALIGNMENT_OPTIONS.map((option) => {
-                  const selected = alignmentLevel === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      onClick={() => setAlignmentLevel(option.value)}
-                      className={`cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors ${
-                        selected ? "bg-white text-neutral-950 shadow-[0_1px_2px_rgba(15,17,21,0.08)] ring-1 ring-neutral-200" : "text-neutral-500 hover:text-neutral-800"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {alignmentHint && <p className="mt-2 text-xs text-neutral-500">{alignmentHint}</p>}
-            </div>
 
             <div className="flex items-center gap-3">
               <button

@@ -175,7 +175,8 @@ export function toResumeDraft(doc: ApiCvDocument): ResumeDraft {
     fullName: personal.full_name || "",
     targetRole,
     targetCompany: "General Application",
-    atsScore: 90,
+    // Stored by the backend on every save (lib/cv-score); 0 until the CV is first scored.
+    atsScore: doc.score ?? 0,
     lastEdited: new Date(doc.updatedAt).toLocaleString(undefined, {
       month: "short",
       day: "numeric",

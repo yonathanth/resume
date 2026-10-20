@@ -67,11 +67,18 @@ import {
   downloadCvPdf,
   finalizeCvDocument,
   updateCvContent,
+  type CvPolishPatch,
+  type CvReviewTip,
 } from "@/lib/api";
-import { usePolishSummary } from "@/hooks/use-cv-generation";
+import { useAnalyzeJobRequirements, usePolishCv, usePolishSummary, useReviewCv } from "@/hooks/use-cv-generation";
+import { useProGate } from "@/hooks/use-pro-gate";
+import { checkTarget, jobRequirementsState, scoreEditorCv, type PolishTarget, type ScoreCheck } from "@/lib/cv-score";
+import { ProUpgradeModal } from "../ProUpgradeModal";
+import { CvScorePanel } from "./CvScorePanel";
 import { useCvPreview } from "@/hooks/use-cv-preview";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { useMe } from "@/hooks/use-auth";
 import { bulletToText, flattenSkillGroups, newLocalId, toCVContentPatch } from "@/lib/cv-mapper";
 import { getMissingDetails, type MissingDetail } from "@/lib/missing-details";
 import { resolvePreviewPath, type EditorTarget } from "@/lib/preview-paths";
@@ -576,6 +583,29 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
   const toast = useToast();
   const isPro = useSubscriptionStatus().data?.isPro ?? false;
   const [cv, setCv] = useState<CvData>(initialData);
+
+  // The name, email, phone and occupation given at sign-up fill any of those
+  // the CV leaves empty, so nobody is asked twice. Runs once per editor visit
+  // and never overwrites what the CV already has; autosave then stores it.
+  const { data: me } = useMe();
+  const filledFromAccountRef = useRef(false);
+  useEffect(() => {
+    if (!me || filledFromAccountRef.current) return;
+    filledFromAccountRef.current = true;
+    const accountName = [me.firstName, me.lastName].filter(Boolean).join(" ") || me.fullName || "";
+    setCv((prev) => {
+      const p = prev.personalInfo;
+      const filled = {
+        fullName: p.fullName.trim() ? p.fullName : accountName,
+        email: p.email.trim() ? p.email : me.email || "",
+        phone: p.phone.trim() ? p.phone : me.phone || "",
+        // The saved headline falls back to the target role (see toCVContentPatch), so only fill when both are empty.
+        headline: p.headline.trim() || prev.targetRole.trim() ? p.headline : me.occupationTitle || "",
+      };
+      const changed = (Object.keys(filled) as (keyof typeof filled)[]).some((k) => filled[k] !== p[k]);
+      return changed ? { ...prev, personalInfo: { ...p, ...filled } } : prev;
+    });
+  }, [me]);
   const [isSaving, setIsSaving] = useState(false);
   const [showExportChecklist, setShowExportChecklist] = useState(false);
   const [showMissingList, setShowMissingList] = useState(false);
@@ -686,6 +716,11 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       title: "Let AI polish your summary",
       body: "Write a rough summary in your own words, then press AI Polish to tighten it up.",
       onShow: () => openSection("summary"),
+    },
+    {
+      target: "editor-score",
+      title: "Watch your score",
+      body: "Your CV is scored by the same checks as every other CV, and against the job if you add one. Click it to see what's costing points and jump straight to it.",
     },
     {
       target: "editor-download",
@@ -893,6 +928,138 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
     return () => window.removeEventListener("keydown", handler);
   }, [saveNow, toast]);
 
+  // ---- CV score (lib/cv-score) ----
+  // The same rules the backend stores the score with, run live on every edit.
+  const cvScore = useMemo(() => scoreEditorCv(cv, content), [cv, content]);
+  const jobState = jobRequirementsState(cv);
+  const { isPaywallOpen, openPaywall, closePaywall, isProRequired } = useProGate();
+  const analyzeJobMutation = useAnalyzeJobRequirements();
+  const reviewMutation = useReviewCv();
+  const polishCvMutation = usePolishCv();
+  const [jobError, setJobError] = useState<string | null>(null);
+  const [reviewTips, setReviewTips] = useState<CvReviewTip[] | null>(null);
+  const [polishingKey, setPolishingKey] = useState<string | null>(null);
+  // The job description an analysis failed for — not retried automatically until it changes.
+  const failedJdRef = useRef<string | null>(null);
+
+  // Reads the job description once (the backend caches it per job description),
+  // so the job-match part of the score always uses the same requirements.
+  const runJobAnalysis = useCallback(async () => {
+    const jobDescription = latestRef.current.cv.jobDescription ?? "";
+    if (!jobDescription.trim()) return;
+    setJobError(null);
+    try {
+      const id = await saveNow();
+      const res = await analyzeJobMutation.mutateAsync({ cvId: id, jobDescription });
+      failedJdRef.current = null;
+      setCv((prev) => ({ ...prev, jobRequirements: { forJobDescription: jobDescription, data: res.jobRequirements.data } }));
+    } catch (err) {
+      failedJdRef.current = jobDescription;
+      setJobError(err instanceof ApiError ? err.message : "Couldn't read the job description.");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mutateAsync is stable; the mutation object isn't
+  }, [saveNow]);
+
+  const jobPending = jobState.status === "pending";
+  const analyzingJob = analyzeJobMutation.isPending;
+  useEffect(() => {
+    if (!jobPending || analyzingJob || failedJdRef.current === (cv.jobDescription ?? "")) return;
+    // Wait until the user stops typing the job description.
+    const timer = setTimeout(() => void runJobAnalysis(), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [jobPending, analyzingJob, cv.jobDescription, runJobAnalysis]);
+
+  const focusOn = (target: EditorTarget) => {
+    setActiveSection(target.section);
+    if (target.field) setFocusTarget({ ...target, signal: Date.now() });
+    else formScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleReview = async () => {
+    try {
+      const id = await saveNow();
+      const { tips } = await reviewMutation.mutateAsync({ cvId: id, content: toCVContentPatch(latestRef.current.cv) });
+      setReviewTips(tips);
+    } catch (err) {
+      toast.error("Couldn't check your CV", { description: err instanceof ApiError ? err.message : "Please try again in a moment." });
+    }
+  };
+
+  // Applies an AI polish to the editor. Entries are matched by id, captured
+  // when the request was sent, so a reorder in the meantime can't misplace them.
+  const applyPolish = (prev: CvData, patch: CvPolishPatch, experienceIds: string[]): CvData => {
+    const next = { ...prev };
+    if (patch.summary !== undefined) next.summary = patch.summary;
+    if (patch.headline !== undefined) next.personalInfo = { ...prev.personalInfo, headline: patch.headline };
+    if (patch.experience) {
+      const byId = new Map(patch.experience.map((e) => [experienceIds[e.index], e.bullets]));
+      next.experiences = prev.experiences.map((exp) => {
+        const bullets = byId.get(exp.id);
+        return bullets ? { ...exp, bullets: bullets.map((text) => ({ id: newLocalId("b"), label: "", text })) } : exp;
+      });
+    }
+    if (patch.skillGroups) {
+      next.skillGroups = patch.skillGroups.map((g) => ({ id: newLocalId("sg"), category: g.category, items: g.items }));
+      next.skills = flattenSkillGroups(next.skillGroups);
+    }
+    return next;
+  };
+
+  // Undo puts back only what the polish replaced, keeping any edits made since.
+  const revertPolish = (current: CvData, before: CvData, patch: CvPolishPatch, experienceIds: string[]): CvData => {
+    const next = { ...current };
+    if (patch.summary !== undefined) next.summary = before.summary;
+    if (patch.headline !== undefined) next.personalInfo = { ...current.personalInfo, headline: before.personalInfo.headline };
+    if (patch.experience) {
+      const touched = new Set(patch.experience.map((e) => experienceIds[e.index]));
+      const original = new Map(before.experiences.map((exp) => [exp.id, exp.bullets]));
+      next.experiences = current.experiences.map((exp) =>
+        touched.has(exp.id) && original.has(exp.id) ? { ...exp, bullets: original.get(exp.id)! } : exp
+      );
+    }
+    if (patch.skillGroups) {
+      next.skillGroups = before.skillGroups;
+      next.skills = before.skills;
+    }
+    return next;
+  };
+
+  const handleScorePolish = async (targets: PolishTarget[] | "all", key: string) => {
+    if (!isPro) {
+      openPaywall();
+      return;
+    }
+    setPolishingKey(key);
+    try {
+      const id = await saveNow();
+      const before = latestRef.current.cv;
+      const experienceIds = before.experiences.map((exp) => exp.id);
+      const res = await polishCvMutation.mutateAsync({ cvId: id, content: toCVContentPatch(before), targets });
+      const { patch } = res;
+      const changed = [
+        patch.summary !== undefined && "summary",
+        patch.headline !== undefined && "headline",
+        patch.experience?.length && `${patch.experience.length} role${patch.experience.length === 1 ? "" : "s"}`,
+        patch.skillGroups && "skills",
+      ].filter(Boolean) as string[];
+      if (changed.length === 0) {
+        toast.info("Nothing to change", { description: "AI couldn't improve this without inventing details. Try editing it yourself." });
+        return;
+      }
+      setCv((prev) => applyPolish(prev, patch, experienceIds));
+      toast.success(`Score ${res.score} → ${res.projectedScore}`, {
+        description: `Polished your ${changed.join(", ")}. Check the wording is still true to you.`,
+        action: { label: "Undo", onClick: () => setCv((prev) => revertPolish(prev, before, patch, experienceIds)) },
+        duration: 8000,
+      });
+    } catch (err) {
+      if (isProRequired(err)) return;
+      toast.error("Couldn't polish your CV", { description: err instanceof ApiError ? err.message : "Please try again in a moment." });
+    } finally {
+      setPolishingKey(null);
+    }
+  };
+
   // What the backend requires before it will export (see POST /cv/:id/finalize).
   const missingForExport = [
     !cv.personalInfo.fullName.trim() && { label: "Your full name", section: "personal" },
@@ -957,7 +1124,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       setIsSaving(false);
     }
     if (hasSaved || isDirty) {
-      onSave({ ...latestRef.current.cv, id: docIdRef.current ?? latestRef.current.cv.id });
+      onSave({ ...latestRef.current.cv, id: docIdRef.current ?? latestRef.current.cv.id, atsScore: cvScore.total });
     } else {
       onBack();
     }
@@ -1172,8 +1339,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Below lg the preview column is hidden — this opens it full screen.
-              Phones use the floating "Preview CV" button instead. */}
+          {/* Below lg the preview column is hidden — this opens it full screen. */}
           <button
             type="button"
             onClick={() => setMobilePreviewOpen(true)}
@@ -2237,6 +2403,12 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
           </div>
         </div>
       )}
+
+      <ProUpgradeModal
+        isOpen={isPaywallOpen}
+        onClose={closePaywall}
+        reason="AI polish rewrites your summary, bullets and skills to fix what's costing points. It's part of FitCV Pro."
+      />
 
       {/* Spotlight tour over the real editor — shown before editing a CV that opened incomplete. */}
       {showWalkthrough && (
