@@ -8,7 +8,6 @@ import { notifyCvDownloaded } from "@/lib/cv-rating";
 import { CvPreviewFrame } from "./create-flow/CvPreviewFrame";
 import { useToast } from "@/components/Toaster";
 import { getCvFileName } from "@/lib/utils";
-import { scoreTone } from "@/lib/cv-score";
 import { ResumeDraft, templateLabel } from "./create-flow/types";
 
 /** A saved CV's first page, rendered by the backend with the CV's own template. */
@@ -134,17 +133,6 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
           draft={draft}
           className="absolute inset-0 group-hover:scale-[1.02] origin-top transition-transform duration-500"
         />
-
-        {/* The CV score the editor shows (stored on every save). 0 means it hasn't been scored yet. */}
-        {draft.atsScore > 0 && (
-          <span
-            className={`absolute top-3 left-3 inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-white/60 shadow-sm text-xs font-bold tabular-nums ${scoreTone(draft.atsScore).bg} ${scoreTone(draft.atsScore).text}`}
-            title="CV score"
-          >
-            {draft.atsScore}
-            <span className="font-medium opacity-70">/100</span>
-          </span>
-        )}
 
         {/* Frosted glass: the page blurs out toward the bottom... */}
         <div

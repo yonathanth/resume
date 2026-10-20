@@ -382,7 +382,13 @@ export function CreateCvModal({
       setFullName(personal.full_name ?? "");
       setTargetRole(personal.title ?? "");
       setPhone(personal.phone ?? "");
-      setStep("scratch-missing");
+      // Nothing to ask: go straight on to the job question.
+      if (document.questions?.length) {
+        setStep("scratch-missing");
+      } else {
+        setJobBackStep("scratch-freestyle");
+        setStep("job-ask");
+      }
     } catch (err) {
       if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof ApiError ? err.message : "Could not analyze your story. Please try again.");

@@ -320,7 +320,8 @@ export function TailorCvModal({
       setEmail(personal.email ?? "");
       setPhone(personal.phone ?? "");
       setTargetRole(personal.title ?? "");
-      setStep("new-cv-missing");
+      // Nothing to ask: go straight on to the job description.
+      setStep(document.questions?.length ? "new-cv-missing" : "jd-and-slider");
     } catch (err) {
       if (proGate.isProRequired(err)) {
         setStep("new-cv-upload");
@@ -368,7 +369,8 @@ export function TailorCvModal({
       setEmail(personal.email ?? "");
       setPhone(personal.phone ?? "");
       setTargetRole(personal.title ?? "");
-      setStep("new-cv-missing");
+      // Nothing to ask: go straight on to the job description.
+      setStep(document.questions?.length ? "new-cv-missing" : "jd-and-slider");
     } catch (err) {
       if (proGate.isProRequired(err)) return;
       setFlowError(err instanceof Error ? err.message : "Could not analyze your story. Please try again.");
@@ -919,7 +921,9 @@ export function TailorCvModal({
                 type="button"
                 onClick={() => {
                   if (sourceType === "new-cv") {
-                    setStep("new-cv-missing");
+                    if (clarifyingQuestions.length) setStep("new-cv-missing");
+                    else if (newCvMethod === "scratch") setStep("new-cv-freestyle");
+                    else setStep("new-cv-upload");
                   } else {
                     setStep("pick-source-item");
                   }
