@@ -182,7 +182,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
           <p className="mt-1 text-sm text-neutral-500 max-w-md mx-auto leading-relaxed">
             {isPro
               ? "One profile per role you go for."
-              : "Career profiles are part of GoMoxie Pro. Keep everything for a role in one place and build tailored CVs from it."}
+              : "Career profiles are part of gomoxie pro. Keep everything for a role in one place and build tailored CVs from it."}
           </p>
           <button
             type="button"
@@ -362,7 +362,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
         </div>
       )}
 
-      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Career profiles are part of GoMoxie Pro." />
+      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Career profiles are part of gomoxie pro." />
     </div>
   );
 }

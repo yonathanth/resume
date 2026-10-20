@@ -2,7 +2,7 @@
 // the sitemap and structured data all read them from here.
 
 export const SITE = {
-  name: "GoMoxie",
+  name: "gomoxie",
   /** Production origin, no trailing slash. NEXT_PUBLIC_SITE_URL overrides it (staging, previews). */
   url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://gomoxie.app").replace(/\/$/, ""),
   tagline: "AI resumes that land interviews",

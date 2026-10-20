@@ -729,7 +729,7 @@ function PlanSection() {
 
           <p className="mt-1 text-sm text-neutral-500 max-w-xl">
             {isGrant
-              ? `Pro access from the GoMoxie team${
+              ? `Pro access from the gomoxie team${
                   subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""
                 }. You aren't being charged for it.`
               : subscription.isPro

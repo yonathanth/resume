@@ -65,7 +65,7 @@ export function Footer() {
           <div className="max-w-sm">
             <Link href="/" className="inline-flex items-center gap-2.5 group">
               <BrandMark size={36} className="transition-transform duration-200 group-hover:scale-105" />
-              <span className="text-lg font-bold tracking-tight text-white">GoMoxie</span>
+              <span className="text-lg font-bold tracking-tight text-white">gomoxie</span>
             </Link>
             <p className="mt-5 flex items-start gap-2.5 text-sm sm:text-base text-neutral-400 leading-relaxed">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
@@ -104,7 +104,7 @@ export function Footer() {
             Back to top
             <ArrowUp className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
           </Link>
-          <span className="order-3 sm:order-1 w-full sm:w-auto text-neutral-600 sm:text-neutral-500">© GoMoxie 2026. All rights reserved.</span>
+          <span className="order-3 sm:order-1 w-full sm:w-auto text-neutral-600 sm:text-neutral-500">© gomoxie 2026. All rights reserved.</span>
         </div>
       </div>
     </footer>

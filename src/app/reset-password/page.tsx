@@ -4,7 +4,7 @@ import { ResetPasswordView } from "@/components/AccountRecoveryViews";
 
 export const metadata: Metadata = {
   title: "Choose a new password",
-  description: "Set a new password for your GoMoxie account.",
+  description: "Set a new password for your gomoxie account.",
   // Account and token pages: not for search results.
   robots: NO_INDEX,
 };

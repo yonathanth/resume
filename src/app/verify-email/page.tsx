@@ -4,7 +4,7 @@ import { VerifyEmailView } from "@/components/VerifyEmailView";
 
 export const metadata: Metadata = {
   title: "Confirm your email",
-  description: "Confirm your email address to finish creating your GoMoxie account.",
+  description: "Confirm your email address to finish creating your gomoxie account.",
   // Account and token pages: not for search results.
   robots: NO_INDEX,
 };

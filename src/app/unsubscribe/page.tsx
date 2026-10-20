@@ -4,7 +4,7 @@ import { UnsubscribeView } from "@/components/AccountRecoveryViews";
 
 export const metadata: Metadata = {
   title: "Unsubscribe",
-  description: "Stop product announcement emails from GoMoxie.",
+  description: "Stop product announcement emails from gomoxie.",
   // Account and token pages: not for search results.
   robots: NO_INDEX,
 };

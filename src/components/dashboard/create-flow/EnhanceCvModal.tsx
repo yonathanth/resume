@@ -432,7 +432,7 @@ export function EnhanceCvModal({
         <ProUpgradeModal
           isOpen={proGate.isPaywallOpen}
           onClose={proGate.closePaywall}
-          reason="You've already used your free Improve generation. Upgrade to GoMoxie Pro for unlimited AI tailoring."
+          reason="You've already used your free Improve generation. Upgrade to gomoxie pro for unlimited AI tailoring."
         />
       }
     >

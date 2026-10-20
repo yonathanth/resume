@@ -4,7 +4,7 @@ import { fetchPublicTemplate, templatePreviewFetchUrl } from "@/lib/templates-se
 
 // A template page's share image: the real template (its sample CV, rendered
 // by the backend) with Moxie beside it.
-export const alt = "A free, ATS-friendly resume template from GoMoxie";
+export const alt = "A free, ATS-friendly resume template from gomoxie";
 export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 

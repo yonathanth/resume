@@ -92,10 +92,10 @@ export function Navbar({ theme = "light" }: NavbarProps) {
       >
         {/* Logo + primary links */}
         <div className="flex items-center gap-10">
-          <Link href="/" className="flex items-center gap-2 group" aria-label="GoMoxie home">
+          <Link href="/" className="flex items-center gap-2 group" aria-label="gomoxie home">
             <BrandMark size={36} className="transition-transform duration-200 group-hover:scale-105" />
             <span className={`text-[17px] font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-950"}`}>
-              GoMoxie
+              gomoxie
             </span>
           </Link>
 

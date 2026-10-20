@@ -6,7 +6,7 @@ import { LegalPage, type LegalSection } from "@/components/LegalPage";
 export const metadata: Metadata = pageMetadata({
   title: "Privacy Policy",
   description:
-    "What GoMoxie collects, why, and the choices you have.",
+    "What gomoxie collects, why, and the choices you have.",
   path: "/privacy",
 });
 
@@ -42,7 +42,7 @@ const sections: LegalSection[] = [
         <li>To run your account and keep you signed in.</li>
         <li>To generate, improve, tailor, preview and export your resumes.</li>
         <li>To manage your plan and the number of free generations you have left.</li>
-        <li>To keep GoMoxie secure and fix problems.</li>
+        <li>To keep gomoxie secure and fix problems.</li>
       </ul>
     ),
   },
@@ -50,7 +50,7 @@ const sections: LegalSection[] = [
     title: "AI processing",
     body: (
       <p>
-        When you ask GoMoxie to write or rewrite a resume, the relevant content — for example your experience and a job
+        When you ask gomoxie to write or rewrite a resume, the relevant content — for example your experience and a job
         description you pasted — is sent to our AI provider to produce the result. It&apos;s used to answer that request,
         not to advertise to you.
       </p>
@@ -60,7 +60,7 @@ const sections: LegalSection[] = [
     title: "Who we share it with",
     body: (
       <>
-        <p>We don&apos;t sell your personal information. We share it only with services that help us run GoMoxie:</p>
+        <p>We don&apos;t sell your personal information. We share it only with services that help us run gomoxie:</p>
         <ul>
           <li>our AI provider, to generate resume content;</li>
           <li>Google, if you choose to sign in with Google;</li>
@@ -111,7 +111,7 @@ export default function PrivacyPage() {
       updated="October 6, 2026"
       intro={
         <p>
-          Your resume holds a lot about you. This policy explains what GoMoxie collects, why, and the choices you have.
+          Your resume holds a lot about you. This policy explains what gomoxie collects, why, and the choices you have.
           It works alongside our{" "}
           <Link href="/terms" className="font-medium text-neutral-900 underline decoration-neutral-300 underline-offset-2">
             Terms of Service

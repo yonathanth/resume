@@ -563,7 +563,7 @@ export function TailorCvModal({
         <ProUpgradeModal
           isOpen={proGate.isPaywallOpen}
           onClose={proGate.closePaywall}
-          reason="You've already used your free Tailor generation. Upgrade to GoMoxie Pro for unlimited AI tailoring."
+          reason="You've already used your free Tailor generation. Upgrade to gomoxie pro for unlimited AI tailoring."
         />
       }
     >
@@ -618,7 +618,7 @@ export function TailorCvModal({
                   description={
                     canUseProfiles
                       ? "Tailor everything a role profile holds to this job."
-                      : "A GoMoxie Pro feature: build from your saved role profiles."
+                      : "A gomoxie pro feature: build from your saved role profiles."
                   }
                   onClick={() => {
                     if (!canUseProfiles) {

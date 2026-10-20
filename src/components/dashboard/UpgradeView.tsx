@@ -111,7 +111,7 @@ export function UpgradeView() {
       <div className="flex items-end justify-between gap-6">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-neutral-950 sm:text-3xl">
-            {subscription.isExpired ? "Renew GoMoxie Pro" : "Upgrade to GoMoxie Pro"}
+            {subscription.isExpired ? "Renew gomoxie pro" : "Upgrade to gomoxie pro"}
           </h2>
           <p className="mt-2 text-sm text-neutral-500">
             {subscription.isExpired
