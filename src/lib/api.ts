@@ -1,5 +1,7 @@
 import type { PolishTarget, ScoreJobRequirements } from "@/lib/cv-score/engine";
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// In production, the API is proxied through /api/v1 so cookies work (same-site).
+// Locally, NEXT_PUBLIC_API_URL points to the backend (default: localhost:8000).
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // The session is the httpOnly refresh cookie (30 days, renewed on every
 // refresh). The short-lived access token lives only in memory, never in
