@@ -1339,6 +1339,28 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
         </div>
 
         <div className="flex items-center gap-2">
+          <CvScorePanel
+            score={cvScore}
+            isPro={isPro}
+            job={jobState}
+            jobDescription={cv.jobDescription ?? ""}
+            onJobDescriptionChange={(jobDescription) => {
+              failedJdRef.current = null;
+              setJobError(null);
+              setCv((prev) => ({ ...prev, jobDescription }));
+            }}
+            analyzingJob={analyzingJob}
+            jobError={jobError}
+            onRetryJob={() => void runJobAnalysis()}
+            onGoTo={(check: ScoreCheck) => focusOn(checkTarget(cv, check))}
+            onPolish={(targets, key) => void handleScorePolish(targets, key)}
+            polishingKey={polishingKey}
+            onReview={() => void handleReview()}
+            reviewing={reviewMutation.isPending}
+            tips={reviewTips}
+            onUpgrade={openPaywall}
+          />
+
           {/* Below lg the preview column is hidden — this opens it full screen. */}
           <button
             type="button"
