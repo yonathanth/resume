@@ -12,8 +12,7 @@ import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
 
 const ACCEPT = ".pdf,.docx,.png,.jpg,.jpeg";
 const ACCEPTED = /\.(pdf|docx|png|jpe?g)$/i;
-/** Moxie's size on the card, and how long her celebration plays before the flow opens. */
-const MOXIE_SIZE = 104;
+/** How long her celebration plays before the flow opens. (Her size is the --moxie-size set where she stands.) */
 const CELEBRATE_MS = 900;
 
 /** What Moxie is saying, in the bubble beside her — each line on her beat (see the "invite" animation). */
@@ -43,6 +42,23 @@ export function HeroStart() {
   const [dragging, setDragging] = useState(false);
   const moxieRef = useRef<MoxieHandle>(null);
   const reducedMotion = usePrefersReducedMotion();
+  // She starts once her card is on screen (it sits below the fold), so the greeting isn't missed.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setSeen(true);
+        observer.disconnect();
+      },
+      { threshold: 0.45 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   const [line, setLine] = useState<Line>("greet");
   const scratchTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(scratchTimer.current), []);
@@ -70,7 +86,7 @@ export function HeroStart() {
   };
 
   return (
-    <div className="w-full max-w-xl pt-28">
+    <div ref={wrapperRef} className="relative w-full max-w-xl pt-28 lg:flex lg:max-w-4xl lg:items-end lg:gap-10 lg:pt-20">
       {/* The whole card takes a dropped file */}
       <div
         onDragOver={(e) => {
@@ -89,35 +105,10 @@ export function HeroStart() {
           setDragging(false);
           start(e.dataTransfer.files?.[0]);
         }}
-        className="relative rounded-[26px] border border-neutral-200/80 bg-white p-2.5 text-left shadow-[0_28px_60px_-32px_rgba(226,71,11,0.35),0_10px_28px_-18px_rgba(15,17,21,0.2)]"
+        className="relative rounded-[26px] border border-neutral-200/80 bg-white p-2.5 text-left lg:min-w-0 lg:flex-1 shadow-[0_28px_60px_-32px_rgba(226,71,11,0.35),0_10px_28px_-18px_rgba(15,17,21,0.2)]"
       >
         {/* A warm glow behind the card, so it sits a little forward of the page */}
         <div aria-hidden="true" className="pointer-events-none absolute -inset-x-6 -bottom-8 top-6 -z-10 rounded-[40px] bg-[radial-gradient(60%_70%_at_30%_60%,rgba(255,94,31,0.14),transparent_70%)] blur-2xl" />
-        {/* What she's saying, beside her (the buttons below say it too, so it's hidden from screen readers) */}
-        <SpeechBubble text={LINES[reducedMotion && line === "greet" ? "still" : line]} />
-        {/* Moxie, standing on the card's top edge */}
-        <Moxie
-          ref={moxieRef}
-          animation="invite"
-          size={MOXIE_SIZE}
-          ticklish
-          shadow={false}
-          title="Moxie"
-          // Each round: "upload yours", then "or start from scratch", on her beat.
-          onCycle={(looping) => {
-            if (looping !== "invite") return;
-            say("upload");
-            scratchTimer.current = setTimeout(() => setLine("scratch"), INVITE_SCRATCH_AT * 1000);
-          }}
-          // Reactions end in idle: after a wave, straight back to inviting.
-          onAnimationComplete={(done) => {
-            if (done !== "wave") return;
-            say("greet");
-            moxieRef.current?.play("invite");
-          }}
-          className="!absolute right-8 top-0 z-10"
-          style={{ marginTop: -MOXIE_GROUND.y * MOXIE_SIZE }}
-        />
         <input
           ref={inputRef}
           type="file"
@@ -178,20 +169,53 @@ export function HeroStart() {
         </div>
       </div>
 
-      {fileError && <p className="mt-2 text-center text-sm font-medium text-red-600">{fileError}</p>}
+      {/* Moxie: on phones and tablets, standing on the card's top edge; on large screens, bigger, in a column beside the
+          card on its right (her pointing claw reaches left, to it), her bubble stacked over her head */}
+      <div
+        className="absolute right-8 z-10 [--moxie-size:104px] lg:relative lg:right-auto lg:!top-0 lg:flex lg:w-[15rem] lg:shrink-0 lg:flex-col lg:items-end lg:[--moxie-size:168px]"
+        style={{ top: `calc(7rem - var(--moxie-size) * ${MOXIE_GROUND.y})` }}
+      >
+        {/* What she's saying (the tiles say it too, so it's hidden from screen readers) */}
+        {seen && <SpeechBubble text={LINES[reducedMotion && line === "greet" ? "still" : line]} />}
+        <Moxie
+          ref={moxieRef}
+          animation={seen ? "invite" : "idle"}
+          size="var(--moxie-size)"
+          ticklish
+          title="Moxie"
+          // Each round: "upload yours", then "or start from scratch", on her beat.
+          onCycle={(looping) => {
+            if (looping !== "invite") return;
+            say("upload");
+            scratchTimer.current = setTimeout(() => setLine("scratch"), INVITE_SCRATCH_AT * 1000);
+          }}
+          // Reactions end in idle: after a wave, straight back to inviting.
+          onAnimationComplete={(done) => {
+            if (done !== "wave") return;
+            say("greet");
+            moxieRef.current?.play("invite");
+          }}
+          className="block"
+        />
+      </div>
+
+      {fileError && <p className="mt-2 text-center text-sm font-medium text-red-600 lg:absolute lg:inset-x-0 lg:-bottom-8">{fileError}</p>}
     </div>
   );
 }
 
-/** How far above the card's top edge her eyes are (she stands on it), so the bubble can sit level with them. */
-const EYE_HEIGHT = ((393 - 168) / 320) * MOXIE_SIZE;
+/** How far above her feet her eyes are, as a fraction of her size, so the bubble can sit level with them. */
+const EYE_RISE = (393 - 168) / 320;
+/** …and so how far up from the bottom of her box: under her feet, then up to her eyes. */
+const EYE_FROM_BOTTOM = 1 - MOXIE_GROUND.y + EYE_RISE;
 
 /** Moxie "typing" before each line arrives (moxie-typing in globals.css). */
 const TYPING_MS = 700;
 
 /**
- * Moxie's speech bubble: up beside her head, its bottom edge just below her
- * eyes and its tail curling toward them; longer lines grow it upward.
+ * Moxie's speech bubble: beside her head (its bottom edge just below her eyes,
+ * its tail curling toward them; longer lines grow it upward) or, on large
+ * screens, stacked over her head in her column, its tail curling down to her.
  * For each new line the old one fades, she "types" for a
  * moment (three bouncing dots), then the line arrives word by word. They all
  * share one grid cell, so the bubble only grows or shrinks to fit, never jumps.
@@ -203,12 +227,15 @@ function SpeechBubble({ text }: { text: string }) {
   return (
     <div
       aria-hidden="true"
-      className="absolute z-10 w-max max-w-[12rem] rounded-[20px] bg-neutral-100 px-4 py-3 shadow-[0_10px_24px_-16px_rgba(15,17,21,0.25)] ring-1 ring-neutral-900/[0.04] sm:max-w-[15rem]"
-      style={{ right: `calc(2rem + ${MOXIE_SIZE + 4}px)`, bottom: `calc(100% + ${Math.round(EYE_HEIGHT - 14)}px)` }}
+      className="absolute right-[calc(100%+4px)] z-10 w-max max-w-[12rem] rounded-[20px] bg-neutral-100 px-4 py-3 shadow-[0_10px_24px_-16px_rgba(15,17,21,0.25)] ring-1 ring-neutral-900/[0.04] bottom-[var(--bubble-bottom)] sm:max-w-[15rem] lg:static lg:mb-1 lg:w-full lg:max-w-none"
+      style={{ "--bubble-bottom": `calc(var(--moxie-size) * ${EYE_FROM_BOTTOM.toFixed(3)} - 14px)` } as React.CSSProperties}
     >
-      {/* The tail, curling down toward her */}
-      <svg viewBox="0 0 14 18" className="absolute -right-[11px] bottom-2 h-[18px] w-[14px] text-neutral-100" aria-hidden="true">
+      {/* The tail: on its right edge curling toward her (beside her), or under it curling down to her (above her) */}
+      <svg viewBox="0 0 14 18" className="absolute -right-[11px] bottom-2 h-[18px] w-[14px] text-neutral-100 lg:hidden" aria-hidden="true">
         <path d="M0 0 C1 7 5 13 14 17 C7 17.5 2.5 15 0 12 Z" fill="currentColor" />
+      </svg>
+      <svg viewBox="0 0 18 14" className="absolute -bottom-[11px] right-[70px] hidden h-[14px] w-[18px] text-neutral-100 lg:block" aria-hidden="true">
+        <path d="M0 0 C7 1 13 5 17 14 C17.5 7 15 2.5 12 0 Z" fill="currentColor" />
       </svg>
       <div className="grid text-[13.5px] font-medium leading-[1.4] text-neutral-900 sm:text-[14.5px]">
         {shown.leaving && (

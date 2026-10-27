@@ -275,8 +275,56 @@ body {
   animation: hero-shimmer 6s ease-in-out infinite;
 }
 
+/* The hero's before & after (HeroBeforeAfter): the old CV settles in, the arrow
+   draws itself, then the new CV lands over it and a sheen sweeps across it —
+   once on arrival, then every few seconds. */
+@keyframes hero-before-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+.hero-before-in {
+  animation: hero-before-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+}
+
+@keyframes hero-after-land {
+  0% { opacity: 0; transform: translate(28px, 46px) rotate(7deg) scale(0.9); }
+  60% { opacity: 1; }
+  78% { transform: translate(0, -6px) rotate(-1deg) scale(1.015); }
+  100% { opacity: 1; transform: none; }
+}
+
+.hero-after-land {
+  animation: hero-after-land 1.1s cubic-bezier(0.22, 1, 0.36, 1) 1.05s both;
+}
+
+@keyframes hero-arrow-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+
+.hero-arrow-draw {
+  stroke-dasharray: 1;
+  animation: hero-arrow-draw 0.55s ease-out 0.7s both;
+}
+
+.hero-arrow-head {
+  animation-delay: 1.2s;
+  animation-duration: 0.2s;
+}
+
+@keyframes hero-after-shine {
+  0%, 12% { transform: translateX(0); }
+  32%, 100% { transform: translateX(320%); }
+}
+
+.hero-after-shine {
+  animation: hero-after-shine 6s ease-in-out 1.7s infinite both;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .hero-rise, .hero-glow, .hero-shimmer { animation: none; }
+  .hero-rise, .hero-glow, .hero-shimmer, .hero-before-in, .hero-after-land, .hero-arrow-draw, .hero-after-shine { animation: none; }
+  .hero-arrow-draw { stroke-dasharray: none; }
 }
 
 /* How it works (components/HowItWorks.tsx) — each card replays its step of the

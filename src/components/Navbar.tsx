@@ -95,15 +95,19 @@ export function Navbar({ theme = "light" }: NavbarProps) {
         className="mx-auto flex h-20 sm:h-24 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10"
       >
         {/* Logo + primary links */}
-        <div className="flex items-center gap-10">
+        <div className="flex items-center gap-6 lg:gap-8">
           <Link href="/" className="flex items-center gap-2 group" aria-label="gomoxie home">
             <BrandMark size={36} className="transition-transform duration-200 group-hover:scale-105" />
-            <span className={`text-lg font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-950"}`}>
+            <span className={`text-[16px] font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-950"}`}>
               gomoxie
             </span>
           </Link>
 
-          <div className="hidden md:flex items-center gap-8 text-[16px] font-medium">
+          {/* A hairline between the logo and the links, so the links read as their own row */}
+          <span aria-hidden="true" className={`hidden h-5 w-px md:block ${isDark ? "bg-neutral-800" : "bg-neutral-200"}`} />
+
+          {/* The links: plain black text, with a short underline on hover (the logo's name is the quiet grey one) */}
+          <div className="hidden md:flex items-center gap-7 text-[16px] font-medium">
             {NAV_LINKS.map((link) => {
               const current = isCurrent(link.href);
               return (
@@ -111,14 +115,16 @@ export function Navbar({ theme = "light" }: NavbarProps) {
                   key={link.href}
                   href={link.href}
                   aria-current={current ? "page" : undefined}
-                  className={`group relative transition-colors duration-200 ${current ? "text-accent" : linkClass}`}
+                  className={`group relative py-1 transition-colors duration-200 ${
+                    current ? "text-accent" : isDark ? "text-white hover:text-neutral-300" : "text-neutral-950 hover:text-neutral-600"
+                  }`}
                 >
                   {link.label}
-                  {/* A short centred underline: grows in under the current page, faintly on hover for the others. */}
+                  {/* A short centred underline: grows in under the current page, and under the others on hover. */}
                   <span
                     aria-hidden="true"
-                    className={`absolute -bottom-0.5 left-1/2 h-[2px] w-5 -translate-x-1/2 origin-center rounded-full bg-accent transition-transform duration-300 ease-out ${
-                      current ? "nav-underline-in scale-x-100" : "scale-x-0 opacity-60 group-hover:scale-x-100"
+                    className={`absolute -bottom-0.5 left-1/2 h-[2px] w-4 -translate-x-1/2 origin-center rounded-full bg-accent transition-transform duration-300 ease-out ${
+                      current ? "nav-underline-in scale-x-100" : "scale-x-0 group-hover:scale-x-100"
                     }`}
                   />
                 </Link>

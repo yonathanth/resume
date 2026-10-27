@@ -9,15 +9,16 @@ import { CtaButton } from "@/components/CtaButton";
 import { HERO_RATING } from "@/lib/social-proof";
 
 /**
- * The landing page's first screen, built to get a visitor started: the
- * rating and the promise on the left, the first step (upload a CV, or build
- * one from scratch) on the right. Under it, what they get: the same CV before
- * and after, side by side. On phones it all stacks in that order.
+ * The landing page's first screen, a full screen tall: the rating and the
+ * promise on the left, and beside them the proof — the same CV before and
+ * after, whole. Under it, the first step: Moxie's card (upload a CV, or build
+ * one from scratch), centred; she starts greeting once it scrolls into view.
+ * On phones it all stacks in that order.
  */
 export function Hero() {
   return (
     <>
-      <section className="relative mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-5 pb-16 pt-36 sm:gap-14 sm:px-8 sm:pt-40 lg:min-h-[86svh] lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:gap-20 lg:px-10 lg:pb-16">
+      <section className="relative mx-auto grid min-h-svh w-full max-w-6xl grid-cols-1 content-center items-center gap-12 px-5 pb-12 pt-32 sm:gap-14 sm:px-8 sm:pt-36 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:px-10 lg:pb-12">
         {/* The rating and the promise */}
         <div className="flex flex-col items-start text-left">
           {/* The rating, and where it's from (Trustpilot's own green squares and mark) */}
@@ -61,16 +62,15 @@ export function Hero() {
           </div>
         </div>
 
-        {/* The first step: upload a CV, or build one from scratch */}
-        <div className="hero-rise [animation-delay:320ms] flex w-full justify-start lg:justify-end">
-          <HeroStart />
+        {/* What they get: the same CV before and after */}
+        <div className="w-full">
+          <HeroBeforeAfter full />
         </div>
       </section>
 
-      {/* What they get */}
-      <section aria-label="What GoMoxie does to a CV" className="hero-rise [animation-delay:420ms] mx-auto w-full max-w-5xl px-5 pb-20 pt-6 sm:px-8 sm:pb-28 lg:px-10">
-        <p className="mb-7 text-center text-[13px] font-semibold uppercase tracking-[0.14em] text-neutral-400">What changes in your CV</p>
-        <HeroBeforeAfter />
+      {/* The first step, centred under the hero: upload a CV, or build one from scratch */}
+      <section aria-label="Get started" className="flex justify-center px-5 pb-20 sm:px-8 sm:pb-28">
+        <HeroStart />
       </section>
     </>
   );
