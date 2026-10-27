@@ -16,7 +16,6 @@ import {
   PERIODS,
   PERIOD_LABEL,
   PERIOD_SUFFIX,
-  describeLimits,
   formatPrice,
   planFeatures,
   timeLeft,
@@ -339,62 +338,78 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
   );
 }
 
-/** The Plus Lifetime deal as a wide banner (hidden when it isn't on sale). */
+/**
+ * The Plus Lifetime deal as a plan card — the same shape as Free, Plus and Pro
+ * in its own deal colors — centered under them, one column wide. Hidden when
+ * it isn't listed.
+ */
 export function LifetimeDeal({ theme, signedIn, status }: { theme: PlanTheme; signedIn: boolean; status?: SubscriptionStatusResult }) {
   const t = T[theme];
   const { data } = usePricing();
   const purchase = useStartPurchase();
   const pricing = data ?? FALLBACK_PRICING;
-  const { offer } = pricing.lifetime;
+  const { offer, limits } = pricing.lifetime;
   // Listed like Plus and Pro: shown with a "Coming soon" button until its Polar product exists.
   if (!(offer.listed ?? offer.available)) return null;
   const onSale = offer.available;
   const owned = Boolean(status?.hasLifetime);
+  const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const features = [
+    `${count(limits.tailor, "tailoring", "tailorings")} a month`,
+    `${count(limits.improve, "enhancement", "enhancements")} a month`,
+    `${count(limits.create, "new CV", "new CVs")} a month`,
+    "Career profiles",
+    "Pay once, keep it for as long as GoMoxie runs",
+  ];
 
   return (
-    <div className={`mx-auto mt-8 flex max-w-6xl flex-col gap-6 rounded-3xl border p-7 sm:p-8 lg:flex-row lg:items-center ${t.deal}`}>
-      <div className="flex-1">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11.5px] font-bold uppercase tracking-wide ${t.dealChip}`}>
-            <InfinityIcon className="h-3.5 w-3.5" /> Lifetime deal
-          </span>
-          <span className={`${t.dealChip} rounded-full border px-2.5 py-1`}>
+    <div className="mx-auto mt-6 max-w-6xl">
+      {/* One column of the grid above (three columns, 1.5rem gaps). */}
+      <div className={`relative mx-auto flex flex-col rounded-3xl border p-8 md:w-[calc((100%-3rem)/3)] ${t.deal}`}>
+        <span className="absolute -top-3 left-8 inline-flex items-center gap-1.5 rounded-full bg-amber-400 px-3 py-1 text-[11.5px] font-bold uppercase tracking-wide text-neutral-950">
+          <InfinityIcon className="h-3.5 w-3.5" /> Limited offer
+        </span>
+        <div className="flex min-h-[30px] items-center justify-between gap-3">
+          <h3 className={`text-[17px] font-semibold ${t.title}`}>Plus Lifetime</h3>
+          <span className={`shrink-0 rounded-full border px-2.5 py-1 ${t.dealChip}`}>
             <LifetimeScarcity offer={offer} theme={theme} compact />
           </span>
         </div>
-        <h3 className={`mt-3 text-xl font-bold tracking-tight sm:text-2xl ${t.title}`}>Plus forever, pay once</h3>
-        <p className={`mt-1.5 text-[14.5px] ${t.body}`}>
-          {describeLimits(pricing.lifetime.limits)}, every month, for as long as GoMoxie runs. Career profiles included.
-        </p>
-      </div>
-      <div className="flex flex-col items-start gap-3 lg:items-end">
-        {offer.display === "countdown" && offer.endsAt && <Countdown endsAt={offer.endsAt} theme={theme} />}
-        <div className="flex items-baseline gap-1.5">
-          <span className={`text-4xl font-bold tracking-tight ${t.title}`}>{formatPrice(pricing.lifetime.price)}</span>
+        <div className="mt-12 flex items-baseline gap-1.5">
+          <span className={`text-5xl font-bold tracking-tight ${t.title}`}>{formatPrice(pricing.lifetime.price)}</span>
           <span className={`text-[14px] ${t.muted}`}>once</span>
         </div>
+        <p className={`mt-1.5 text-[14px] ${t.body}`}>Plus forever, pay once.</p>
+
         {!signedIn ? (
-          <Link href="/signup" className={`${BUTTON} mt-0 w-auto px-8 ${t.primary}`}>
-            Get Lifetime <ArrowRight className="h-4 w-4 opacity-80" />
+          <Link href="/signup" className={`${BUTTON} ${t.primary}`}>
+            Get Lifetime
+            <ArrowRight className="h-4 w-4 opacity-80 transition-transform group-hover:translate-x-0.5" />
           </Link>
         ) : owned ? (
-          <span className={`${BUTTON} mt-0 w-auto cursor-default px-8 ${t.current}`}>You own it</span>
+          <span className={`${BUTTON} cursor-default ${t.current}`}>You own it</span>
         ) : (
           <button
             type="button"
             disabled={purchase.isPending || !onSale}
             onClick={() => purchase.mutate({ product: "plus_lifetime" })}
-            className={`${BUTTON} mt-0 w-auto px-8 ${t.primary}`}
+            className={`${BUTTON} ${t.primary}`}
           >
             {purchase.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : onSale && <Sparkles className="h-4 w-4" />}
             {purchase.isPending ? "Redirecting..." : onSale ? "Get Lifetime" : "Coming soon"}
           </button>
         )}
-        {purchase.isError && (
-          <p className={`text-[12.5px] font-medium ${t.error}`}>
-            {purchase.error instanceof ApiError ? purchase.error.message : "Could not start checkout."}
-          </p>
-        )}
+        <p className={`mt-2.5 min-h-[18px] text-center text-[12.5px] ${purchase.isError ? t.error : t.muted}`}>
+          {purchase.isError
+            ? purchase.error instanceof ApiError
+              ? purchase.error.message
+              : "Could not start checkout."
+            : "No subscription"}
+        </p>
+
+        <div className={`mt-6 border-t pt-7 ${t.divider}`}>
+          <FeatureList items={features} strong theme={theme} />
+        </div>
       </div>
     </div>
   );
