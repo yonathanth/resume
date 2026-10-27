@@ -1,4 +1,5 @@
-/* Compact peach clouds at the edges leave the centre open and airy. */
+/* The page's atmosphere: just a fine line grid around the hero, fading to
+   nothing at its edges. */
 .atmosphere {
   position: absolute;
   inset: 0;
@@ -6,53 +7,35 @@
   pointer-events: none;
 }
 
-.sky {
+/* The hero area the grid (and its mouse spotlight) covers. */
+.heroGrid {
+  --mx: 50%;
+  --my: 30%;
+  --spot: 0;
   position: absolute;
   inset: 0 0 auto;
-  height: min(760px, 90svh);
-  background:
-    radial-gradient(ellipse at 0% 28%, #ffe5d6 0%, transparent 52%),
-    radial-gradient(ellipse at 100% 38%, #ffeadb 0%, transparent 48%),
-    radial-gradient(ellipse at 48% 0%, var(--accent-soft) 0%, transparent 55%);
-  mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%);
+  height: min(900px, 100svh);
+  /* Every layer fades out toward the edges, like the grid. */
+  mask-image: radial-gradient(ellipse 70% 62% at 50% 34%, #000 0%, rgb(0 0 0 / 0.7) 50%, transparent 82%);
 }
 
-.cloud {
+.grid {
   position: absolute;
-  width: clamp(320px, 40vw, 660px);
-  height: clamp(190px, 23vw, 340px);
-  background:
-    radial-gradient(ellipse at 22% 65%, #fff 0%, #ffffffed 18%, transparent 43%),
-    radial-gradient(ellipse at 46% 43%, #fff 0%, #fffffff2 18%, transparent 41%),
-    radial-gradient(ellipse at 70% 62%, #fff 0%, #ffffffeb 20%, transparent 44%),
-    radial-gradient(ellipse at 48% 76%, #fff 0%, #ffffffd9 28%, transparent 62%);
-  filter: blur(15px);
-  opacity: 0.85;
+  inset: 0;
+  background-image:
+    linear-gradient(to right, rgb(15 17 21 / 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(15 17 21 / 0.16) 1px, transparent 1px);
+  background-size: 56px 56px;
+  background-position: center top;
 }
 
-.cloudLeft {
-  top: clamp(100px, 18svh, 180px);
-  left: -15%;
-  transform: rotate(-9deg);
-}
-
-.cloudRight {
-  top: clamp(190px, 32svh, 320px);
-  right: -18%;
-  transform: rotate(12deg) scale(0.9);
-  opacity: 0.7;
-}
-
-.lowerHaze {
+/* The cells lit around the pointer (see landing/HeroGrid.tsx). */
+.gridCanvas {
   position: absolute;
-  top: 48%;
-  right: -20%;
-  width: 65%;
-  height: 560px;
-  background:
-    radial-gradient(ellipse at 65% 40%, #ffe5d670, transparent 60%),
-    radial-gradient(ellipse at 45% 55%, #fff2eb55, transparent 55%);
+  inset: 0;
+  pointer-events: none;
 }
+
 
 .sectionScene {
   position: relative;
@@ -118,17 +101,11 @@
     top: 0;
   }
 
-  .cloudLeft {
-    left: -220px;
-    top: 110px;
+  .grid {
+    background-size: 40px 40px;
   }
 
-  .cloudRight {
-    right: -235px;
-    top: 290px;
-  }
-
-  .sky {
-    opacity: 0.8;
+  .gridCanvas {
+    display: none;
   }
 }

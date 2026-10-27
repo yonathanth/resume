@@ -1467,6 +1467,8 @@ export interface CvTemplateSample {
   label: string;
 }
 
-export function getCvTemplateSample(templateId: string) {
-  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample`);
+/** `story`: one of the landing page's before/after people instead of the template's own sample person. */
+export function getCvTemplateSample(templateId: string, story?: string) {
+  const query = story ? `?story=${encodeURIComponent(story)}` : "";
+  return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample${query}`);
 }

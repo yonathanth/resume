@@ -11,7 +11,7 @@ import { CtaButton } from "@/components/CtaButton";
 const SHEET_W = 595;
 const SHEET_H = 842;
 
-function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+export function Sheet({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
 

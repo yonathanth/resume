@@ -9,6 +9,8 @@ interface TemplateThumbnailProps {
   templateId: string;
   className?: string;
   title?: string;
+  /** Render one of the landing page's before/after people instead of the template's sample person. */
+  story?: string;
 }
 
 /**
@@ -16,10 +18,10 @@ interface TemplateThumbnailProps {
  * fictional sample CV — every template list in the app uses this, so what a
  * gallery shows is exactly what the template produces.
  */
-export function TemplateThumbnail({ templateId, className = "", title }: TemplateThumbnailProps) {
+export function TemplateThumbnail({ templateId, className = "", title, story }: TemplateThumbnailProps) {
   const { data, isError } = useQuery({
-    queryKey: ["cv-template-sample", templateId],
-    queryFn: () => getCvTemplateSample(templateId),
+    queryKey: ["cv-template-sample", templateId, story ?? null],
+    queryFn: () => getCvTemplateSample(templateId, story),
     staleTime: Infinity,
   });
 

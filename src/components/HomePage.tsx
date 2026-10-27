@@ -12,6 +12,13 @@ import { PricingSection } from "@/components/PricingSection";
 import { Footer } from "@/components/Footer";
 import styles from "./HomePage.module.css";
 import { LandingDetail } from "./LandingDetail";
+import { HiredAtStrip } from "./landing/HiredAtStrip";
+import { HeroGrid } from "./landing/HeroGrid";
+import { ResultsCarousel } from "./landing/ResultsCarousel";
+
+// The single before & after ("Recruiters give you six seconds", Robel Kassa) —
+// hidden for now; the swipeable "Real results" stories below take its place.
+const SHOW_SIX_SECONDS = false;
 
 export function HomePage() {
   const router = useRouter();
@@ -29,12 +36,8 @@ export function HomePage() {
     <div className="min-h-screen bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
       {/* Decorative atmosphere stays behind the content and never intercepts input. */}
       <div className={styles.atmosphere} aria-hidden="true">
-        <div className={styles.sky} />
-        <div className={`${styles.cloud} ${styles.cloudLeft}`} />
-        <div className={`${styles.cloud} ${styles.cloudRight}`} />
-        <div className={styles.lowerHaze} />
+        <HeroGrid />
       </div>
-      <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" aria-hidden="true" />
 
       {/* Floating Pill Navigation */}
       <Navbar />
@@ -43,6 +46,9 @@ export function HomePage() {
       <main className="relative z-10 flex flex-col">
         {/* Mobbin-inspired Hero */}
         <Hero />
+
+        {/* Where users got hired */}
+        <HiredAtStrip />
 
         {/* How It Works (Directly below Hero) */}
         <div className={styles.sectionScene}>
@@ -57,7 +63,10 @@ export function HomePage() {
         </div>
 
         {/* Real Results: Before & After CV Comparison */}
-        <RealResultsSection />
+        {SHOW_SIX_SECONDS && <RealResultsSection />}
+
+        {/* More before & afters to swipe through */}
+        <ResultsCarousel />
 
         {/* Pricing (Free, Pro) */}
         <div className={styles.sectionScene}>

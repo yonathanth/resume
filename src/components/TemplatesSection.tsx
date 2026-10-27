@@ -7,29 +7,31 @@ import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateTh
 import { Reveal } from "@/components/Reveal";
 import { CtaButton } from "@/components/CtaButton";
 
-// Side by side: the copy on the left; on the right, a wall of real templates
-// laid out on a tilted plane — three columns drifting in opposite directions,
-// fading out at the edges — that pauses while the pointer is over it (and
-// stands still for reduced motion). On phones the wall sits under the copy.
+// Side by side: the copy on the left; on the right, a wall of real templates,
+// dark and light neighbours contrasting, laid out on a tilted plane — three columns drifting in opposite directions, fading out at
+// the edges — that pauses while the pointer is over it (and stands still for
+// reduced motion). On phones the wall sits under the copy.
 // (The sign-in pages have a flat wall of their own; this one is tilted.)
 
-/** Templates per column, before it repeats for the seamless loop. */
-const PER_COLUMN = 4;
 /** Each column's direction and how long one loop takes — slow, and never in step. */
 const COLUMNS = [
   { direction: "up", seconds: 70 },
   { direction: "down", seconds: 82 },
   { direction: "up", seconds: 76 },
 ] as const;
+/** Templates that contrast with each other, dark and colorful next to light — shown first, in this order. */
+const CONTRAST_ORDER = ["midnight", "classic", "spark", "linen", "slate", "minimal", "sidebar", "clarity", "crest", "formal"];
+/** Templates per column, before it repeats for the seamless loop. */
+const PER_COLUMN = 4;
 
 export function TemplatesSection() {
   const { data: templates } = useCvTemplates();
   const reducedMotion = usePrefersReducedMotion();
-  const ids = (templates ?? []).map((t) => t.id);
-
-  // Each column starts further along the list, so neighbours never line up the same template.
+  const all = (templates ?? []).map((t) => t.id);
+  const ids = [...CONTRAST_ORDER.filter((id) => all.includes(id)), ...all.filter((id) => !CONTRAST_ORDER.includes(id))];
+  // Down each column the templates follow the contrast order; each column starts further along it.
   const columnIds = (col: number) =>
-    ids.length ? Array.from({ length: PER_COLUMN }, (_, i) => ids[(col * 2 + i * COLUMNS.length) % ids.length]) : [];
+    ids.length ? Array.from({ length: PER_COLUMN }, (_, i) => ids[(col + i * COLUMNS.length) % ids.length]) : [];
 
   return (
     <section id="templates" className="relative overflow-hidden px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
@@ -54,7 +56,7 @@ export function TemplatesSection() {
         {/* The tilted wall */}
         <Reveal delay={150}>
           <div
-            className="group relative h-[380px] overflow-hidden sm:h-[460px] lg:h-[560px] [perspective:1600px]"
+            className="group relative h-[320px] overflow-hidden sm:h-[400px] lg:h-[460px] [perspective:1600px]"
             style={{
               maskImage: "linear-gradient(to bottom, transparent, black 14%, black 86%, transparent), linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
               WebkitMaskImage: "linear-gradient(to bottom, transparent, black 14%, black 86%, transparent), linear-gradient(to right, transparent, black 10%, black 90%, transparent)",
@@ -89,10 +91,10 @@ export function TemplatesSection() {
                           <TemplateThumbnail
                             key={i}
                             templateId={id}
-                            className="aspect-[210/297] w-full shrink-0 rounded-xl border border-neutral-200/80 shadow-[0_1px_2px_rgba(15,17,21,0.05),0_12px_24px_-14px_rgba(15,17,21,0.25)]"
+                            className="aspect-[210/297] w-full shrink-0 rounded-2xl border border-neutral-200/80 shadow-[0_1px_2px_rgba(15,17,21,0.05),0_12px_24px_-14px_rgba(15,17,21,0.25)]"
                           />
                         ) : (
-                          <div key={i} className="aspect-[210/297] w-full shrink-0 animate-pulse rounded-xl bg-neutral-100" />
+                          <div key={i} className="aspect-[210/297] w-full shrink-0 animate-pulse rounded-2xl bg-neutral-100" />
                         ),
                       )}
                     </div>
