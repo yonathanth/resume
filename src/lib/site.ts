@@ -18,13 +18,13 @@ export const siteUrl = (path = "/") => `${SITE.url}${path.startsWith("/") ? path
 
 /**
  * The backend, for server-side fetches (template list, share images).
- * BACKEND_URL is the API's own address (e.g. https://gomoxie-api.onrender.com)
+ * BACKEND_URL is the API's own address (default https://api.gomoxie.app)
  * when the browser reaches it through this site's /api/v1 proxy.
  */
-export const API_URL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+export const API_URL = (process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "https://api.gomoxie.app").replace(/\/$/, "");
 
 /**
  * The backend as the browser addresses it: "" (same origin, through the
  * /api/v1 proxy in next.config.ts) or the API's own address.
  */
-export const PUBLIC_API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+export const PUBLIC_API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "https://api.gomoxie.app").replace(/\/$/, "");

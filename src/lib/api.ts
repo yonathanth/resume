@@ -1,6 +1,6 @@
 import type { PolishTarget, ScoreJobRequirements } from "@/lib/cv-score/engine";
 // In production, the API is proxied through /api/v1 so cookies work (same-site).
-// Locally, NEXT_PUBLIC_API_URL points to the backend (default: localhost:8000).
+// Locally, NEXT_PUBLIC_API_URL points to the backend (set in .env.local; site.ts falls back to https://api.gomoxie.app).
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // The session is the httpOnly refresh cookie (30 days, renewed on every
