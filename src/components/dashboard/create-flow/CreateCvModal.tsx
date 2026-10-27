@@ -16,7 +16,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowStepWithLoader, JobMismatchDialog, RunOnMount, TemplateStep, gapsNotice, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowStepWithLoader, JobMismatchDialog, RunOnMount, TemplateStep, gapsNotice, useAiDone, type AiWait, FlowError, flowErrorMessage } from "./FlowUI";
 import { OptionCard, SOFT_TONES } from "./OptionCard";
 import {
   useAnalyzeFreestyle,
@@ -25,7 +25,7 @@ import {
   splitClarificationAnswers,
 } from "@/hooks/use-cv-generation";
 import { applyCvContent, createBlankCv } from "@/lib/cv-mapper";
-import { ApiError, ClarificationQuestion, CVContentDTO, canUseCareerProfiles, type GenerateCvMismatch } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, type GenerateCvMismatch } from "@/lib/api";
 import { useToast } from "@/components/Toaster";
 import {
   ClarifyingQuestionsForm,
@@ -308,7 +308,7 @@ export function CreateCvModal({
       }
     } catch (err) {
       if (proGate.isProRequired(err, () => generateFromProfile(jobDescription))) return;
-      setFlowError(err instanceof Error ? err.message : "Could not build your CV from this profile. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not build your CV from this profile. Please try again."));
     }
   };
 
@@ -370,7 +370,7 @@ export function CreateCvModal({
       }
     } catch (err) {
       if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId))) return;
-      setFlowError(err instanceof ApiError ? err.message : "Could not analyze your story. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not analyze your story. Please try again."));
     }
   };
 
@@ -430,7 +430,7 @@ export function CreateCvModal({
       return true;
     } catch (err) {
       if (!proGate.isProRequired(err, () => void handleContinueFromMissing(jobDescription))) {
-        setFlowError(err instanceof ApiError ? err.message : "Could not update your CV. Please try again.");
+        setFlowError(flowErrorMessage(err, "Could not update your CV. Please try again."));
       }
       return false;
     }
@@ -697,7 +697,7 @@ export function CreateCvModal({
               Back
             </button>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
@@ -824,7 +824,7 @@ export function CreateCvModal({
               </button>
             </div>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
@@ -879,7 +879,7 @@ export function CreateCvModal({
               </button>
             </div>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
@@ -939,7 +939,7 @@ export function CreateCvModal({
                 Back
               </button>
             </div>
-            {flowError && <p className="mt-3 text-xs font-medium text-red-600">{flowError}</p>}
+            {flowError && <FlowError message={flowError} className="mt-3" />}
           </div>
         )}
 
@@ -980,7 +980,7 @@ export function CreateCvModal({
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-            {flowError && <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>}
+            {flowError && <FlowError message={flowError} className="mt-3" />}
           </div>
         )}
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { isPaidPlan, type GenerateCvMismatch } from "@/lib/api";
+import { ApiError, isPaidPlan, type GenerateCvMismatch } from "@/lib/api";
 import React, { useCallback, useEffect, useState } from "react";
-import { ArrowRight, ChevronDown, Compass, Loader2, X } from "lucide-react";
+import { AlertCircle, ArrowRight, ChevronDown, Compass, Loader2, X } from "lucide-react";
 import { MoxieLoader, type MoxieLoaderProps } from "@/components/moxie";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { TemplatePicker } from "./TemplatePicker";
@@ -205,6 +205,45 @@ export function StepEyebrow({ children }: { children: React.ReactNode }) {
  * continue. Must sit directly inside FlowModal's padded body (the bar's
  * negative margins undo that padding).
  */
+/**
+ * What went wrong in a flow, in words a person can act on: what happened,
+ * whether anything was used up, and what to do next. The backend gives back
+ * a CV's charge whenever the AI fails, so "nothing was used up" holds there.
+ */
+export function flowErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    switch (err.code) {
+      case "AI_GENERATION_FAILED":
+        return "Moxie couldn't finish your CV this time. Nothing was used up, so it won't count against your CVs. Please try again, it usually works on the next go.";
+      case "AI_RATE_LIMITED":
+        return "Moxie is very busy right now. Nothing was used up. Wait a moment, then try again.";
+      case "RATE_LIMITED":
+        return "Moxie needs a short breather between CVs. Wait a few seconds, then try again.";
+      case "AI_PAUSED":
+        return "Moxie is taking a short maintenance break. Your details are kept, so come back in a little while and carry on.";
+    }
+    if (err.status >= 500) return "Something went wrong on our side. Nothing was used up. Please try again in a moment.";
+    return err.message || fallback;
+  }
+  // fetch() itself failing: offline, or the server unreachable.
+  if (err instanceof TypeError) return "We couldn't reach GoMoxie. Check your internet connection, then try again.";
+  return err instanceof Error && err.message ? err.message : fallback;
+}
+
+/** A flow's error, shown calmly: a soft notice, not red text. Renders nothing without a message. */
+export function FlowError({ message, className = "" }: { message?: string | null; className?: string }) {
+  if (!message) return null;
+  return (
+    <div
+      role="alert"
+      className={`flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-left text-[13px] leading-snug text-amber-950 ${className}`}
+    >
+      <AlertCircle className="mt-px h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
+      <p>{message}</p>
+    </div>
+  );
+}
+
 export function TemplateStep({
   selectedId,
   onSelect,
@@ -242,7 +281,7 @@ export function TemplateStep({
 
       <div className="sticky -bottom-7 sm:-bottom-9 -mx-7 sm:-mx-9 -mb-7 sm:-mb-9 mt-8 px-7 sm:px-9 py-4 bg-white/80 backdrop-blur-md border-t border-neutral-200 flex flex-wrap sm:flex-nowrap items-center justify-between gap-x-4 gap-y-3">
         {error ? (
-          <p className="w-full sm:w-auto text-sm font-medium text-red-600">{error}</p>
+          <FlowError message={error} className="w-full sm:w-auto sm:max-w-md" />
         ) : (
           // Hidden on phones: no room beside the buttons, and the picked card is already highlighted.
           <p className="hidden sm:block text-sm text-neutral-500 truncate">

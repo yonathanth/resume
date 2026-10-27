@@ -64,12 +64,19 @@ async function analyzeAndPersist(
 
   const doc = await createCvDocument(profileId, options.templateId);
   let document: ApiCvDocument | GenerateCvMismatch;
-  try {
-    // The charge from the analysis goes with the save (see the backend's chargeToken).
-    document = await generateCv(doc.id, {
+  // The charge from the analysis goes with the save (see the backend's chargeToken).
+  const save = () =>
+    generateCv(doc.id, {
       analyzedContent: analyzed.candidateData,
       jobDescription: options.jobDescription,
       chargeToken: analyzed.chargeToken,
+    });
+  try {
+    // The CV is already written and paid for: a dropped connection on the save
+    // gets one more try, so it isn't lost (the same token, so no second charge).
+    document = await save().catch((err) => {
+      if (err instanceof TypeError) return save();
+      throw err;
     });
   } catch (err) {
     // Don't leave an empty draft behind in Past Projects.

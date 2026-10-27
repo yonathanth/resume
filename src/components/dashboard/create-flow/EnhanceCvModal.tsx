@@ -14,7 +14,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowModal, JobMismatchDialog, RunOnMount, TemplateStep, JobGaps, gapsNotice, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowModal, JobMismatchDialog, RunOnMount, TemplateStep, JobGaps, gapsNotice, useAiDone, type AiWait, FlowError, flowErrorMessage } from "./FlowUI";
 import { OptionCard, SOFT_TONES } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -301,7 +301,7 @@ export function EnhanceCvModal({
       setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
       if (proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId))) return;
-      setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not load that resume. Please try again."));
     } finally {
       setLoadingSourceId(null);
     }
@@ -417,7 +417,7 @@ export function EnhanceCvModal({
       }
     } catch (err) {
       if (proGate.isProRequired(err, () => void handleContinueToTemplate(jobDescription))) return;
-      setFlowError(err instanceof Error ? err.message : "Could not enhance your CV. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not enhance your CV. Please try again."));
     }
   };
 
@@ -596,7 +596,7 @@ export function EnhanceCvModal({
               </p>
             </div>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mb-4">{flowError}</p>
+              <FlowError message={flowError} className="mb-4" />
             )}
 
             <button
@@ -636,7 +636,7 @@ export function EnhanceCvModal({
               Back
             </button>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
@@ -774,7 +774,7 @@ export function EnhanceCvModal({
                 Back
               </button>
             </div>
-            {flowError && <p className="mt-3 text-xs font-medium text-red-600">{flowError}</p>}
+            {flowError && <FlowError message={flowError} className="mt-3" />}
           </div>
         )}
 
@@ -813,7 +813,7 @@ export function EnhanceCvModal({
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-            {flowError && <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>}
+            {flowError && <FlowError message={flowError} className="mt-3" />}
           </div>
         )}
 

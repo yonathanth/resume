@@ -15,7 +15,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowModal, JobGaps, JobMismatchDialog, RunOnMount, TemplateStep, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowModal, JobGaps, JobMismatchDialog, RunOnMount, TemplateStep, useAiDone, type AiWait, FlowError, flowErrorMessage } from "./FlowUI";
 import { OptionCard } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -302,7 +302,7 @@ export function TailorCvModal({
       setStep("jd-and-slider");
     } catch (err) {
       if (proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId))) return;
-      setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not load that resume. Please try again."));
     } finally {
       setLoadingSourceId(null);
     }
@@ -395,7 +395,7 @@ export function TailorCvModal({
       setStep(document.questions?.length ? "new-cv-missing" : "jd-and-slider");
     } catch (err) {
       if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId))) return;
-      setFlowError(err instanceof Error ? err.message : "Could not analyze your story. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not analyze your story. Please try again."));
     }
   };
 
@@ -538,7 +538,7 @@ export function TailorCvModal({
       return { remaining, content };
     } catch (err) {
       if (proGate.isProRequired(err, retry)) return null;
-      setFlowError(err instanceof Error ? err.message : "Could not tailor your CV. Please try again.");
+      setFlowError(flowErrorMessage(err, "Could not tailor your CV. Please try again."));
       return null;
     }
   };
@@ -788,7 +788,7 @@ export function TailorCvModal({
               Back
             </button>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
@@ -898,7 +898,7 @@ export function TailorCvModal({
               </button>
             </div>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
@@ -941,7 +941,7 @@ export function TailorCvModal({
               </p>
             </div>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mb-4">{flowError}</p>
+              <FlowError message={flowError} className="mb-4" />
             )}
 
             <button
@@ -1045,7 +1045,7 @@ export function TailorCvModal({
               </button>
             </div>
             {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
+              <FlowError message={flowError} className="mt-3" />
             )}
           </div>
         )}
