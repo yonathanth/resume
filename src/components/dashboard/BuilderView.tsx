@@ -95,7 +95,7 @@ export function BuilderView({
   // The open flow is whatever the URL says (see flow-url): a refresh reopens
   // it, Back closes it. One already closed or finished (Back onto its old
   // steps) isn't reopened — the URL goes back to the plain dashboard.
-  const { openFlow, closeFlow, openFinishedCv } = useDashboard();
+  const { openFlow, closeFlow, openFinishedCv, handleTailorDraft } = useDashboard();
   const searchParams = useSearchParams();
   const urlFlow = readOpenFlow(new URLSearchParams(searchParams.toString()));
   const openFlowNow = urlFlow && !isFlowClosed(urlFlow.session) ? urlFlow : null;
@@ -233,7 +233,7 @@ export function BuilderView({
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
 
-      {/* ACTIONS: creating a resume leads; tailoring and improving sit beside it. */}
+      {/* ACTIONS: creating a resume leads; improving, then tailoring, sit beside it. */}
       {/* Create stays a little wider (~55/45) without crowding out the other two. */}
       <div data-tour="builder-actions" className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4 mb-14">
         <div
@@ -265,8 +265,8 @@ export function BuilderView({
         <div className="flex flex-col gap-4">
           {(
             [
-              { title: "Tailor to a job", description: "Match your CV to a job posting", Icon: Target, tone: ICON_TONES.sky, colors: ACTION_CARD_COLORS.tailor, onClick: () => openFlow("tailor") },
               { title: "Improve a CV", description: "Strengthen one you already have", Icon: PenLine, tone: ICON_TONES.violet, colors: ACTION_CARD_COLORS.improve, onClick: () => openFlow("improve") },
+              { title: "Tailor to a job", description: "Match your CV to a job posting", Icon: Target, tone: ICON_TONES.sky, colors: ACTION_CARD_COLORS.tailor, onClick: () => openFlow("tailor") },
             ] as const
           ).map(({ title, description, Icon, tone, colors, onClick }) => (
             <button
@@ -330,6 +330,7 @@ export function BuilderView({
               onOpen={() => openDraftInEditor(draft)}
               onDuplicate={() => requestAction("duplicate", draft)}
               onDelete={() => requestAction("delete", draft)}
+              onTailor={() => handleTailorDraft(draft)}
               quiet
             />
           ))}
@@ -357,6 +358,8 @@ export function BuilderView({
           onClose={() => closeFlow(openFlowNow.session, openFlowNow.from)}
           onComplete={finishFlow}
           pastProjects={pastProjectsList}
+          initialSourceCvId={openFlowNow.cv ?? null}
+          initialTemplate={openFlowNow.template as TemplateId | undefined}
         />
       )}
       {openFlowNow?.kind === "improve" && (

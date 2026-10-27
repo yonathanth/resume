@@ -39,7 +39,9 @@ export function ProfessionInput({
 
   const trimmed = value.trim();
   const exactMatch = suggestions.some((s) => s.title.toLowerCase() === trimmed.toLowerCase());
-  const showList = open && (suggestions.length > 0 || trimmed.length > 0);
+  // Suggestions only while something is typed: an empty, merely focused field
+  // keeps the list closed so it never covers the buttons below it.
+  const showList = open && trimmed.length > 0;
 
   const choose = (title: string) => {
     if (onCommit) {
@@ -95,7 +97,6 @@ export function ProfessionInput({
           setOpen(true);
           setHighlight(-1);
         }}
-        onFocus={() => setOpen(true)}
         // Delay so a click on a suggestion lands before the list closes.
         onBlur={() => setTimeout(() => setOpen(false), 120)}
         onKeyDown={handleKeyDown}

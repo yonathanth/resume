@@ -5,22 +5,24 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   cancelSubscription,
   changeSubscriptionPlan,
-  createCreditCheckout,
+  createPurchaseCheckout,
   createSubscriptionCheckout,
+  getPricing,
   getSubscriptionStatus,
   hasSession,
   resumeSubscription,
-  type CheckoutProvider,
-  type CreditProduct,
-  type SubscriptionPlan,
+  type BillingPeriod,
+  type OneTimePurchase,
+  type PaidTier,
 } from "@/lib/api";
 import { useHasMounted } from "./use-has-mounted";
-import { saveLastChapaPaymentId } from "@/lib/payment-session";
+import { savePendingPurchase } from "@/lib/payment-session";
 
 export const SUBSCRIPTION_STATUS_QUERY_KEY = ["subscription-status"] as const;
+export const PRICING_QUERY_KEY = ["pricing"] as const;
 
-// The dashboard's single source of truth for Pro access / free-generation
-// usage — always read from here, never from a locally-computed guess.
+// The dashboard's single source of truth for the plan and its usage —
+// always read from here, never from a locally-computed guess.
 // Gated on useHasMounted (not `typeof window !== "undefined"` directly) so
 // the query's enabled/loading state is identical between the server render
 // and the client's first hydration pass — it only flips on in an effect
@@ -35,9 +37,15 @@ export function useSubscriptionStatus() {
   });
 }
 
+// The public price list (prices, Plus limits, the lifetime deal, pay per CV).
+// Signed out too — the pricing page shows it to everyone.
+export function usePricing() {
+  return useQuery({ queryKey: PRICING_QUERY_KEY, queryFn: getPricing, staleTime: 5 * 60 * 1000 });
+}
+
 // Re-fetches subscription status — call this when the user returns from the
 // Polar checkout redirect, since the webhook may not have synced yet and a
-// stale cached "not Pro" must not be shown as final.
+// stale cached "Free" must not be shown as final.
 export function useRefreshSubscriptionStatus() {
   const queryClient = useQueryClient();
   // Stable identity — callers (e.g. the Polar return page) put this in a
@@ -49,43 +57,39 @@ export function useRefreshSubscriptionStatus() {
   );
 }
 
-export interface StartProCheckoutInput {
-  provider: CheckoutProvider;
-  /** Polar only — which tier (weekly $4.99 / monthly $9.99 / quarterly $24.99). Ignored for Chapa. */
-  plan?: SubscriptionPlan;
+export interface StartCheckoutInput {
+  tier: PaidTier;
+  period: BillingPeriod;
 }
 
-// Starts a checkout with the chosen provider/plan (a Polar subscription
-// tier, or Chapa's 80 ETB / 1-month one-time local alternative) and
-// redirects the browser there. The actual subscription state only updates
-// once the payment is confirmed (Polar's webhook, or Chapa's webhook /
-// the Chapa return page's re-verify call) — this mutation only gets the
-// user to the checkout page.
+// Starts a Plus / Pro subscription checkout and sends the browser there. The
+// plan only changes once Polar's webhook confirms the payment — this only
+// gets the user to the checkout page.
 export function useStartProCheckout() {
   return useMutation({
-    mutationFn: ({ provider, plan }: StartProCheckoutInput) => createSubscriptionCheckout(provider, plan),
-    onSuccess: ({ checkoutUrl, paymentId }) => {
-      if (paymentId) {
-        saveLastChapaPaymentId(paymentId);
-      }
+    mutationFn: ({ tier, period }: StartCheckoutInput) => createSubscriptionCheckout(tier, period),
+    onSuccess: ({ checkoutUrl }, { tier }) => {
+      savePendingPurchase({ kind: "plan", tier });
       window.location.href = checkoutUrl;
     },
   });
 }
 
-// Starts a one-time checkout for a pay-per-use credit (one extra Create or
-// Tailor generation). Always Polar — see createCreditCheckout.
-export function useStartCreditCheckout() {
+// Starts a one-time checkout: Plus Lifetime, or unlocking one CV's download.
+export function useStartPurchase() {
   return useMutation({
-    mutationFn: (product: CreditProduct) => createCreditCheckout(product),
-    onSuccess: ({ checkoutUrl }) => {
+    mutationFn: (purchase: OneTimePurchase) => createPurchaseCheckout(purchase),
+    onSuccess: ({ checkoutUrl }, purchase) => {
+      savePendingPurchase(
+        purchase.product === "cv_unlock" ? { kind: "unlock", cvDocumentId: purchase.cvDocumentId } : { kind: "lifetime" }
+      );
       window.location.href = checkoutUrl;
     },
   });
 }
 
-// Schedules cancellation at the end of the current billing period — Pro
-// access stays active until then and nothing already paid is refunded (see
+// Schedules cancellation at the end of the current billing period — the plan
+// stays active until then and nothing already paid is refunded (see
 // cancelSubscription's doc comment). Updates the cached status immediately
 // with the backend's response rather than waiting on a refetch.
 export function useCancelSubscription() {
@@ -98,11 +102,11 @@ export function useCancelSubscription() {
   });
 }
 
-// Moves the subscription to another tier in place (see changeSubscriptionPlan).
+// Moves the subscription to another plan or period in place (see changeSubscriptionPlan).
 export function useChangePlan() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (plan: SubscriptionPlan) => changeSubscriptionPlan(plan),
+    mutationFn: ({ tier, period }: StartCheckoutInput) => changeSubscriptionPlan(tier, period),
     onSuccess: (status) => {
       queryClient.setQueryData(SUBSCRIPTION_STATUS_QUERY_KEY, status);
     },

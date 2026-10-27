@@ -9,9 +9,22 @@
  *
  * The only AI input is the job's requirements (extracted once per job
  * description and stored), so the same CV + the same job always scores the same.
+ *
+ * Two scores, each out of 100:
+ *   - CV quality — completeness (30), impact (35), writing & ATS (20), skills (15).
+ *     Optional sections (projects, awards…) never cost points for being absent;
+ *     only half-filled entries in them do.
+ *   - Job match — only when the CV has a job: required skills (45), nice-to-have
+ *     skills (15), skills shown in the work (10), keywords (10), headline (15),
+ *     seniority (5).
+ * The overall `total` is the quality score, or 60% quality + 40% job match.
  */
 
-export const SCORE_RULES_VERSION = "1.0";
+export const SCORE_RULES_VERSION = "2.0";
+
+/** How much each score counts toward the overall total when the CV has a job. */
+export const QUALITY_WEIGHT = 0.6;
+export const JOB_WEIGHT = 0.4;
 
 type BulletLike = string | { label?: string; text?: string } | null | undefined;
 
@@ -31,6 +44,15 @@ export interface ScoreInput {
   skills?: string[];
   skillGroups?: { category?: string; items?: string[] }[];
   projects?: { name?: string; description?: string; tech?: string[]; bullets?: BulletLike[] }[];
+  /** Optional sections (certifications, languages, awards…) — read only to find half-filled entries. */
+  [section: string]: unknown;
+}
+
+export interface ScoreOptions {
+  /** The template's section keys. Only sections the template shows are checked for half-filled entries. */
+  sections?: string[];
+  /** "Now", for roles that end "present" (seniority check). Defaults to the current date. */
+  now?: Date;
 }
 
 /** What a job asks for — extracted from the job description once and stored. */
@@ -42,7 +64,7 @@ export interface ScoreJobRequirements {
   keywords?: string[];
 }
 
-export type ScoreCategoryKey = "contact" | "summary" | "experience" | "skills" | "education" | "writing" | "job";
+export type ScoreCategoryKey = "completeness" | "impact" | "writing" | "skills" | "job";
 
 /** What AI polish can rewrite to fix a check. `bullets` without an index means every role. */
 export type PolishTarget =
@@ -56,8 +78,14 @@ export interface ScoreCheck {
   category: ScoreCategoryKey;
   label: string;
   status: "pass" | "partial" | "fail";
+  /** Points within its own score (quality or job match, each out of 100). */
   points: number;
   max: number;
+  /**
+   * "missing": something to add (a detail, an entry, a skill the job asks for) — shown to everyone.
+   * "improve": how what's there is written — the detailed breakdown.
+   */
+  kind: "missing" | "improve";
   /** What to do about it, in plain words (empty when it passes). */
   message: string;
   /** The editor section to open: "personal", "summary", "experience", "education" or "skills". */
@@ -92,7 +120,12 @@ export interface JobMatch {
 }
 
 export interface CvScore {
+  /** The overall score: `quality`, or 60% quality + 40% job match when there's a job. */
   total: number;
+  /** CV quality, out of 100 — independent of any job. */
+  quality: number;
+  /** Job match, out of 100 — only when the CV has a job. */
+  job?: number;
   version: string;
   categories: ScoreCategory[];
   checks: ScoreCheck[];
@@ -257,14 +290,33 @@ function dateFormat(value: string): string | null {
 // ── Scoring ─────────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<ScoreCategoryKey, string> = {
-  contact: "Contact & header",
-  summary: "Summary",
-  experience: "Experience",
-  skills: "Skills",
-  education: "Education",
+  completeness: "Completeness",
+  impact: "Impact",
   writing: "Writing & ATS",
+  skills: "Skills",
   job: "Job match",
 };
+
+/** Optional sections whose half-filled entries cost points: the fields every entry needs. */
+const OPTIONAL_SECTIONS: { key: string; label: string; fields: string[]; dated?: boolean }[] = [
+  { key: "projects", label: "Projects", fields: ["name"] },
+  { key: "certifications", label: "Certifications", fields: ["name"] },
+  { key: "languages", label: "Languages", fields: ["language", "proficiency"] },
+  { key: "awards", label: "Awards", fields: ["title"] },
+  { key: "publications", label: "Publications", fields: ["title"] },
+  { key: "volunteering", label: "Volunteering", fields: ["organization"], dated: true },
+  { key: "courses", label: "Courses", fields: ["name"] },
+  { key: "memberships", label: "Memberships", fields: ["organization"] },
+  { key: "presentations", label: "Presentations", fields: ["title"] },
+  { key: "references", label: "References", fields: ["name"] },
+  { key: "personalDetails", label: "Personal details", fields: ["label", "value"] },
+  { key: "research", label: "Research", fields: ["title"], dated: true },
+  { key: "teaching", label: "Teaching", fields: ["title"], dated: true },
+  { key: "activities", label: "Activities", fields: ["title"], dated: true },
+];
+
+/** Minimum years of experience a seniority level usually expects. */
+const SENIORITY_YEARS: Record<string, number> = { intern: 0, junior: 0, mid: 2, senior: 5, lead: 7, executive: 10 };
 
 interface CheckSpec {
   id: string;
@@ -272,6 +324,7 @@ interface CheckSpec {
   label: string;
   max: number;
   ratio: number;
+  kind: "missing" | "improve";
   message: string;
   section: string;
   index?: number;
@@ -290,6 +343,7 @@ function makeCheck(spec: CheckSpec): ScoreCheck {
     status,
     points: round1(spec.max * ratio),
     max: spec.max,
+    kind: spec.kind,
     message: status === "pass" ? "" : spec.message,
     section: spec.section,
     fix: spec.fix,
@@ -307,8 +361,50 @@ function lengthRatio(count: number, min: number, max: number): number {
   return 1;
 }
 
-export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRequirements | null): CvScore {
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/** A date as months since year 0, or null. "present" is `now`. */
+function monthIndex(value: string, now: Date): number | null {
+  const text = value.trim().toLowerCase();
+  if (text === "present" || text === "current" || text === "now") return now.getFullYear() * 12 + now.getMonth();
+  let m = /^(\d{4})-(\d{1,2})$/.exec(text);
+  if (m) return Number(m[1]) * 12 + Number(m[2]) - 1;
+  m = /^(\d{1,2})\/(\d{4})$/.exec(text);
+  if (m) return Number(m[2]) * 12 + Number(m[1]) - 1;
+  m = /^([a-z]{3})[a-z]*\.? (\d{4})$/.exec(text);
+  if (m && MONTHS.includes(m[1])) return Number(m[2]) * 12 + MONTHS.indexOf(m[1]);
+  m = /^(\d{4})$/.exec(text);
+  if (m) return Number(m[1]) * 12;
+  return null;
+}
+
+/** Years covered by the roles' date ranges, overlaps counted once. */
+function yearsOfExperience(experience: { start_date?: string; end_date?: string }[], now: Date): number {
+  const spans = experience
+    .map((e) => [monthIndex(str(e.start_date), now), monthIndex(str(e.end_date) || "present", now)] as const)
+    .filter((s): s is readonly [number, number] => s[0] !== null && s[1] !== null && s[1] >= s[0])
+    .map(([a, b]) => [a, b] as [number, number])
+    .sort((a, b) => a[0] - b[0]);
+  let months = 0;
+  let end = -Infinity;
+  for (const [a, b] of spans) {
+    const from = Math.max(a, end);
+    if (b > from) months += b - from;
+    end = Math.max(end, b);
+  }
+  return months / 12;
+}
+
+const sumPoints = (checks: ScoreCheck[]): number => checks.reduce((s, c) => s + c.points, 0);
+const toScore = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
+
+export function scoreCv(
+  content: ScoreInput | null | undefined,
+  job?: ScoreJobRequirements | null,
+  options: ScoreOptions = {}
+): CvScore {
   const cv: ScoreInput = content && typeof content === "object" ? content : {};
+  const now = options.now ?? new Date();
   const personal = cv.personal && typeof cv.personal === "object" ? cv.personal : {};
   const summary = str(cv.summary);
   const experience = list<NonNullable<ScoreInput["experience"]>[number]>(cv.experience).filter((e) => e && typeof e === "object");
@@ -323,14 +419,14 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
   const checks: ScoreCheck[] = [];
   const add = (spec: CheckSpec) => checks.push(makeCheck(spec));
 
-  // Contact & header — 10
+  // ── Completeness — 30 ──
   const contact = (id: string, label: string, max: number, ok: boolean, field: string, message: string) =>
-    add({ id, category: "contact", label, max, ratio: ok ? 1 : 0, message, section: "personal", field, fix: "manual" });
-  contact("contact.name", "Full name", 2, !blank(personal.full_name), "fullName", "Add your full name.");
+    add({ id, category: "completeness", label, max, ratio: ok ? 1 : 0, kind: "missing", message, section: "personal", field, fix: "manual" });
+  contact("contact.name", "Full name", 2.5, !blank(personal.full_name), "fullName", "Add your full name.");
   contact(
     "contact.email",
     "Email address",
-    2,
+    2.5,
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(personal.email)),
     "email",
     "Add a valid email address."
@@ -346,59 +442,25 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     "links",
     "Add a LinkedIn, portfolio or GitHub link."
   );
-
-  // Summary — 10
-  const summaryWords = words(summary).length;
-  const summaryLower = summary.toLowerCase();
   add({
     id: "summary.present",
-    category: "summary",
+    category: "completeness",
     label: "Professional summary",
     max: 4,
     ratio: summary ? 1 : 0,
+    kind: "missing",
     message: "Add a 2–4 sentence summary of who you are and what you're best at.",
     section: "summary",
     fix: allBullets.length > 0 ? "ai" : "manual",
     polish: { kind: "summary" },
   });
   add({
-    id: "summary.length",
-    category: "summary",
-    label: "Summary length",
-    max: 3,
-    ratio: lengthRatio(summaryWords, 30, 90),
-    message:
-      summaryWords === 0
-        ? "Write a summary of 30–90 words."
-        : summaryWords < 30
-          ? `Your summary is ${summaryWords} words — aim for 30–90.`
-          : `Your summary is ${summaryWords} words — trim it to 90 or fewer.`,
-    section: "summary",
-    fix: summary || allBullets.length > 0 ? "ai" : "manual",
-    polish: { kind: "summary" },
-  });
-  const summaryIssues = [FIRST_PERSON.test(summaryLower), BUZZWORDS.some((b) => summaryLower.includes(b))].filter(Boolean).length;
-  add({
-    id: "summary.voice",
-    category: "summary",
-    label: "Summary voice",
-    max: 3,
-    ratio: summary ? 1 - summaryIssues / 2 : 0,
-    message: summary
-      ? "Drop “I/my” and clichés like “hard-working” — state what you do and what you've achieved."
-      : "Write a summary without “I/my” or clichés.",
-    section: "summary",
-    fix: summary || allBullets.length > 0 ? "ai" : "manual",
-    polish: { kind: "summary" },
-  });
-
-  // Experience — 35
-  add({
     id: "experience.present",
-    category: "experience",
+    category: "completeness",
     label: "Work experience",
     max: 5,
     ratio: experience.length > 0 ? 1 : 0,
+    kind: "missing",
     message: "Add at least one role.",
     section: "experience",
     fix: "manual",
@@ -409,10 +471,11 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
   const incompleteCount = experience.filter((e) => !isComplete(e)).length;
   add({
     id: "experience.complete",
-    category: "experience",
+    category: "completeness",
     label: "Role details",
-    max: 8,
+    max: 4,
     ratio: experience.length ? (experience.length - incompleteCount) / experience.length : 0,
+    kind: "missing",
     message: experience.length
       ? `${plural(incompleteCount, "role is", "roles are")} missing a title, company or dates.`
       : "Add a role with its title, company and dates.",
@@ -420,22 +483,102 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     index: incompleteRole >= 0 ? incompleteRole : undefined,
     fix: "manual",
   });
+  add({
+    id: "education.present",
+    category: "completeness",
+    label: "Education",
+    max: 2,
+    ratio: education.length > 0 ? 1 : 0,
+    kind: "missing",
+    message: "Add your education.",
+    section: "education",
+    fix: "manual",
+  });
+  const eduComplete = (e: NonNullable<ScoreInput["education"]>[number]) =>
+    !blank(e.institution) && !blank(e.degree) && (!blank(e.start_date) || !blank(e.end_date));
+  const eduIncomplete = education.findIndex((e) => !eduComplete(e));
+  add({
+    id: "education.complete",
+    category: "completeness",
+    label: "Education details",
+    max: 2,
+    ratio: education.length ? education.filter(eduComplete).length / education.length : 0,
+    kind: "missing",
+    message: education.length ? "Add the school, degree and dates for every entry." : "Add a school and degree.",
+    section: "education",
+    index: eduIncomplete >= 0 ? eduIncomplete : undefined,
+    fix: "manual",
+  });
+  // Optional sections: absent is fine; an entry that's there but half-filled is not.
+  const shown = options.sections ? new Set(options.sections) : null;
+  let optionalTotal = 0;
+  let optionalIncomplete = 0;
+  let firstIncomplete: { key: string; label: string; index: number } | null = null;
+  const incompleteLabels: string[] = [];
+  for (const spec of OPTIONAL_SECTIONS) {
+    if (shown && !shown.has(spec.key)) continue;
+    const items = list<Record<string, unknown>>(cv[spec.key]).filter((item) => item && typeof item === "object");
+    items.forEach((item, index) => {
+      optionalTotal += 1;
+      const undated = spec.dated && blank(item.start_date) && blank(item.end_date);
+      if (spec.fields.some((f) => blank(item[f])) || undated) {
+        optionalIncomplete += 1;
+        if (!firstIncomplete) firstIncomplete = { key: spec.key, label: spec.label, index };
+        if (!incompleteLabels.includes(spec.label)) incompleteLabels.push(spec.label);
+      }
+    });
+  }
+  const firstGap = firstIncomplete as { key: string; label: string; index: number } | null;
+  add({
+    id: "sections.complete",
+    category: "completeness",
+    label: "Other sections",
+    max: 2,
+    // With no optional entries this passes once the CV has a start (an empty CV scores 0).
+    ratio: optionalTotal ? (optionalTotal - optionalIncomplete) / optionalTotal : experience.length + education.length > 0 ? 1 : 0,
+    kind: "missing",
+    message: optionalTotal === 0 ? "Add your experience and education." : `${plural(optionalIncomplete, "entry", "entries")} in ${incompleteLabels.join(", ")} ${optionalIncomplete === 1 ? "is" : "are"} missing details. Fill ${optionalIncomplete === 1 ? "it" : "them"} in or remove ${optionalIncomplete === 1 ? "it" : "them"}.`,
+    section: firstGap?.key ?? "projects",
+    index: firstGap?.index,
+    fix: "manual",
+  });
+
+  // ── Impact — 35 ──
   const thinRole = roleBullets.findIndex((b) => b.length < 3);
   const emptyRole = roleBullets.findIndex((b) => b.length === 0);
   add({
     id: "experience.bulletCount",
-    category: "experience",
+    category: "impact",
     label: "Bullets per role",
-    max: 7,
+    max: 10,
     ratio: roleBullets.length ? roleBullets.reduce((sum, b) => sum + Math.min(b.length, 3) / 3, 0) / roleBullets.length : 0,
+    // A role with no bullets at all is something to add, not something to reword.
+    kind: emptyRole >= 0 || roleBullets.length === 0 ? "missing" : "improve",
     message:
       emptyRole >= 0
-        ? "Add bullet points to every role — what you did and what changed because of it."
-        : "Give each role at least 3 bullet points.",
+        ? "Add bullet points to every role: what you did and what changed because of it."
+        : roleBullets.length === 0
+          ? "Add a role with bullet points about what you did."
+          : "Give each role at least 3 bullet points.",
     section: "experience",
     index: emptyRole >= 0 ? emptyRole : thinRole >= 0 ? thinRole : undefined,
     fix: emptyRole >= 0 || roleBullets.length === 0 ? "manual" : "ai",
     polish: thinRole >= 0 ? { kind: "bullets", index: thinRole } : undefined,
+  });
+  const quantified = allBullets.filter(hasNumber).length;
+  const unquantifiedRole = roleBullets.findIndex((bs) => bs.length > 0 && !bs.some(hasNumber));
+  add({
+    id: "experience.quantified",
+    category: "impact",
+    label: "Measurable results",
+    max: 12,
+    ratio: allBullets.length ? quantified / allBullets.length / 0.4 : 0,
+    kind: "improve",
+    message:
+      "Add numbers to at least 40% of your bullets: %, money, time saved, team or user counts. Only you know these, so AI won't make them up.",
+    section: "experience",
+    index: unquantifiedRole >= 0 ? unquantifiedRole : undefined,
+    fix: "manual",
   });
   const verbStart = (b: string) => {
     const w = firstWord(b);
@@ -444,29 +587,16 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
   const weakVerbRole = roleBullets.findIndex((bs) => bs.some((b) => !verbStart(b)));
   add({
     id: "experience.actionVerbs",
-    category: "experience",
+    category: "impact",
     label: "Action verbs",
-    max: 5,
+    max: 8,
     ratio: allBullets.length ? allBullets.filter(verbStart).length / allBullets.length : 0,
+    kind: "improve",
     message: `${plural(allBullets.filter((b) => !verbStart(b)).length, "bullet doesn't", "bullets don't")} start with a strong action verb (Led, Built, Reduced…).`,
     section: "experience",
     index: weakVerbRole >= 0 ? weakVerbRole : undefined,
     fix: allBullets.length ? "ai" : "manual",
     polish: { kind: "bullets" },
-  });
-  const quantified = allBullets.filter(hasNumber).length;
-  const unquantifiedRole = roleBullets.findIndex((bs) => bs.length > 0 && !bs.some(hasNumber));
-  add({
-    id: "experience.quantified",
-    category: "experience",
-    label: "Measurable results",
-    max: 6,
-    ratio: allBullets.length ? quantified / allBullets.length / 0.4 : 0,
-    message:
-      "Add numbers to at least 40% of your bullets — %, money, time saved, team or user counts. Only you know these, so AI won't make them up.",
-    section: "experience",
-    index: unquantifiedRole >= 0 ? unquantifiedRole : undefined,
-    fix: "manual",
   });
   const goodLength = (b: string) => {
     const n = words(b).length;
@@ -475,98 +605,53 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
   const badLengthRole = roleBullets.findIndex((bs) => bs.some((b) => !goodLength(b)));
   add({
     id: "experience.bulletLength",
-    category: "experience",
+    category: "impact",
     label: "Bullet length",
-    max: 4,
+    max: 5,
     ratio: allBullets.length ? allBullets.filter(goodLength).length / allBullets.length : 0,
-    message: `${plural(allBullets.filter((b) => !goodLength(b)).length, "bullet is", "bullets are")} too short or too long — aim for 8–35 words each.`,
+    kind: "improve",
+    message: `${plural(allBullets.filter((b) => !goodLength(b)).length, "bullet is", "bullets are")} too short or too long. Aim for 8–35 words each.`,
     section: "experience",
     index: badLengthRole >= 0 ? badLengthRole : undefined,
     fix: allBullets.length ? "ai" : "manual",
     polish: { kind: "bullets" },
   });
 
-  // Skills — 15
+  // ── Writing & ATS — 20 ──
+  const summaryWords = words(summary).length;
+  const summaryLower = summary.toLowerCase();
   add({
-    id: "skills.count",
-    category: "skills",
-    label: "Number of skills",
-    max: 8,
-    ratio: Math.min(skills.length, 6) / 6,
-    message: `You list ${plural(skills.length, "skill", "skills")} — add at least 6.`,
-    section: "skills",
-    fix: allBullets.length > 0 || summary ? "ai" : "manual",
-    polish: { kind: "skills" },
-  });
-  const seen = new Set<string>();
-  let duplicates = 0;
-  for (const skill of skills) {
-    const key = skill.toLowerCase();
-    if (seen.has(key)) duplicates += 1;
-    seen.add(key);
-  }
-  add({
-    id: "skills.duplicates",
-    category: "skills",
-    label: "No duplicate skills",
-    max: 2,
-    ratio: skills.length ? (duplicates === 0 ? 1 : 0) : 0,
-    message: skills.length ? `${plural(duplicates, "skill is", "skills are")} listed twice.` : "Add your skills.",
-    section: "skills",
-    fix: skills.length ? "ai" : "manual",
-    polish: { kind: "skills" },
-  });
-  add({
-    id: "skills.focused",
-    category: "skills",
-    label: "Focused skill list",
-    max: 2,
-    ratio: skills.length === 0 ? 0 : skills.length <= 30 ? 1 : 1 - (skills.length - 30) / 30,
-    message: skills.length ? `${skills.length} skills is a lot — keep the 30 most relevant.` : "Add your skills.",
-    section: "skills",
-    fix: skills.length ? "ai" : "manual",
-    polish: { kind: "skills" },
-  });
-  const namedGroups = groups.filter((g) => !blank(g.category) && list<string>(g.items).some((i) => !blank(i))).length;
-  add({
-    id: "skills.grouped",
-    category: "skills",
-    label: "Grouped skills",
+    id: "summary.length",
+    category: "writing",
+    label: "Summary length",
     max: 3,
-    ratio: skills.length === 0 ? 0 : skills.length < 8 || namedGroups >= 2 ? 1 : 0,
-    message: skills.length ? "Group your skills into named categories (e.g. Languages, Tools)." : "Add your skills.",
-    section: "skills",
-    fix: skills.length ? "ai" : "manual",
-    polish: { kind: "skills" },
+    ratio: lengthRatio(summaryWords, 30, 90),
+    kind: "improve",
+    message:
+      summaryWords === 0
+        ? "Write a summary of 30–90 words."
+        : summaryWords < 30
+          ? `Your summary is ${summaryWords} words. Aim for 30–90.`
+          : `Your summary is ${summaryWords} words. Trim it to 90 or fewer.`,
+    section: "summary",
+    fix: summary || allBullets.length > 0 ? "ai" : "manual",
+    polish: { kind: "summary" },
   });
-
-  // Education — 10
+  const summaryIssues = [FIRST_PERSON.test(summaryLower), BUZZWORDS.some((b) => summaryLower.includes(b))].filter(Boolean).length;
   add({
-    id: "education.present",
-    category: "education",
-    label: "Education",
-    max: 5,
-    ratio: education.length > 0 ? 1 : 0,
-    message: "Add your education.",
-    section: "education",
-    fix: "manual",
+    id: "summary.voice",
+    category: "writing",
+    label: "Summary voice",
+    max: 3,
+    ratio: summary ? 1 - summaryIssues / 2 : 0,
+    kind: "improve",
+    message: summary
+      ? "Drop “I/my” and clichés like “hard-working”. State what you do and what you've achieved."
+      : "Write a summary without “I/my” or clichés.",
+    section: "summary",
+    fix: summary || allBullets.length > 0 ? "ai" : "manual",
+    polish: { kind: "summary" },
   });
-  const eduIncomplete = education.findIndex((e) => blank(e.institution) || blank(e.degree));
-  add({
-    id: "education.complete",
-    category: "education",
-    label: "Education details",
-    max: 5,
-    ratio: education.length
-      ? education.filter((e) => !blank(e.institution) && !blank(e.degree)).length / education.length
-      : 0,
-    message: education.length ? "Add the school and degree for every entry." : "Add a school and degree.",
-    section: "education",
-    index: eduIncomplete >= 0 ? eduIncomplete : undefined,
-    fix: "manual",
-  });
-
-  // Writing & ATS — 20
   const proseLower = [summary, ...allBullets].join("\n").toLowerCase();
   const buzzCount = BUZZWORDS.filter((b) => proseLower.includes(b)).length;
   const bulletsLower = allBullets.join("\n").toLowerCase();
@@ -576,8 +661,9 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     id: "writing.buzzwords",
     category: "writing",
     label: "No clichés",
-    max: 5,
+    max: 3,
     ratio: hasProse ? 1 - buzzCount / 4 : 0,
+    kind: "improve",
     message: hasProse
       ? `Replace ${plural(buzzCount, "cliché", "clichés")} (“team player”, “responsible for”…) with concrete results.`
       : "Add a summary and experience bullets.",
@@ -590,10 +676,11 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     id: "writing.firstPerson",
     category: "writing",
     label: "No first person in bullets",
-    max: 5,
+    max: 3,
     ratio: allBullets.length ? 1 - firstPersonBullets / allBullets.length : 0,
+    kind: "improve",
     message: allBullets.length
-      ? `${plural(firstPersonBullets, "bullet uses", "bullets use")} “I/my” — start with the verb instead.`
+      ? `${plural(firstPersonBullets, "bullet uses", "bullets use")} “I/my”. Start with the verb instead.`
       : "Add experience bullets.",
     section: "experience",
     fix: allBullets.length ? "ai" : "manual",
@@ -613,11 +700,12 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     max: 3,
     // Nothing dated passes only when there are entries (missing dates are scored in "Role details").
     ratio: dates.length === 0 ? (experience.length + education.length > 0 ? 1 : 0) : (recognized.length / dates.length) * (families <= 1 ? 1 : 0.5),
+    kind: "improve",
     message:
       dates.length === 0
         ? "Add your experience and education with dates."
         : recognized.length < dates.length
-        ? "Some dates aren't in a format ATS systems read — use one format like 2023-01 or Jan 2023."
+        ? "Some dates aren't in a format ATS systems read. Use one format like 2023-01 or Jan 2023."
         : "Use one date format throughout (e.g. always 2023-01).",
     section: "experience",
     fix: "manual",
@@ -634,12 +722,13 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     id: "writing.length",
     category: "writing",
     label: "Overall length",
-    max: 4,
+    max: 3,
     ratio: lengthRatio(totalWords, 250, 1000),
+    kind: "improve",
     message:
       totalWords < 250
-        ? `Your CV has about ${totalWords} words of content — add more detail to reach 250+.`
-        : `Your CV has about ${totalWords} words — tighten it to 1,000 or fewer.`,
+        ? `Your CV has about ${totalWords} words of content. Add more detail to reach 250+.`
+        : `Your CV has about ${totalWords} words. Tighten it to 1,000 or fewer.`,
     section: "experience",
     fix: totalWords > 1000 ? "ai" : "manual",
     polish: totalWords > 1000 ? { kind: "bullets" } : undefined,
@@ -661,25 +750,81 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     id: "writing.verbVariety",
     category: "writing",
     label: "Varied wording",
-    max: 3,
+    max: 2,
     ratio: allBullets.length === 0 ? 0 : topCount <= 3 ? 1 : 1 - (topCount - 3) / 3,
+    kind: "improve",
     message: allBullets.length
-      ? `“${topVerb}” starts ${topCount} bullets — vary your verbs.`
+      ? `“${topVerb}” starts ${topCount} bullets. Vary your verbs.`
       : "Add experience bullets.",
     section: "experience",
     fix: allBullets.length ? "ai" : "manual",
     polish: { kind: "bullets" },
   });
 
-  // Job match — 30 (only with a job); the rest is scaled to 70.
-  let jobMatch: JobMatch | undefined;
-  if (job && typeof job === "object") {
-    const scale = 0.7;
-    for (const check of checks) {
-      check.max = round1(check.max * scale);
-      check.points = round1(check.points * scale);
-    }
+  // ── Skills — 15 ──
+  add({
+    id: "skills.count",
+    category: "skills",
+    label: "Number of skills",
+    max: 8,
+    ratio: Math.min(skills.length, 6) / 6,
+    kind: "missing",
+    message: `You list ${plural(skills.length, "skill", "skills")}. Add at least 6.`,
+    section: "skills",
+    fix: allBullets.length > 0 || summary ? "ai" : "manual",
+    polish: { kind: "skills" },
+  });
+  const seen = new Set<string>();
+  let duplicates = 0;
+  for (const skill of skills) {
+    const key = skill.toLowerCase();
+    if (seen.has(key)) duplicates += 1;
+    seen.add(key);
+  }
+  add({
+    id: "skills.duplicates",
+    category: "skills",
+    label: "No duplicate skills",
+    max: 2,
+    ratio: skills.length ? (duplicates === 0 ? 1 : 0) : 0,
+    kind: "improve",
+    message: skills.length ? `${plural(duplicates, "skill is", "skills are")} listed twice.` : "Add your skills.",
+    section: "skills",
+    fix: skills.length ? "ai" : "manual",
+    polish: { kind: "skills" },
+  });
+  add({
+    id: "skills.focused",
+    category: "skills",
+    label: "Focused skill list",
+    max: 2,
+    ratio: skills.length === 0 ? 0 : skills.length <= 30 ? 1 : 1 - (skills.length - 30) / 30,
+    kind: "improve",
+    message: skills.length ? `${skills.length} skills is a lot. Keep the 30 most relevant.` : "Add your skills.",
+    section: "skills",
+    fix: skills.length ? "ai" : "manual",
+    polish: { kind: "skills" },
+  });
+  const namedGroups = groups.filter((g) => !blank(g.category) && list<string>(g.items).some((i) => !blank(i))).length;
+  add({
+    id: "skills.grouped",
+    category: "skills",
+    label: "Grouped skills",
+    max: 3,
+    ratio: skills.length === 0 ? 0 : skills.length < 8 || namedGroups >= 2 ? 1 : 0,
+    kind: "improve",
+    message: skills.length ? "Group your skills into named categories (e.g. Languages, Tools)." : "Add your skills.",
+    section: "skills",
+    fix: skills.length ? "ai" : "manual",
+    polish: { kind: "skills" },
+  });
 
+  const quality = toScore(sumPoints(checks));
+
+  // ── Job match — its own 100, only with a job ──
+  let jobMatch: JobMatch | undefined;
+  let jobScore: number | undefined;
+  if (job && typeof job === "object") {
     const cvText = [
       str(personal.title),
       summary,
@@ -716,37 +861,72 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     const preferred = uniq(job.preferredSkills).map((skill) => ({ skill, found: contains(everywhere, skill) }));
     const missingRequired = required.filter((s) => !s.found).map((s) => s.skill);
     const missingPreferred = preferred.filter((s) => !s.found).map((s) => s.skill);
+    const jobChecks: ScoreCheck[] = [];
+    const addJob = (spec: Omit<CheckSpec, "category">) => {
+      const check = makeCheck({ ...spec, category: "job" });
+      jobChecks.push(check);
+      checks.push(check);
+    };
 
-    add({
+    addJob({
       id: "job.required",
-      category: "job",
       label: "Required skills",
-      max: 18,
+      max: 45,
       ratio: required.length ? (required.length - missingRequired.length) / required.length : 1,
+      kind: "missing",
       message: `The job asks for ${missingRequired.join(", ")}. Add the ones you really have to your skills or bullets.`,
       section: "skills",
       fix: "manual",
     });
-    add({
+    addJob({
       id: "job.preferred",
-      category: "job",
       label: "Nice-to-have skills",
-      max: 6,
+      max: 15,
       ratio: preferred.length ? (preferred.length - missingPreferred.length) / preferred.length : 1,
+      kind: "missing",
       message: `Also mentioned: ${missingPreferred.join(", ")}. Add any you have.`,
       section: "skills",
+      fix: "manual",
+    });
+
+    // A skill only in the skills list counts less than one shown in the work.
+    const matched = [...required, ...preferred].filter((s) => s.found);
+    const shownInWork = matched.filter((s) => contains(inWork, s.skill)).length;
+    addJob({
+      id: "job.inContext",
+      label: "Skills shown in your work",
+      max: 10,
+      ratio: matched.length ? shownInWork / matched.length / 0.5 : required.length + preferred.length ? 0 : 1,
+      kind: "improve",
+      message:
+        "Mention the job's skills in your summary and bullets where you used them, not only in the skills list.",
+      section: "experience",
+      fix: matched.length ? "ai" : "manual",
+      polish: { kind: "bullets" },
+    });
+
+    const keywords = uniq(job.keywords).filter((k) => !required.some((s) => s.skill === k) && !preferred.some((s) => s.skill === k));
+    const missingKeywords = keywords.filter((k) => !contains(everywhere, k));
+    addJob({
+      id: "job.keywords",
+      label: "Job keywords",
+      max: 10,
+      ratio: keywords.length ? (keywords.length - missingKeywords.length) / keywords.length : 1,
+      kind: "missing",
+      message: `The posting also uses: ${missingKeywords.slice(0, 8).join(", ")}. Use the ones that describe your real work.`,
+      section: "experience",
       fix: "manual",
     });
 
     const titleTokens = tokens(str(job.title)).filter((t) => !STOPWORDS.has(t));
     const headline = haystack([str(personal.title)]);
     const titleHits = titleTokens.filter((t) => headline.includes(` ${t} `)).length;
-    add({
+    addJob({
       id: "job.title",
-      category: "job",
       label: "Headline matches the job",
-      max: 3,
+      max: 15,
       ratio: titleTokens.length ? titleHits / titleTokens.length : 1,
+      kind: "improve",
       message: `Use a headline close to the job title (“${str(job.title)}”) if it fits your experience.`,
       section: "personal",
       field: "headline",
@@ -754,21 +934,21 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
       polish: { kind: "headline" },
     });
 
-    const matched = [...required, ...preferred].filter((s) => s.found);
-    const shown = matched.filter((s) => contains(inWork, s.skill)).length;
-    add({
-      id: "job.inContext",
-      category: "job",
-      label: "Skills shown in your work",
-      max: 3,
-      ratio: matched.length ? shown / matched.length / 0.5 : required.length + preferred.length ? 0 : 1,
-      message:
-        "Mention the job's skills in your summary and bullets where you used them — not only in the skills list.",
+    const level = str(job.seniority).toLowerCase();
+    const needYears = SENIORITY_YEARS[level] ?? 0;
+    const years = yearsOfExperience(experience, now);
+    addJob({
+      id: "job.seniority",
+      label: "Experience level",
+      max: 5,
+      ratio: needYears ? years / needYears : 1,
+      kind: "improve",
+      message: `The job looks for a ${level} profile (about ${needYears}+ years). Your role dates add up to about ${Math.round(years)}. Check every role has its dates.`,
       section: "experience",
-      fix: matched.length ? "ai" : "manual",
-      polish: { kind: "bullets" },
+      fix: "manual",
     });
 
+    jobScore = toScore(sumPoints(jobChecks));
     jobMatch = {
       title: str(job.title),
       required,
@@ -777,7 +957,7 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     };
   }
 
-  const categoryOrder: ScoreCategoryKey[] = ["contact", "summary", "experience", "skills", "education", "writing", "job"];
+  const categoryOrder: ScoreCategoryKey[] = ["completeness", "impact", "writing", "skills", "job"];
   const categories: ScoreCategory[] = categoryOrder
     .map((key) => {
       const inCategory = checks.filter((c) => c.category === key);
@@ -790,15 +970,23 @@ export function scoreCv(content: ScoreInput | null | undefined, job?: ScoreJobRe
     })
     .filter((c) => c.max > 0);
 
-  const rawTotal = checks.reduce((s, c) => s + c.points, 0);
   const result: CvScore = {
-    total: Math.max(0, Math.min(100, Math.round(rawTotal))),
+    total: jobScore === undefined ? quality : toScore(quality * QUALITY_WEIGHT + jobScore * JOB_WEIGHT),
+    quality,
     version: SCORE_RULES_VERSION,
     categories,
     checks,
   };
+  if (jobScore !== undefined) result.job = jobScore;
   if (jobMatch) result.jobMatch = jobMatch;
   return result;
+}
+
+/** Overall points a check would add if fixed — its own points lost, weighted by how much its score counts. */
+export function overallGain(score: Pick<CvScore, "job">, check: ScoreCheck): number {
+  const lost = check.max - check.points;
+  const weight = score.job === undefined ? 1 : check.category === "job" ? JOB_WEIGHT : QUALITY_WEIGHT;
+  return round1(lost * weight);
 }
 
 /** Whether any of the texts mentions the phrase as whole words (same matching as the job-match checks). */

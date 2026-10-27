@@ -18,7 +18,7 @@ const inputClass =
 
 function Frame({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-[#0a0a0a] px-6 font-sans text-white">
+    <div className="fixed inset-0 flex h-dvh w-full items-center justify-center overflow-y-auto overflow-x-hidden overscroll-none bg-[#0a0a0a] px-6 font-sans text-white">
       <div className="w-full max-w-[380px] py-10 text-center">
         <h1 className="text-[28px] font-bold leading-tight tracking-tight sm:text-[32px]">{title}</h1>
         {children}

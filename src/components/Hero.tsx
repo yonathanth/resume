@@ -121,7 +121,7 @@ export function Hero() {
 
       {/* CTA Buttons — side by side at every size */}
       <div className="hero-rise [animation-delay:320ms] mt-8 flex flex-row items-center justify-center gap-2.5 sm:gap-3">
-        <CtaButton href="/signup" size="hero">Start free</CtaButton>
+        <CtaButton href="/signup" size="hero" shine="strong">Start free</CtaButton>
         <CtaButton href="/how-it-works" variant="secondary" size="hero">How it works</CtaButton>
       </div>
     </section>

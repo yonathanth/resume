@@ -15,7 +15,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowModal, JobGaps, TemplateStep, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowModal, JobGaps, JobMismatchDialog, RunOnMount, TemplateStep, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -31,7 +31,7 @@ import {
   getQuestionFormState,
   useQuestionPages,
 } from "./ClarifyingQuestionsForm";
-import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, updateCvContent } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, updateCvContent, type GenerateCvMismatch } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
@@ -39,10 +39,11 @@ import { useAccountGate } from "@/components/account-gate/AccountGate";
 import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
 import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
-import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
+import { CareerProfilesPaywall, ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
+import { useBackgroundProfileSync } from "@/hooks/use-background-profile-sync";
 import { ProfileSyncStep } from "./ProfileSyncStep";
 import { useToast } from "@/components/Toaster";
-import { ProfilePicker } from "./ProfilePicker";
+import { ProfilePicker, isProfileUsable } from "./ProfilePicker";
 import { ConfirmedGap, GapOutcome, GapReviewStep, gapsNotInContent, withAddedSkills } from "./GapReviewStep";
 
 interface TailorCvModalProps {
@@ -50,6 +51,9 @@ interface TailorCvModalProps {
   onClose: () => void;
   onComplete: (cvData: CvData) => void;
   pastProjects?: PastProjectOption[];
+  /** A saved CV to tailor (from its card): the source step is skipped and its template kept. */
+  initialSourceCvId?: string | null;
+  initialTemplate?: TemplateId;
 }
 
 type TailorStep =
@@ -66,6 +70,11 @@ type TailorStep =
   | "select-template";
 
 type TemplateNext = { kind: "existing"; sourceId: string } | { kind: "story" } | { kind: "upload"; file: File };
+
+// "Insert sample story" fills the story box: a shortcut for testing, so only in development.
+const SHOW_SAMPLE_STORY = process.env.NODE_ENV === "development";
+const SAMPLE_STORY =
+  "Senior Cloud Architect with 7 years leading AWS & Kubernetes platforms at Stripe and Vercel. Cut cloud spend by $320K, managed 12M daily requests with Go & Terraform, UC Berkeley CS graduate.";
 
 /** What's kept across a refresh: everything typed and chosen, and the AI's results so far (not a picked file). */
 interface TailorDraft {
@@ -140,6 +149,8 @@ export function TailorCvModal({
   onClose,
   onComplete,
   pastProjects = [],
+  initialSourceCvId = null,
+  initialTemplate,
 }: TailorCvModalProps) {
   // Progress kept across a refresh (or a trip to checkout): see useSaveFlowDraft below.
   const saved = useRestoredFlowDraft<TailorDraft>("tailor");
@@ -156,9 +167,9 @@ export function TailorCvModal({
   // Source selection: 'profile' | 'past-project' | 'new-cv'
   const [sourceType, setSourceType] = useState<
     "profile" | "past-project" | "new-cv"
-  >(saved?.sourceType ?? "profile");
+  >(saved?.sourceType ?? (initialSourceCvId ? "past-project" : "profile"));
   const [selectedProjectId, setSelectedProjectId] = useState<string>(
-    saved?.selectedProjectId ?? (pastProjects[0]?.id || "draft-1")
+    saved?.selectedProjectId ?? initialSourceCvId ?? (pastProjects[0]?.id || "draft-1")
   );
 
   // New CV / Scratch sub-flow states
@@ -176,7 +187,7 @@ export function TailorCvModal({
 
 
   // Template selection state
-  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? DEFAULT_TEMPLATE_ID);
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? initialTemplate ?? DEFAULT_TEMPLATE_ID);
 
   // Real backend integration now covers every source — "new-cv" via
   // analyze/upload, "profile"/"past-project" via pulling their real saved
@@ -186,6 +197,8 @@ export function TailorCvModal({
   const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(saved?.latestContent ?? undefined);
   const [analyzedSourceText, setAnalyzedSourceText] = useState(saved?.analyzedSourceText ?? "");
   const [flowError, setFlowError] = useState<string | null>(null);
+  // The AI won't tailor to a job in another field — the user picks what to do next.
+  const [mismatch, setMismatch] = useState<GenerateCvMismatch | null>(null);
   // The profile / past resume currently being loaded from a click.
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
 
@@ -212,8 +225,14 @@ export function TailorCvModal({
   const proGate = useProGate();
   // Signed out (the /try pages): only what needs no account, and an account before the AI.
   const { isGuest, requireAccount } = useAccountGate();
-  // Career profiles are Pro-only; free users see the option with a Pro badge.
-  const { data: careerProfiles = [] } = useProfiles();
+  // Career profiles come with Plus and Pro; free users see the option with a Pro badge.
+  const { data: careerProfiles = [], isSuccess: profilesLoaded } = useProfiles();
+  // Faded until there's a profile to build from (shown as available while they load).
+  const hasUsableProfile = !profilesLoaded || careerProfiles.some(isProfileUsable);
+  // The career-profile option on a free plan: what profiles do, and the upgrade.
+  const [profilesPaywallOpen, setProfilesPaywallOpen] = useState(false);
+  // Profile updates set to automatic: no last step, the profile is updated in the background.
+  const backgroundSync = useBackgroundProfileSync();
   // The profile this CV is being tailored from, if any — facts go back to it.
   const [sourceProfileId, setSourceProfileId] = useState<string | null>(saved?.sourceProfileId ?? null);
   const subscriptionStatus = useSubscriptionStatus().data;
@@ -262,11 +281,11 @@ export function TailorCvModal({
       const { cvDocumentId: docId, sourceText, document } =
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
-            ? { sourceCvId: sourceId, templateId, flowType: "tailor" }
-            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId, flowType: "tailor" }
+            ? { sourceCvId: sourceId, templateId, flowType: "tailor", payLater: proGate.payLater() }
+            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId, flowType: "tailor", payLater: proGate.payLater() }
         );
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setCvDocumentId(docId);
@@ -281,7 +300,7 @@ export function TailorCvModal({
       setTargetRole(personal.title || targetRole);
       setStep("jd-and-slider");
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId))) return;
       setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
     } finally {
       setLoadingSourceId(null);
@@ -302,10 +321,11 @@ export function TailorCvModal({
         file,
         templateId,
         flowType: "tailor",
+        payLater: proGate.payLater(),
       });
 
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         setStep("new-cv-upload");
         return;
       }
@@ -323,7 +343,7 @@ export function TailorCvModal({
       // Nothing to ask: go straight on to the job description.
       setStep(document.questions?.length ? "new-cv-missing" : "jd-and-slider");
     } catch (err) {
-      if (proGate.isProRequired(err)) {
+      if (proGate.isProRequired(err, () => handleUploadFile(file, templateId))) {
         setStep("new-cv-upload");
         return;
       }
@@ -354,9 +374,10 @@ export function TailorCvModal({
         sourceText: text,
         templateId,
         flowType: "tailor",
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setCvDocumentId(docId);
@@ -372,7 +393,7 @@ export function TailorCvModal({
       // Nothing to ask: go straight on to the job description.
       setStep(document.questions?.length ? "new-cv-missing" : "jd-and-slider");
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId))) return;
       setFlowError(err instanceof Error ? err.message : "Could not analyze your story. Please try again.");
     }
   };
@@ -428,8 +449,22 @@ export function TailorCvModal({
 
   // Done tailoring: straight into the editor — or, on Pro, first the offer to
   // save it to a career profile (the only end step with a real choice in it).
+  // With profile updates set to automatic, that happens in the background instead.
   const toTheEnd = (content?: CVContentDTO) => {
-    if (canUseProfiles && cvDocumentId) setStep("select-template");
+    if (canUseProfiles && cvDocumentId && backgroundSync.autoSync === "always") {
+      const fromProfile = sourceType === "profile" && sourceProfileId;
+      const hasNewDetails = confirmedGaps.length > 0 || Object.values(questionAnswers).some((answer) => answer.trim());
+      // A CV from a profile only gives back what the user added in this flow.
+      if (!fromProfile || hasNewDetails) {
+        backgroundSync.syncCv({
+          cvDocumentId,
+          factsOnly: true,
+          sourceProfileId: fromProfile ? sourceProfileId : null,
+          roleTitle: (targetRole || content?.personal?.title || latestContent?.personal?.title || "").trim(),
+        });
+      }
+      handleFinish(content);
+    } else if (canUseProfiles && cvDocumentId) setStep("select-template");
     else handleFinish(content);
   };
 
@@ -437,7 +472,11 @@ export function TailorCvModal({
   // gaps the user confirmed into the backend document via the same refine
   // endpoint CreateCvModal uses. Resolves to
   // the gaps still left and the tailored content, or null when it didn't go through.
-  const runTailoring = async (gapsToAdd: ConfirmedGap[]): Promise<{ remaining: string[]; content: CVContentDTO } | null> => {
+  // `retry` re-runs the step that called this, after "pay at download" on the paywall.
+  const runTailoring = async (
+    gapsToAdd: ConfirmedGap[],
+    retry: () => void
+  ): Promise<{ remaining: string[]; content: CVContentDTO } | null> => {
     if (!cvDocumentId) return null;
 
     const { personal, otherLines } = splitClarificationAnswers(clarifyingQuestions, questionAnswers);
@@ -469,9 +508,12 @@ export function TailorCvModal({
           ? "Work every requirement listed under \"Details the candidate confirmed\" into this CV where it belongs, " +
             "using only what the candidate wrote about it."
           : undefined,
+        // A copied resume / profile is charged here, on its first AI pass.
+        flowType: "tailor",
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return null;
       }
       // Whatever the user ticked must end up in the CV: anything the AI
@@ -494,7 +536,7 @@ export function TailorCvModal({
       setJobGaps(remaining);
       return { remaining, content };
     } catch (err) {
-      if (proGate.isProRequired(err)) return null;
+      if (proGate.isProRequired(err, retry)) return null;
       setFlowError(err instanceof Error ? err.message : "Could not tailor your CV. Please try again.");
       return null;
     }
@@ -508,7 +550,7 @@ export function TailorCvModal({
       handleFinish();
       return;
     }
-    const result = await runTailoring(confirmedGaps);
+    const result = await runTailoring(confirmedGaps, () => void handleContinueToTemplate());
     if (!result) return;
     // Gaps left to review means it isn't finished yet — save the ta-da for the end.
     if (result.remaining.length > 0) {
@@ -528,7 +570,7 @@ export function TailorCvModal({
     // look like requirements they were never asked about, so they're not shown.
     const picked = new Set(added.map((a) => a.gap.toLowerCase()));
     const notPicked = jobGaps.filter((gap) => !picked.has(gap.toLowerCase()));
-    const result = await runTailoring(all);
+    const result = await runTailoring(all, () => void handleAddConfirmedGaps(added));
     if (!result) return;
     setConfirmedGaps(all);
     setJobGaps(notPicked);
@@ -560,11 +602,47 @@ export function TailorCvModal({
       onClose={onClose}
       loader={aiWait && <AiWaitLoader wait={aiWait} done={aiDone !== null} fileName={uploadedFileName} />}
       outside={
-        <ProUpgradeModal
-          isOpen={proGate.isPaywallOpen}
-          onClose={proGate.closePaywall}
-          reason="You've already used your free Tailor generation. Upgrade to gomoxie pro for unlimited AI tailoring."
-        />
+        <>
+          <ProUpgradeModal
+            isOpen={proGate.isPaywallOpen}
+            onClose={proGate.closePaywall}
+            paywall={proGate.paywall}
+            onPayLater={proGate.canPayLater() ? proGate.continuePayLater : undefined}
+          />
+          <CareerProfilesPaywall isOpen={profilesPaywallOpen} onClose={() => setProfilesPaywallOpen(false)} />
+          <JobMismatchDialog
+            mismatch={mismatch}
+            onClose={() => setMismatch(null)}
+            options={
+              jobDescription.trim() && cvDocumentId
+                ? [
+                    {
+                      label: "Try a different job",
+                      onClick: () => {
+                        setMismatch(null);
+                        setJobDescription("");
+                        setStep("jd-and-slider");
+                      },
+                    },
+                    {
+                      label: "Tailor a different CV",
+                      onClick: () => {
+                        setMismatch(null);
+                        setStep("select-source");
+                      },
+                    },
+                    {
+                      label: "Open my CV without tailoring",
+                      onClick: () => {
+                        setMismatch(null);
+                        handleFinish();
+                      },
+                    },
+                  ]
+                : []
+            }
+          />
+        </>
       }
     >
         {/* ================= TEMPLATE (right before the first AI call) ================= */}
@@ -582,6 +660,10 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 1: SELECT SOURCE (3 Options) ================= */}
+        {/* Opened from a CV's card: read that CV (with its own template), then straight to the job. */}
+        {step === "select-source" && initialSourceCvId && !saved && !cvDocumentId && (
+          <RunOnMount run={() => void handlePrepareExistingSource(initialSourceCvId, selectedTemplate)} />
+        )}
         {step === "select-source" && (
           <div>
             <div className="text-center mb-6">
@@ -598,7 +680,7 @@ export function TailorCvModal({
                 icon={FileText}
                 tone="sky"
                 title="Use an existing CV"
-                description={isGuest ? "Upload a PDF, Word file or photo of your resume." : "Upload one, or pick a resume you've made here."}
+                description={isGuest ? "Upload a PDF, Word file or photo of your resume." : "Upload a file, or pick one of the resumes you've saved here."}
                 onClick={() => {
                   // Nothing saved here yet to pick from: straight to the upload.
                   if (isGuest) {
@@ -615,14 +697,17 @@ export function TailorCvModal({
                   icon={User}
                   tone="violet"
                   title="Start from a career profile"
+                  state={!canUseProfiles ? "locked" : !hasUsableProfile ? "unavailable" : undefined}
                   description={
-                    canUseProfiles
+                    !canUseProfiles
                       ? "Tailor everything a role profile holds to this job."
-                      : "A gomoxie pro feature: build from your saved role profiles."
+                      : !hasUsableProfile
+                        ? "You don't have a career profile with experience or skills yet."
+                        : "Tailor everything a role profile holds to this job."
                   }
                   onClick={() => {
                     if (!canUseProfiles) {
-                      proGate.openPaywall();
+                      setProfilesPaywallOpen(true);
                       return;
                     }
                     setSourceType("profile");
@@ -651,7 +736,7 @@ export function TailorCvModal({
           <div>
             <div className="text-center mb-5">
               <h2 className="text-xl font-bold tracking-tight text-neutral-950">
-                {sourceType === "profile" ? "Choose a career profile" : "Choose a resume"}
+                {sourceType === "profile" ? "Choose a career profile" : "Choose one of your saved resumes"}
               </h2>
             </div>
 
@@ -715,8 +800,13 @@ export function TailorCvModal({
               <OptionCard
                 icon={FolderOpen}
                 tone="emerald"
-                title="Choose from your resumes"
-                description={`Pick one you've already made (${pastProjects.length} available).`}
+                title="Choose one of your saved resumes"
+                state={pastProjects.length === 0 ? "unavailable" : undefined}
+                description={
+                  pastProjects.length === 0
+                    ? "You haven't made any resumes here yet."
+                    : `Pick a resume you've already made here (${pastProjects.length} saved).`
+                }
                 onClick={() => {
                   setSourceType("past-project");
                   setStep("pick-source-item");
@@ -755,20 +845,17 @@ export function TailorCvModal({
                 className="w-full p-3.5 rounded-2xl bg-white border border-neutral-300 text-sm text-neutral-900 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 resize-none"
               />
 
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-neutral-400">Need inspiration?</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFreestyleStory(
-                      "Senior Cloud Architect with 7 years leading AWS & Kubernetes platforms at Stripe and Vercel. Cut cloud spend by $320K, managed 12M daily requests with Go & Terraform, UC Berkeley CS graduate."
-                    )
-                  }
-                  className="text-xs font-semibold text-neutral-900 hover:underline cursor-pointer"
-                >
-                  Insert Sample Story
-                </button>
-              </div>
+              {SHOW_SAMPLE_STORY && (
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setFreestyleStory(SAMPLE_STORY)}
+                    className="text-xs font-semibold text-neutral-900 hover:underline cursor-pointer"
+                  >
+                    Insert sample story (dev)
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -968,7 +1055,7 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 5: READY → KEEP A PROFILE UP TO DATE ================= */}
-        {step === "select-template" && canUseProfiles && cvDocumentId && (
+        {step === "select-template" && canUseProfiles && cvDocumentId && backgroundSync.autoSync !== "always" && (
           <ProfileSyncStep
             key={cvDocumentId}
             cvDocumentId={cvDocumentId}

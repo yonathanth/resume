@@ -11,6 +11,8 @@ export interface MissingDetail {
   section: string;
   /** What's missing, e.g. "2 roles without dates". */
   detail: string;
+  /** Nothing in the section yet (rather than entries missing details). */
+  empty?: boolean;
 }
 
 const blank = (value: string | undefined) => !value || !value.trim();
@@ -37,6 +39,14 @@ const ENTRY_RULES: Record<string, { list: keyof CvData; noun: [string, string]; 
   activities: { list: "activities", noun: ["activity", "activities"], fields: ["title"], dated: true },
   personalDetails: { list: "personalDetails", noun: ["detail", "details"], fields: ["label", "value"] },
 };
+
+/** The id of a list section's entry, e.g. the 2nd project — for jumping to it in the form. */
+export function entryIdAt(cv: CvData, section: string, index: number): string | undefined {
+  const rule = ENTRY_RULES[section];
+  const items = rule ? (cv[rule.list] as unknown as Item[]) : [];
+  const id = items[index]?.id;
+  return typeof id === "string" ? id : undefined;
+}
 
 const plural = (n: number, [one, many]: [string, string]) => `${n} ${n === 1 ? one : many}`;
 
@@ -73,7 +83,7 @@ export function getMissingDetails(cv: CvData, templateSections: string[]): Missi
   for (const key of templateSections) {
     if (key === "photo" || key === "consent") continue; // the photo is checked with the contact details
     if (sectionIsEmpty(cv, key)) {
-      missing.push({ section: key, detail: "Nothing added yet" });
+      missing.push({ section: key, detail: "Nothing added yet", empty: true });
       continue;
     }
     const rule = ENTRY_RULES[key];

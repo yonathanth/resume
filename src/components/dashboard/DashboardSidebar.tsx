@@ -15,7 +15,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
-import { canUseCareerProfiles } from "@/lib/api";
+import { canUseCareerProfiles, isPaidPlan, planTier } from "@/lib/api";
 import { useMe } from "@/hooks/use-auth";
 import { getAvatarColor, getDisplayName, getInitials } from "@/lib/utils";
 import { Moxie, type MoxieHandle } from "@/components/moxie";
@@ -113,7 +113,7 @@ function SidebarMoxie({ crowned }: { crowned: boolean }) {
       type="button"
       onClick={() => moxieRef.current?.play("wave")}
       title="Moxie"
-      aria-label="Moxie — click to say hi"
+      aria-label="Moxie, click to say hi"
       className="shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
     >
       <Moxie ref={moxieRef} animation="welcome" decorative size={48} crowned={crowned} />
@@ -123,14 +123,14 @@ function SidebarMoxie({ crowned }: { crowned: boolean }) {
 
 export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: DashboardSidebarProps) {
   const { data: subscription } = useSubscriptionStatus();
-  const isPro = subscription?.isPro ?? false;
+  const isPro = isPaidPlan(subscription);
   // The only Pro-tagged item is Career Profiles, which a user can also be granted on its own.
   const canUseProfiles = canUseCareerProfiles(subscription);
   const { data: me } = useMe();
   const displayName = getDisplayName(me?.fullName, me?.email);
   const initials = getInitials(me?.fullName, me?.email);
   // Avoid showing the email twice when there's no separate full name.
-  const secondaryLine = me?.email && me.email !== displayName ? me.email : isPro ? "Pro plan" : "Free plan";
+  const secondaryLine = me?.email && me.email !== displayName ? me.email : isPro ? `${planTier(subscription) === "pro" ? "Pro" : "Plus"} plan` : "Free plan";
 
   return (
     <aside
@@ -210,7 +210,7 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
                 <span className={`w-7 h-7 rounded-md shrink-0 flex items-center justify-center ${ACCENT_TILE}`}>
                   <Crown className="w-3.5 h-3.5" />
                 </span>
-                <span className="text-sm font-semibold text-neutral-950">Upgrade to Pro</span>
+                <span className="text-sm font-semibold text-neutral-950">Upgrade</span>
               </div>
               <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-accent-strong">
                 See plans
@@ -220,7 +220,7 @@ export function DashboardSidebar({ activeTab, isExpanded, onToggleExpanded }: Da
           ) : (
             <Link
               href="/dashboard/upgrade"
-              title="Upgrade to Pro"
+              title="Upgrade"
               className="flex justify-center p-1.5 rounded-lg border border-transparent hover:bg-white hover:border-neutral-200 transition-colors"
             >
               <span className={`w-8 h-8 rounded-md flex items-center justify-center ${ACCENT_TILE}`}>

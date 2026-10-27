@@ -1,5 +1,6 @@
 "use client";
 
+import { isPaidPlan } from "@/lib/api";
 import React from "react";
 import { MoxieLogo } from "@/components/moxie/MoxieLogos";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
@@ -10,6 +11,6 @@ import { useSubscriptionStatus } from "@/hooks/use-subscription";
  * and she's plain. Decorative: the link around her carries the name.
  */
 export function BrandMark({ size = 36, crowned, className = "" }: { size?: number; crowned?: boolean; className?: string }) {
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const isPro = isPaidPlan(useSubscriptionStatus().data);
   return <MoxieLogo size={size} crowned={crowned ?? isPro} className={`shrink-0 ${className}`} />;
 }

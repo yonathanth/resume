@@ -60,9 +60,9 @@ const MAX_PICKED_USERS = 500;
 
 const AUDIENCE_OPTIONS: { type: AudienceType; label: string; hint: string }[] = [
   { type: "all", label: "All users", hint: "Every active account." },
-  { type: "free", label: "Free users", hint: "No Pro access right now — neither paid nor complimentary." },
-  { type: "pro", label: "Pro users (paid or complimentary)", hint: "An active paid subscription or an active Pro grant." },
-  { type: "paid", label: "Paid subscribers", hint: "An active paid subscription (complimentary Pro not included)." },
+  { type: "free", label: "Free users", hint: "No paid plan right now, neither paid for nor granted." },
+  { type: "pro", label: "Plus and Pro users", hint: "On any paid plan: a subscription, Plus Lifetime, or a plan grant." },
+  { type: "paid", label: "Paying subscribers", hint: "An active paid subscription (grants and Lifetime not included)." },
   { type: "verified", label: "Verified users", hint: "Accounts whose email address is verified." },
   { type: "beta", label: "Beta program", hint: "Users with an active beta-program grant." },
   { type: "new", label: "New users", hint: "Accounts registered in the last N days." },
@@ -292,7 +292,7 @@ function UserPicker({ picked, onChange, disabled }: { picked: PickedUser[]; onCh
                           </Badge>
                         )}
                         {!u.emailVerified && <Badge tone="warn" title="Unverified addresses don't get email">Unverified</Badge>}
-                        {u.isPro && <Badge tone="accent">Pro</Badge>}
+                        {u.isPro && <Badge tone="accent">Paid</Badge>}
                       </div>
                     </div>
                     <Button

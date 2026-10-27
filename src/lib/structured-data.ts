@@ -31,9 +31,12 @@ export const SOFTWARE_APPLICATION = {
   description: SITE.description,
   offers: [
     { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
-    { "@type": "Offer", name: "Pro — weekly", price: "4.99", priceCurrency: "USD" },
-    { "@type": "Offer", name: "Pro — monthly", price: "9.99", priceCurrency: "USD" },
-    { "@type": "Offer", name: "Pro — 3 months", price: "24.99", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Plus, weekly", price: "3.99", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Plus, monthly", price: "7.99", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Plus, 3 months", price: "19.99", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Pro, weekly", price: "6.99", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Pro, monthly", price: "14.99", priceCurrency: "USD" },
+    { "@type": "Offer", name: "Pro, 3 months", price: "34.99", priceCurrency: "USD" },
   ],
   publisher: { "@id": siteUrl("/#organization") },
 };

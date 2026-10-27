@@ -17,10 +17,10 @@ const LINE_EVERY_MS = 3800;
 /** A new line waits this long for the old one to fade (moxie-line-out in globals.css) so they never overlap. */
 const LINE_HANDOVER_MS = 380;
 
-const SLOW_MESSAGES = ["Almost there…", "Still on it — good things take a moment…", "Just tidying up the last bits…"];
+const SLOW_MESSAGES = ["Almost there…", "Still on it, good things take a moment…", "Just tidying up the last bits…"];
 
 /** What she says when she's tickled mid-work — a different one each time. */
-const TICKLE_MESSAGES = ["Hehe — that tickles!", "Hey! I'm working here!", "Eek — stop it, hehe!"];
+const TICKLE_MESSAGES = ["Hehe, that tickles!", "Hey! I'm working here!", "Eek, stop it, hehe!"];
 
 /** Scenes tell their own story, so the generic foot-tapping would only interrupt it. */
 const SCENES: ReadonlySet<MoxieAnimation> = new Set(["tailor", "write", "read", "polish", "stamp"]);

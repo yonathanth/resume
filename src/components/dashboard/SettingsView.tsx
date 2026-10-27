@@ -3,9 +3,10 @@
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell, Mail, ChevronDown, Check, Briefcase } from "lucide-react";
+import { Infinity as InfinityIcon, User, Shield, CreditCard, AlertTriangle, CheckCircle2, Loader2, LogOut, X, KeyRound, UserCheck, Bell, Mail, ChevronDown, Check, Briefcase } from "lucide-react";
 import {
   useSubscriptionStatus,
+  usePricing,
   useCancelSubscription,
   useChangePlan,
   useResumeSubscription,
@@ -28,7 +29,8 @@ import {
   confirmEmailChange,
   resendEmailChange,
   startEmailChange,
-  SubscriptionPlan,
+  planTier,
+  type CareerStage,
   canUseCareerProfiles,
   getNotificationPreferences,
   updateNotificationPreferences,
@@ -42,7 +44,9 @@ import {
   type PushSupport,
 } from "@/lib/push";
 import { CancelPlanModal } from "@/components/dashboard/CancelPlanModal";
-import { ChangePlanModal } from "@/components/dashboard/ChangePlanModal";
+import { ChangePlanModal, type PlanChoice } from "@/components/dashboard/ChangePlanModal";
+import { CAREER_STAGES } from "@/components/dashboard/OnboardingModal";
+import { FALLBACK_PRICING, PERIOD_LABEL, PERIOD_SUFFIX, TIER_LABEL, formatPrice } from "@/lib/plans";
 import { ICON_TONES, OptionTone } from "@/components/dashboard/create-flow/OptionCard";
 import { ProfessionsInput, addProfession } from "@/components/dashboard/ProfessionsInput";
 import { useToast } from "@/components/Toaster";
@@ -56,12 +60,8 @@ const PRIMARY_BUTTON =
 const SECONDARY_BUTTON =
   "inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-neutral-300 bg-white text-sm font-semibold text-neutral-800 hover:border-neutral-400 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed";
 
-const PLAN_LABEL: Record<SubscriptionPlan, string> = { weekly: "Weekly", monthly: "Monthly", quarterly: "3 Months" };
-const PLAN_PRICE_LABEL: Record<SubscriptionPlan, string> = {
-  weekly: "$4.99/week",
-  monthly: "$9.99/month",
-  quarterly: "$24.99/3 months",
-};
+
+
 
 const SECTIONS = [
   { id: "profile", label: "Profile", icon: User },
@@ -165,13 +165,16 @@ function ProfileForm({ me }: { me: ApiUser }) {
   const [professionDraft, setProfessionDraft] = useState("");
   const allProfessions = addProfession(professions, professionDraft);
   const professionsChanged = allProfessions.join("|") !== savedProfessions.join("|");
+  // Asked during onboarding; shapes how new CVs are written.
+  const [careerStage, setCareerStage] = useState<CareerStage | null>(me.careerStage ?? null);
+  const careerStageChanged = careerStage !== (me.careerStage ?? null);
   const [error, setError] = useState<string | null>(null);
   const [changingEmail, setChangingEmail] = useState(false);
   const toast = useToast();
 
   const set = (key: keyof typeof form) => (value: string) => setForm((prev) => ({ ...prev, [key]: value }));
   const changed = (key: keyof typeof form) => form[key].trim() !== saved[key];
-  const isDirty = (Object.keys(form) as (keyof typeof form)[]).some(changed) || professionsChanged;
+  const isDirty = (Object.keys(form) as (keyof typeof form)[]).some(changed) || professionsChanged || careerStageChanged;
   const phoneInvalid = !PHONE_PATTERN.test(form.phone);
   const isValid = form.firstName.trim() !== "" && form.lastName.trim() !== "" && !phoneInvalid;
 
@@ -185,6 +188,7 @@ function ProfileForm({ me }: { me: ApiUser }) {
         ...(namesChanged ? { firstName: form.firstName.trim(), lastName: form.lastName.trim() } : {}),
         ...(changed("phone") ? { phone: form.phone.trim() } : {}),
         ...(professionsChanged ? { professions: allProfessions } : {}),
+        ...(careerStageChanged ? { careerStage } : {}),
       });
       toast.success("Changes saved");
     } catch (err) {
@@ -265,6 +269,28 @@ function ProfileForm({ me }: { me: ApiUser }) {
             onDraftChange={setProfessionDraft}
           />
         </div>
+        <div className="sm:col-span-2">
+          <span className={LABEL_CLASS}>Career stage</span>
+          <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Career stage">
+            {CAREER_STAGES.map(({ value, label }) => {
+              const selected = careerStage === value;
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setCareerStage(selected ? null : value)}
+                  className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                    selected ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-400"
+                  }`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       <div className="flex flex-col-reverse sm:flex-row sm:items-center justify-between gap-3">
@@ -277,6 +303,7 @@ function ProfileForm({ me }: { me: ApiUser }) {
                 setForm(saved);
                 setProfessions(savedProfessions);
                 setProfessionDraft("");
+                setCareerStage(me.careerStage ?? null);
                 setError(null);
               }}
               className={SECONDARY_BUTTON}
@@ -647,8 +674,16 @@ function SecuritySection({ me }: { me: ApiUser }) {
 
 /* ---------------- Plan ---------------- */
 
+const FLOW_USAGE: { flow: "create" | "tailor" | "improve"; label: string }[] = [
+  { flow: "tailor", label: "Tailorings" },
+  { flow: "improve", label: "Enhancements" },
+  { flow: "create", label: "New CVs" },
+];
+
 function PlanSection() {
   const { data: subscription, isLoading } = useSubscriptionStatus();
+  const { data: pricingData } = usePricing();
+  const pricing = pricingData ?? FALLBACK_PRICING;
   const cancelSubscription = useCancelSubscription();
   const resumeSubscription = useResumeSubscription();
   const changePlan = useChangePlan();
@@ -662,15 +697,16 @@ function PlanSection() {
     return <div className="h-24 rounded-lg bg-neutral-100 animate-pulse" />;
   }
 
-  const isChapa = subscription.subscriptionProvider === "CHAPA";
-  // Pro given by the GoMoxie team rather than paid for — nothing to cancel or renew.
-  const isGrant = subscription.isPro && subscription.proSource === "grant";
-  const freeTabs: { key: "freeCreateUsed" | "freeTailorUsed" | "freeImproveUsed"; flow: "create" | "tailor" | "improve"; label: string }[] = [
-    { key: "freeCreateUsed", flow: "create", label: "Create" },
-    { key: "freeTailorUsed", flow: "tailor", label: "Tailor" },
-    { key: "freeImproveUsed", flow: "improve", label: "Improve" },
-  ];
-  const freeLimitsAreDefault = freeTabs.every(({ flow }) => (subscription.freeUses?.[flow]?.limit ?? 1) === 1);
+  const tier = planTier(subscription);
+  const paid = tier !== "free";
+  const source = subscription.planSource;
+  // Only a Polar subscription can be changed or cancelled here; a gift, the
+  // lifetime deal or an old one-off period just runs its course.
+  const manageable = source === "subscription" && subscription.subscriptionProvider === "POLAR";
+  const period = subscription.plan && subscription.plan !== "lifetime" ? subscription.plan : null;
+  const planName = tier === "pro" ? "Pro" : tier === "plus" ? "Plus" : "Free";
+  const periodLabel = subscription.plan === "lifetime" ? "Lifetime" : period ? PERIOD_LABEL[period] : null;
+  const price = tier !== "free" && period ? pricing.plans[tier][period].price : null;
 
   const handleConfirmCancel = async () => {
     setCancelError(null);
@@ -682,12 +718,12 @@ function PlanSection() {
     }
   };
 
-  const handleConfirmChange = async (plan: SubscriptionPlan) => {
+  const handleConfirmChange = async (choice: PlanChoice) => {
     setChangeError(null);
     try {
-      await changePlan.mutateAsync(plan);
+      await changePlan.mutateAsync(choice);
       setShowChangeModal(false);
-      toast.success(`You're now on the ${PLAN_LABEL[plan]} plan`);
+      toast.success(`You're now on ${TIER_LABEL[choice.tier]} · ${PERIOD_LABEL[choice.period]}`);
     } catch (err) {
       setChangeError(errorMessage(err, "Could not change your plan. Please try again."));
     }
@@ -703,100 +739,108 @@ function PlanSection() {
     }
   };
 
+  const description = !paid
+    ? subscription.isExpired
+      ? "Your plan has ended. Your CVs and profiles are still here."
+      : `Your first AI CV is free. After that, pay per CV when you download (${formatPrice(pricing.payPerCv.cv_new.price)} new, ${formatPrice(pricing.payPerCv.cv_edit.price)} tailored or improved), or pick a plan.`
+    : source === "grant"
+      ? `${planName} from the GoMoxie team${subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""}. You aren't being charged for it.`
+      : source === "lifetime"
+        ? `Plus for life. Your limits reset every month${subscription.periodEndsAt ? `, next on ${formatDate(subscription.periodEndsAt)}` : ""}.`
+        : !manageable
+          ? `Active until ${formatDate(subscription.currentPeriodEnd)}. This plan doesn't renew on its own.`
+          : `${price ? `${formatPrice(price)} ${period ? PERIOD_SUFFIX[period] : ""}. ` : ""}${
+              subscription.cancelAtPeriodEnd
+                ? `Cancels on ${formatDate(subscription.currentPeriodEnd)}. You keep ${planName} until then.`
+                : subscription.currentPeriodEnd
+                  ? `Renews on ${formatDate(subscription.currentPeriodEnd)}.`
+                  : ""
+            }`;
+
   return (
     <>
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-5">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-lg font-bold text-neutral-950 tracking-tight">
-              {subscription.isPro
-                ? `Pro${subscription.plan ? ` (${PLAN_LABEL[subscription.plan]})` : ""}`
-                : subscription.isExpired
-                  ? "Pro (expired)"
-                  : "Free"}
+              {paid ? `${planName}${periodLabel ? ` · ${periodLabel}` : ""}` : subscription.isExpired ? "Free (plan ended)" : "Free"}
             </span>
-            {subscription.isPro && (
+            {paid && (
               <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent text-white">
-                {isGrant ? "Complimentary" : subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active"}
-              </span>
-            )}
-            {subscription.isPro && !isGrant && isChapa && (
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border border-neutral-300 text-neutral-600">
-                via Chapa
+                {source === "grant" ? "Complimentary" : subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active"}
               </span>
             )}
           </div>
 
-          <p className="mt-1 text-sm text-neutral-500 max-w-xl">
-            {isGrant
-              ? `Pro access from the gomoxie team${
-                  subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""
-                }. You aren't being charged for it.`
-              : subscription.isPro
-              ? isChapa
-                ? `80 ETB for one month. Active until ${formatDate(subscription.currentPeriodEnd)}. Chapa doesn't auto-renew, so pay again after that to keep Pro.`
-                : subscription.cancelAtPeriodEnd
-                  ? `${PLAN_PRICE_LABEL[subscription.plan ?? "monthly"]}. Cancels on ${formatDate(subscription.currentPeriodEnd)}. You keep Pro until then.`
-                  : `${PLAN_PRICE_LABEL[subscription.plan ?? "monthly"]}. ${subscription.currentPeriodEnd ? `Renews on ${formatDate(subscription.currentPeriodEnd)}.` : ""}`
-              : subscription.isExpired
-                ? "Your Pro plan has ended. Renew to get unlimited AI tailoring back."
-                : "Pro makes AI generations and tailoring unlimited."}
-          </p>
+          <p className="mt-1 text-sm text-neutral-500 max-w-xl">{description}</p>
 
-          {!subscription.isPro && (
-            <div className="mt-5 max-w-sm">
-              <div className="text-xs text-neutral-600 mb-1.5">Free tab usage{freeLimitsAreDefault ? " — one use each" : ""}</div>
-              <div className="flex gap-2">
-                {freeTabs.map(({ key, flow, label }) => {
-                  const used = subscription[key];
-                  const remaining = subscription.freeUses?.[flow]?.remaining;
+          {/* What's left this period (Plus), or of the free CV. Pro shows nothing: it's unlimited. */}
+          {tier === "plus" && subscription.freeUses && (
+            <div className="mt-5 max-w-md">
+              <div className="text-xs text-neutral-600 mb-1.5">
+                Left this period{subscription.periodEndsAt ? ` · resets ${formatDate(subscription.periodEndsAt)}` : ""}
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {FLOW_USAGE.map(({ flow, label }) => {
+                  const usage = subscription.freeUses?.[flow];
                   return (
-                    <span
-                      key={key}
-                      className={`flex-1 rounded-md border px-2 py-1.5 text-center text-[11px] font-semibold ${
-                        used ? "border-neutral-200 text-neutral-400" : "border-accent-border bg-accent-soft text-accent-strong"
-                      }`}
-                    >
-                      {label}
-                      <span className="block text-[10px] font-normal">
-                        {used ? "Used" : !freeLimitsAreDefault && typeof remaining === "number" ? `${remaining} left` : "Available"}
-                      </span>
+                    <span key={flow} className="rounded-md border border-neutral-200 px-2 py-1.5 text-center text-[11px] font-semibold text-neutral-800">
+                      {usage?.remaining ?? 0}
+                      <span className="text-neutral-400"> / {usage?.limit ?? 0}</span>
+                      <span className="block text-[10px] font-normal text-neutral-500">{label}</span>
                     </span>
                   );
                 })}
               </div>
             </div>
           )}
+          {!paid && subscription.free && (
+            <p className="mt-4 text-xs text-neutral-600">
+              Free CVs left: <span className="font-semibold">{subscription.free.remaining ?? 0}</span>
+              {subscription.unpaidCvs && subscription.unpaidCvs.count > 0 && (
+                <> · CVs waiting to be paid for: <span className="font-semibold">{subscription.unpaidCvs.count}</span></>
+              )}
+            </p>
+          )}
+          {/* The Plus Lifetime deal, while it's listed (see the backend's price list). */}
+          {!paid && (pricing.lifetime.offer.listed ?? pricing.lifetime.offer.available) && (
+            <Link
+              href="/dashboard/upgrade"
+              className="mt-4 inline-flex items-center gap-2 rounded-full border border-dashed border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 transition-colors hover:border-amber-400"
+            >
+              <InfinityIcon className="h-3.5 w-3.5" />
+              Plus Lifetime: {formatPrice(pricing.lifetime.price)} once, limited offer
+            </Link>
+          )}
         </div>
 
         <div className="flex flex-col sm:flex-row md:flex-col gap-2 shrink-0 md:w-60">
-          {subscription.isPro ? (
-            !isChapa &&
-            !isGrant && (
-              <>
-                <button type="button" onClick={() => setShowChangeModal(true)} className={SECONDARY_BUTTON}>
-                  Change plan
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCancelModal(true)}
-                  className={
-                    subscription.cancelAtPeriodEnd
-                      ? SECONDARY_BUTTON
-                      : "inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                  }
-                >
-                  {subscription.cancelAtPeriodEnd ? "Keep my plan" : "Cancel plan"}
-                </button>
-              </>
-            )
+          {manageable ? (
+            <>
+              <button type="button" onClick={() => setShowChangeModal(true)} className={SECONDARY_BUTTON}>
+                Change plan
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowCancelModal(true)}
+                className={
+                  subscription.cancelAtPeriodEnd
+                    ? SECONDARY_BUTTON
+                    : "inline-flex items-center justify-center px-4 py-2.5 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                }
+              >
+                {subscription.cancelAtPeriodEnd ? "Keep my plan" : "Cancel plan"}
+              </button>
+            </>
           ) : (
-            <Link
-              href="/dashboard/upgrade"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-strong transition-colors cursor-pointer"
-            >
-              {subscription.isExpired ? "Renew Pro" : "Upgrade to Pro"}
-            </Link>
+            tier !== "pro" && (
+              <Link
+                href="/dashboard/upgrade"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent text-white text-sm font-semibold hover:bg-accent-strong transition-colors cursor-pointer"
+              >
+                {tier === "plus" ? "Upgrade to Pro" : subscription.isExpired ? "Renew a plan" : "See plans"}
+              </Link>
+            )
           )}
           <Link href="/pricing" className="text-center text-xs font-semibold text-neutral-500 hover:text-neutral-900 py-1">
             Compare plans
@@ -804,10 +848,10 @@ function PlanSection() {
         </div>
       </div>
 
-      {showChangeModal && (
+      {showChangeModal && tier !== "free" && (
         <ChangePlanModal
           isOpen
-          currentPlan={subscription.plan ?? null}
+          current={{ tier, period }}
           isCancelScheduled={subscription.cancelAtPeriodEnd}
           isProcessing={changePlan.isPending}
           error={changeError}
@@ -1002,7 +1046,7 @@ function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void 
 
 const AUTO_SYNC_OPTIONS: { value: ProfileAutoSync; label: string; hint: string }[] = [
   { value: "ask", label: "Ask me each time", hint: "After a new CV is ready, we show what it would add and you decide." },
-  { value: "always", label: "Update automatically", hint: "We add the new details straight away. You can undo right there, or later from the profile's history." },
+  { value: "always", label: "Update automatically", hint: "No questions: new CVs update the matching profile (or start one for a new role) in the background, and a short notice tells you what changed. Undo any time from the profile's History." },
   { value: "never", label: "Don't update my profiles", hint: "New CVs never change your profiles. You can still update a profile by hand." },
 ];
 
@@ -1026,10 +1070,10 @@ function CareerProfilesSection({ me }: { me: ApiUser }) {
   return (
     <div>
       <fieldset disabled={!isPro || updateProfile.isPending}>
-        <legend className="text-sm font-semibold text-neutral-900">When a new CV matches one of your profiles</legend>
+        <legend className="text-sm font-semibold text-neutral-900">When you finish a new CV</legend>
         <p className="mt-0.5 mb-4 text-xs text-neutral-500">
           Only facts are added (roles, skills, education…). Nothing is replaced, and anything you edited by hand is left
-          alone. Creating a new profile always asks first.
+          alone.
         </p>
         <div className="space-y-2">
           {AUTO_SYNC_OPTIONS.map((option) => (
@@ -1057,7 +1101,7 @@ function CareerProfilesSection({ me }: { me: ApiUser }) {
       </fieldset>
       {!isPro && (
         <p className="mt-4 text-xs text-neutral-500">
-          Career profiles are part of GoMoxie Pro.{" "}
+          Career profiles come with Plus and Pro.{" "}
           <Link href="/dashboard/upgrade" className="font-semibold text-accent-strong hover:text-accent">
             Upgrade
           </Link>
@@ -1317,7 +1361,7 @@ export function SettingsView() {
           {active === "profile" && (
             <Section id="profile" icon={User} tone="accent" title="Profile" description="Your details, used as the defaults on every new resume.">
               {me ? (
-                <ProfileForm key={[me.id, me.firstName, me.lastName, me.email, me.phone, ...(me.professions ?? [])].join("|")} me={me} />
+                <ProfileForm key={[me.id, me.firstName, me.lastName, me.email, me.phone, me.careerStage, ...(me.professions ?? [])].join("|")} me={me} />
               ) : (
                 <div className="h-20 rounded-lg bg-neutral-100 animate-pulse" />
               )}

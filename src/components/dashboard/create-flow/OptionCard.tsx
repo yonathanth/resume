@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Crown } from "lucide-react";
 
 // Soft glossy icon tiles, matching the Builder's action cards.
 export const ICON_TONES = {
@@ -36,6 +36,12 @@ interface OptionCardProps {
   tone?: OptionTone;
   /** Accepted for call-site compatibility; options are never highlighted. */
   selected?: boolean;
+  /**
+   * "locked": a Pro feature on a free plan — highlighted with a Pro badge, and
+   * clicking it opens the paywall. "unavailable": nothing to pick from yet
+   * (no profiles, no saved resumes) — shown faded and can't be clicked.
+   */
+  state?: "locked" | "unavailable";
   onClick: () => void;
 }
 
@@ -43,23 +49,48 @@ interface OptionCardProps {
  * A step option in the create flows: tinted icon tile, copy, and a chevron.
  * Options are never shown as pre-selected — the flows don't favour any choice.
  */
-export function OptionCard({ icon: Icon, title, description, tone = "neutral", onClick }: OptionCardProps) {
+export function OptionCard({ icon: Icon, title, description, tone = "neutral", state, onClick }: OptionCardProps) {
+  const locked = state === "locked";
+  const unavailable = state === "unavailable";
   return (
     <button
       type="button"
       onClick={onClick}
-      className="group w-full p-4 rounded-xl border border-neutral-200 bg-white text-left transition-colors cursor-pointer flex items-center gap-4 hover:border-neutral-300 hover:bg-neutral-50/60"
+      disabled={unavailable}
+      aria-disabled={unavailable}
+      className={`group w-full p-4 rounded-xl border text-left transition-colors flex items-center gap-4 ${
+        locked
+          ? "border-amber-300 bg-[linear-gradient(135deg,#fff8e6_0%,#fffdf6_55%,#ffffff_100%)] hover:border-amber-400 cursor-pointer"
+          : unavailable
+            ? "border-dashed border-neutral-200 bg-neutral-50/60 opacity-60 cursor-not-allowed"
+            : "border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50/60 cursor-pointer"
+      }`}
     >
       <span
-        className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES[tone]}`}
+        className={`w-10 h-10 rounded-xl shrink-0 flex items-center justify-center bg-gradient-to-b border ${
+          unavailable ? ICON_TONES.neutral : ICON_TONES[tone]
+        }`}
       >
         <Icon className="w-[18px] h-[18px]" />
       </span>
       <span className="flex-1 min-w-0">
-        <span className="block text-sm font-semibold text-neutral-950">{title}</span>
+        <span className="flex items-center gap-2 text-sm font-semibold text-neutral-950">
+          {title}
+          {locked && (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+              <Crown className="w-3 h-3" /> Pro
+            </span>
+          )}
+        </span>
         <span className="block text-sm text-neutral-500 mt-0.5 leading-snug">{description}</span>
       </span>
-      <ChevronRight className="w-4 h-4 shrink-0 text-neutral-300 transition-all group-hover:translate-x-0.5 group-hover:text-neutral-700" />
+      {!unavailable && (
+        <ChevronRight
+          className={`w-4 h-4 shrink-0 transition-all group-hover:translate-x-0.5 ${
+            locked ? "text-amber-500 group-hover:text-amber-700" : "text-neutral-300 group-hover:text-neutral-700"
+          }`}
+        />
+      )}
     </button>
   );
 }

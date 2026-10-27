@@ -10,6 +10,8 @@ import { RealResultsSection } from "@/components/RealResultsSection";
 import { HowItWorks } from "@/components/HowItWorks";
 import { PricingSection } from "@/components/PricingSection";
 import { Footer } from "@/components/Footer";
+import styles from "./HomePage.module.css";
+import { LandingDetail } from "./LandingDetail";
 
 export function HomePage() {
   const router = useRouter();
@@ -25,8 +27,14 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
-      {/* Subtle background radial dot pattern */}
-      <div className="absolute inset-0 bg-grid-pattern opacity-40 pointer-events-none" />
+      {/* Decorative atmosphere stays behind the content and never intercepts input. */}
+      <div className={styles.atmosphere} aria-hidden="true">
+        <div className={styles.sky} />
+        <div className={`${styles.cloud} ${styles.cloudLeft}`} />
+        <div className={`${styles.cloud} ${styles.cloudRight}`} />
+        <div className={styles.lowerHaze} />
+      </div>
+      <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" aria-hidden="true" />
 
       {/* Floating Pill Navigation */}
       <Navbar />
@@ -37,16 +45,25 @@ export function HomePage() {
         <Hero />
 
         {/* How It Works (Directly below Hero) */}
-        <HowItWorks />
+        <div className={styles.sectionScene}>
+          <LandingDetail kind="keywords" />
+          <HowItWorks />
+        </div>
 
         {/* Templates Showcase */}
-        <TemplatesSection />
+        <div className={styles.sectionScene}>
+          <LandingDetail kind="templates" />
+          <TemplatesSection />
+        </div>
 
         {/* Real Results: Before & After CV Comparison */}
         <RealResultsSection />
 
         {/* Pricing (Free, Pro) */}
-        <PricingSection />
+        <div className={styles.sectionScene}>
+          <LandingDetail kind="ready" />
+          <PricingSection />
+        </div>
       </main>
 
       {/* Minimal Footer */}

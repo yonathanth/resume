@@ -161,7 +161,7 @@ function SegmentsCard({ data }: { data: Insights }) {
           Activation by onboarding answer <SourceTag source="database" />
         </span>
       }
-      description="Which kinds of people get to a finished CV, and to Pro"
+      description="Which kinds of people get to a finished CV, and to a paid plan"
     >
       <Tabs tabs={SEGMENT_TABS.map((t) => ({ id: t.id, label: t.label }))} active={tab} onChange={setTab} />
       {rows.length === 0 ? (
@@ -176,7 +176,7 @@ function SegmentsCard({ data }: { data: Insights }) {
                 <th className="px-3 py-2 font-semibold text-right">Onboarded</th>
                 <th className="px-3 py-2 font-semibold text-right">First CV</th>
                 <th className="px-3 py-2 font-semibold text-right">Downloaded</th>
-                <th className="px-5 py-2 font-semibold text-right">Pro</th>
+                <th className="px-5 py-2 font-semibold text-right">Paid</th>
               </tr>
             </thead>
             <tbody className="tabular-nums">

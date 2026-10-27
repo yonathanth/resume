@@ -136,11 +136,63 @@ export default function CvEditorPage({
 
 const shimmer = "animate-pulse rounded-md bg-neutral-200/70";
 
-/** The editor's layout in outline — same bars, columns, and sheet position — so nothing jumps when it loads. */
+/** The sheet as the preview frame draws it (inside a 24px gutter: 24/842 of its width), in outline. */
+function SheetSkeleton() {
+  return (
+    <div className="w-full max-w-[720px] px-[2.85%] pt-[2.85%]">
+      <div className="aspect-[210/297] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.15)] p-[8%] space-y-3">
+        <div className={`h-6 w-1/2 ${shimmer}`} />
+        <div className={`h-3 w-2/3 ${shimmer}`} />
+        <div className="pt-4 space-y-2">
+          <div className={`h-3.5 w-1/4 ${shimmer}`} />
+          <div className={`h-2.5 w-full ${shimmer}`} />
+          <div className={`h-2.5 w-11/12 ${shimmer}`} />
+          <div className={`h-2.5 w-4/5 ${shimmer}`} />
+        </div>
+        <div className="pt-4 space-y-2">
+          <div className={`h-3.5 w-1/3 ${shimmer}`} />
+          <div className={`h-2.5 w-full ${shimmer}`} />
+          <div className={`h-2.5 w-5/6 ${shimmer}`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The editor's layout in outline — same bars, columns, and sheet position — so nothing jumps when it loads.
+ * Phones open a CV on its preview, so there it's the preview screen: score and Download, the page, Edit.
+ */
 function EditorSkeleton() {
   return (
-    <div className="h-screen w-full flex flex-col bg-[#fdfdfd] overflow-hidden" aria-busy="true" aria-label="Loading resume">
-      {/* Top bar: back, name, save state | template, preview PDF, download */}
+    <>
+      <div className="lg:hidden h-screen w-full flex flex-col bg-[#ebebed] overflow-hidden" aria-busy="true" aria-label="Loading resume">
+        <div className="shrink-0 p-3 bg-white border-b border-neutral-200 grid grid-cols-2 gap-2">
+          <div className="h-[46px] rounded-lg border border-neutral-300 bg-white flex items-center gap-2 px-1">
+            <div className="w-9 h-9 rounded-full bg-neutral-200/70 animate-pulse" />
+            <div className="space-y-1.5">
+              <div className={`h-2.5 w-14 ${shimmer}`} />
+              <div className={`h-2.5 w-20 ${shimmer}`} />
+            </div>
+          </div>
+          <div className="h-[46px] rounded-lg bg-accent/25 animate-pulse" />
+        </div>
+        <div className="flex-1 overflow-hidden flex justify-center">
+          <SheetSkeleton />
+        </div>
+        <div className="shrink-0 p-3 bg-white border-t border-neutral-200">
+          <div className="h-11 rounded-lg bg-neutral-300/70 animate-pulse" />
+        </div>
+      </div>
+      <EditorSkeletonDesktop />
+    </>
+  );
+}
+
+function EditorSkeletonDesktop() {
+  return (
+    <div className="hidden lg:flex h-screen w-full flex-col bg-[#fdfdfd] overflow-hidden" aria-busy="true" aria-label="Loading resume">
+      {/* Top bar: back, name, save state | score, template, download */}
       <div className="h-16 shrink-0 bg-white border-b border-neutral-200 px-4 sm:px-6 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className={`w-8 h-8 ${shimmer} rounded-lg`} />
@@ -192,24 +244,7 @@ function EditorSkeleton() {
             <div className="h-9 w-44 rounded-lg bg-white border border-neutral-300" />
           </div>
           <div className="px-6 lg:px-8 flex justify-center">
-            {/* The preview frame draws the sheet inside a 24px gutter (24/842 of its width). */}
-            <div className="w-full max-w-[720px] px-[2.85%] pt-[2.85%]">
-              <div className="aspect-[210/297] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.15)] p-[8%] space-y-3">
-                <div className={`h-6 w-1/2 ${shimmer}`} />
-                <div className={`h-3 w-2/3 ${shimmer}`} />
-                <div className="pt-4 space-y-2">
-                  <div className={`h-3.5 w-1/4 ${shimmer}`} />
-                  <div className={`h-2.5 w-full ${shimmer}`} />
-                  <div className={`h-2.5 w-11/12 ${shimmer}`} />
-                  <div className={`h-2.5 w-4/5 ${shimmer}`} />
-                </div>
-                <div className="pt-4 space-y-2">
-                  <div className={`h-3.5 w-1/3 ${shimmer}`} />
-                  <div className={`h-2.5 w-full ${shimmer}`} />
-                  <div className={`h-2.5 w-5/6 ${shimmer}`} />
-                </div>
-              </div>
-            </div>
+            <SheetSkeleton />
           </div>
         </div>
       </div>

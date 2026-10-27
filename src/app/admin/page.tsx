@@ -21,7 +21,7 @@ import {
   StatCard,
   StatusBadge,
 } from "@/components/admin/ui";
-import { errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, formatNumber, formatRelative } from "@/lib/admin-format";
+import { errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, formatNumber, formatRelative, SHOW_CHAPA } from "@/lib/admin-format";
 
 // Overview: one request to /admin/overview. Every block is labelled with its
 // source (database / Polar API / tracked) and nothing is filled in when a
@@ -128,42 +128,44 @@ function RevenueCard({ data }: { data: Overview }) {
   return (
     <Card title="Revenue" description={`Last ${data.days} days`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-neutral-950">Chapa</h3>
-            <SourceTag source="database" />
-          </div>
-          <Section title="Successful payments">
-            {chapa.successful.length === 0 ? (
-              <p className="text-sm text-neutral-500">No successful Chapa payments in this period.</p>
-            ) : (
-              <ul className="space-y-1.5">
-                {chapa.successful.map((c) => (
-                  <li key={c.currency} className="flex items-baseline justify-between gap-3">
-                    <span className="text-lg font-bold tabular-nums text-neutral-950">{formatMoney(c.amount, c.currency)}</span>
-                    <span className="text-xs text-neutral-500">
-                      {formatNumber(c.count)} payment{c.count === 1 ? "" : "s"}
+        {SHOW_CHAPA && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-neutral-950">Chapa</h3>
+              <SourceTag source="database" />
+            </div>
+            <Section title="Successful payments">
+              {chapa.successful.length === 0 ? (
+                <p className="text-sm text-neutral-500">No successful Chapa payments in this period.</p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {chapa.successful.map((c) => (
+                    <li key={c.currency} className="flex items-baseline justify-between gap-3">
+                      <span className="text-lg font-bold tabular-nums text-neutral-950">{formatMoney(c.amount, c.currency)}</span>
+                      <span className="text-xs text-neutral-500">
+                        {formatNumber(c.count)} payment{c.count === 1 ? "" : "s"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+            <Section title="All payments by status">
+              {statuses.length === 0 ? (
+                <p className="text-sm text-neutral-500">No Chapa payments started in this period.</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {statuses.map(([status, count]) => (
+                    <span key={status} className="inline-flex items-center gap-1.5">
+                      <StatusBadge status={status} />
+                      <span className="text-sm font-semibold tabular-nums">{formatNumber(count)}</span>
                     </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Section>
-          <Section title="All payments by status">
-            {statuses.length === 0 ? (
-              <p className="text-sm text-neutral-500">No Chapa payments started in this period.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {statuses.map(([status, count]) => (
-                  <span key={status} className="inline-flex items-center gap-1.5">
-                    <StatusBadge status={status} />
-                    <span className="text-sm font-semibold tabular-nums">{formatNumber(count)}</span>
-                  </span>
-                ))}
-              </div>
-            )}
-          </Section>
-        </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+          </div>
+        )}
 
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
@@ -266,7 +268,7 @@ function FreeTierCard({ data }: { data: Overview }) {
           <thead>
             <tr className="border-b border-neutral-200 bg-neutral-50/60 text-left text-xs text-neutral-500">
               <th className="px-5 py-2 font-semibold">Flow</th>
-              <th className="px-5 py-2 font-semibold text-right">Free uses spent</th>
+              <th className="px-5 py-2 font-semibold text-right">Free CVs used</th>
               <th className="px-5 py-2 font-semibold text-right">Users who used it</th>
             </tr>
           </thead>
@@ -339,37 +341,39 @@ function RecentActivity({ data }: { data: Overview }) {
         )}
       </Card>
 
-      <Card
-        title={
-          <span className="inline-flex items-center gap-2">
-            Recent payments <SourceTag source="database" />
-          </span>
-        }
-        description="Chapa payments recorded by GoMoxie"
-        actions={<CardLink href="/admin/billing">Billing</CardLink>}
-        padded={false}
-      >
-        {r.payments.length === 0 ? (
-          <Quiet>No payments recorded.</Quiet>
-        ) : (
-          <List>
-            {r.payments.map((p) => (
-              <Row
-                key={p.id}
-                main={<UserLink id={p.userId}>{p.userEmail ?? <Mono>{p.userId}</Mono>}</UserLink>}
-                sub={
-                  <span className="inline-flex flex-wrap items-center gap-1.5">
-                    <span className="font-semibold tabular-nums text-neutral-800">{formatMoney(p.amount, p.currency)}</span>
-                    <StatusBadge status={p.status} />
-                    <span>{p.provider}</span>
-                  </span>
-                }
-                side={<span title={formatDateTime(p.createdAt)}>{formatRelative(p.createdAt)}</span>}
-              />
-            ))}
-          </List>
-        )}
-      </Card>
+      {SHOW_CHAPA && (
+        <Card
+          title={
+            <span className="inline-flex items-center gap-2">
+              Recent payments <SourceTag source="database" />
+            </span>
+          }
+          description="Chapa payments recorded by GoMoxie"
+          actions={<CardLink href="/admin/billing">Billing</CardLink>}
+          padded={false}
+        >
+          {r.payments.length === 0 ? (
+            <Quiet>No payments recorded.</Quiet>
+          ) : (
+            <List>
+              {r.payments.map((p) => (
+                <Row
+                  key={p.id}
+                  main={<UserLink id={p.userId}>{p.userEmail ?? <Mono>{p.userId}</Mono>}</UserLink>}
+                  sub={
+                    <span className="inline-flex flex-wrap items-center gap-1.5">
+                      <span className="font-semibold tabular-nums text-neutral-800">{formatMoney(p.amount, p.currency)}</span>
+                      <StatusBadge status={p.status} />
+                      <span>{p.provider}</span>
+                    </span>
+                  }
+                  side={<span title={formatDateTime(p.createdAt)}>{formatRelative(p.createdAt)}</span>}
+                />
+              ))}
+            </List>
+          )}
+        </Card>
+      )}
 
       <Card
         title={
@@ -498,13 +502,13 @@ function OverviewBody({ data }: { data: Overview }) {
         />
         <StatCard label="Suspended" value={formatNumber(users.suspended)} tone={users.suspended > 0 ? "bad" : "neutral"} hint="Can't sign in or use the app" source="database" />
         <StatCard
-          label="Pro users"
+          label="Plus & Pro users"
           value={formatNumber(plans.pro)}
-          hint={`${formatNumber(plans.paid)} paid · ${formatNumber(plans.complimentary)} complimentary`}
+          hint={`${formatNumber(plans.paid)} paying · ${formatNumber(plans.complimentary)} granted or lifetime`}
           tone="good"
           source="database"
         />
-        <StatCard label="Free users" value={formatNumber(plans.free)} hint="No Pro access right now" source="database" />
+        <StatCard label="Free users" value={formatNumber(plans.free)} hint="No paid plan right now" source="database" />
         <StatCard
           label="Cancelling at period end"
           value={formatNumber(plans.cancellingAtPeriodEnd)}

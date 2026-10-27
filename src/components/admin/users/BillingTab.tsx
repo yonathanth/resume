@@ -14,7 +14,7 @@ import {
   type PolarOrder,
   type UserDetail,
 } from "@/lib/admin-api";
-import { errorText, formatDateTime, formatMinorMoney, formatMoney, formatRelative } from "@/lib/admin-format";
+import { errorText, formatDateTime, formatMinorMoney, formatMoney, formatRelative, SHOW_CHAPA } from "@/lib/admin-format";
 import { ActionDialog, Badge, Button, Card, DataTable, KeyValue, Mono, Note, SourceTag, StatusBadge, type Column } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/AdminShell";
 import { useToast } from "@/components/Toaster";
@@ -290,14 +290,16 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
         </div>
       </Card>
 
-      <Card
-        title="Chapa payments"
-        description="Stored in GoMoxie's database. Only Chapa's own answer can move a payment to SUCCESS."
-        padded={false}
-        actions={<SourceTag source="database" />}
-      >
-        <DataTable columns={paymentColumns} rows={detail.payments} rowKey={(p) => p.id} emptyTitle="No Chapa payments" />
-      </Card>
+      {SHOW_CHAPA && (
+        <Card
+          title="Chapa payments"
+          description="Stored in GoMoxie's database. Only Chapa's own answer can move a payment to SUCCESS."
+          padded={false}
+          actions={<SourceTag source="database" />}
+        >
+          <DataTable columns={paymentColumns} rows={detail.payments} rowKey={(p) => p.id} emptyTitle="No Chapa payments" />
+        </Card>
+      )}
 
       {canRead && (
         <Card
@@ -343,7 +345,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
         danger
         description={
           <>
-            This calls Polar&apos;s API to stop the subscription from renewing. No refund is issued, and {account.email} keeps Pro until the current period ends
+            This calls Polar&apos;s API to stop the subscription from renewing. No refund is issued, and {account.email} keeps their plan until the current period ends
             {sub.currentPeriodEnd ? ` (${formatDateTime(sub.currentPeriodEnd)})` : ""}. You can resume it before then.
           </>
         }

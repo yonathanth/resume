@@ -14,7 +14,7 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowModal, TemplateStep, JobGaps, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowModal, JobMismatchDialog, RunOnMount, TemplateStep, JobGaps, gapsNotice, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard, SOFT_TONES } from "./OptionCard";
 import { ResumePicker } from "./ResumePicker";
 import {
@@ -29,7 +29,8 @@ import {
   getQuestionFormState,
   useQuestionPages,
 } from "./ClarifyingQuestionsForm";
-import { ClarificationQuestion, CVContentDTO, WordingPreview, canUseCareerProfiles, previewCvWording } from "@/lib/api";
+import { ClarificationQuestion, CVContentDTO, WordingPreview, canUseCareerProfiles, previewCvWording, type GenerateCvMismatch } from "@/lib/api";
+import { useToast } from "@/components/Toaster";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useAccountGate } from "@/components/account-gate/AccountGate";
@@ -37,6 +38,7 @@ import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
 import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { useBackgroundProfileSync } from "@/hooks/use-background-profile-sync";
 import { WordingReviewStep } from "./WordingReviewStep";
 import { peekPendingUpload, takePendingUpload } from "@/lib/pending-upload";
 
@@ -172,6 +174,9 @@ export function EnhanceCvModal({
   const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(saved?.latestContent ?? undefined);
   const [analyzedSourceText, setAnalyzedSourceText] = useState(saved?.analyzedSourceText ?? "");
   const [flowError, setFlowError] = useState<string | null>(null);
+  // The AI won't tailor to a job in another field — the user picks what to do next.
+  const [mismatch, setMismatch] = useState<GenerateCvMismatch | null>(null);
+  const toast = useToast();
   // The profile / past resume currently being loaded from a click.
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -194,6 +199,8 @@ export function EnhanceCvModal({
   const refineMutation = useRefineCv();
   const proGate = useProGate();
   const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
+  // Profile updates set to automatic: the improved wording goes into the profile in the background.
+  const backgroundSync = useBackgroundProfileSync();
   // Improved wording that differs from the matching career profile — offered
   // on the last step when there is any (Pro only).
   const [wordingPreview, setWordingPreview] = useState<ProfileWordingPreview | null>(saved?.wordingPreview ?? null);
@@ -246,9 +253,10 @@ export function EnhanceCvModal({
         file,
         templateId,
         flowType: "improve",
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setCvDocumentId(docId);
@@ -258,7 +266,7 @@ export function EnhanceCvModal({
       setQuestionAnswers({});
       setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => handleUploadFile(file, templateId))) return;
       setFlowError(
         err instanceof Error ? err.message : "Could not read this file. Please try a different one."
       );
@@ -277,11 +285,11 @@ export function EnhanceCvModal({
       const { cvDocumentId: docId, sourceText, document } =
         await analyzeExistingMutation.mutateAsync(
           sourceType === "past-project"
-            ? { sourceCvId: sourceId, templateId, flowType: "improve" }
-            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId, flowType: "improve" }
+            ? { sourceCvId: sourceId, templateId, flowType: "improve", payLater: proGate.payLater() }
+            : { sourceProfileId: sourceId, targetProfileId: sourceId, templateId, flowType: "improve", payLater: proGate.payLater() }
         );
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setCvDocumentId(docId);
@@ -291,7 +299,7 @@ export function EnhanceCvModal({
       setQuestionAnswers({});
       setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId))) return;
       setFlowError(err instanceof Error ? err.message : "Could not load that resume. Please try again.");
     } finally {
       setLoadingSourceId(null);
@@ -377,24 +385,37 @@ export function EnhanceCvModal({
         // and on our own guidelines alone when they skipped both.
         requiresRewrite: true,
         enhancementLevel: 0.8,
+        // A copied resume is charged here, on its first AI pass.
+        flowType: "improve",
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setLatestContent(document.content);
       const gaps = document.jobAnalysis?.gaps ?? [];
       setJobGaps(gaps);
       setFinishingUp(true);
-      const wording = await loadWordingPreview(cvDocumentId).finally(() => setFinishingUp(false));
+      let wording = await loadWordingPreview(cvDocumentId).finally(() => setFinishingUp(false));
+      // Automatic updates: no review step, saved in the background with a short notice.
+      if (wording && backgroundSync.autoSync === "always") {
+        backgroundSync.applyWording(cvDocumentId, wording);
+        wording = null;
+      }
       setWordingPreview(wording);
       await celebrate("improve");
       // Straight into the editor — unless there's improved wording to offer
-      // back to a profile, or the job description showed gaps.
-      if (wording || gaps.length > 0) setStep("select-template");
-      else handleFinish(document.content);
+      // back to a profile (that step lists the job's gaps; otherwise a notice does).
+      if (wording) {
+        setStep("select-template");
+      } else {
+        const gapsText = gapsNotice(gaps);
+        if (gapsText) toast.info("Tailored to the job", { id: "job-gaps", description: gapsText, duration: 9000 });
+        handleFinish(document.content);
+      }
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => void handleContinueToTemplate(jobDescription))) return;
       setFlowError(err instanceof Error ? err.message : "Could not enhance your CV. Please try again.");
     }
   };
@@ -429,11 +450,40 @@ export function EnhanceCvModal({
       onClose={onClose}
       loader={aiWait && <AiWaitLoader wait={aiWait} done={aiDone !== null} fileName={uploadedFileName} />}
       outside={
-        <ProUpgradeModal
-          isOpen={proGate.isPaywallOpen}
-          onClose={proGate.closePaywall}
-          reason="You've already used your free Improve generation. Upgrade to gomoxie pro for unlimited AI tailoring."
-        />
+        <>
+          <ProUpgradeModal
+            isOpen={proGate.isPaywallOpen}
+            onClose={proGate.closePaywall}
+            paywall={proGate.paywall}
+            onPayLater={proGate.canPayLater() ? proGate.continuePayLater : undefined}
+          />
+          <JobMismatchDialog
+            mismatch={mismatch}
+            onClose={() => setMismatch(null)}
+            options={
+              optionalJd.trim()
+                ? [
+                    {
+                      label: "Try a different job",
+                      onClick: () => {
+                        setMismatch(null);
+                        setOptionalJd("");
+                        setStep("job-target");
+                      },
+                    },
+                    {
+                      label: "Improve it without a job",
+                      onClick: () => {
+                        setMismatch(null);
+                        setOptionalJd("");
+                        void handleContinueToTemplate("");
+                      },
+                    },
+                  ]
+                : []
+            }
+          />
+        </>
       }
     >
         {/* ================= TEMPLATE (right before the first AI call) ================= */}
@@ -467,8 +517,8 @@ export function EnhanceCvModal({
               <OptionCard
                 icon={Upload}
                 tone="sky"
-                title="Upload an existing CV"
-                description="Upload a PDF or Word resume to improve."
+                title="Upload a CV file"
+                description="Upload a PDF or Word resume from your device to improve."
                 onClick={() => {
                   setSourceType("upload");
                   setStep("upload-file");
@@ -478,8 +528,13 @@ export function EnhanceCvModal({
                 <OptionCard
                   icon={FileText}
                   tone="accent"
-                  title="Pick an existing resume"
-                  description={`Choose one you've already made (${pastProjects.length} available).`}
+                  title="Choose one of your saved resumes"
+                  state={pastProjects.length === 0 ? "unavailable" : undefined}
+                  description={
+                    pastProjects.length === 0
+                      ? "You haven't made any resumes here yet."
+                      : `Improve a resume you've already made here (${pastProjects.length} saved).`
+                  }
                   onClick={() => {
                     setSourceType("past-project");
                     setStep("pick-source-item");
@@ -547,7 +602,7 @@ export function EnhanceCvModal({
         {step === "pick-source-item" && (
           <div>
             <div className="text-center mb-5">
-              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Choose a resume</h2>
+              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Choose one of your saved resumes</h2>
             </div>
 
             <div className="mb-6">
@@ -752,6 +807,8 @@ export function EnhanceCvModal({
         )}
 
         {/* ================= STEP 4: IMPROVED WORDING → PROFILE ================= */}
+        {/* Restored at the end with no wording to review: nothing left to ask, so on to the editor. */}
+        {step === "select-template" && !wordingPreview && cvDocumentId && <RunOnMount run={() => handleFinish()} />}
         {step === "select-template" && wordingPreview && cvDocumentId && (
           <WordingReviewStep
             key={cvDocumentId}
@@ -764,37 +821,6 @@ export function EnhanceCvModal({
           </WordingReviewStep>
         )}
 
-        {/* ================= STEP 4: READY ================= */}
-        {step === "select-template" && !wordingPreview && (
-          <div>
-            <div className="text-center mb-5">
-              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Your improved CV is ready</h2>
-            </div>
-
-            <JobGaps gaps={jobGaps} />
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("job-ask")}
-                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={() => handleFinish()}
-                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                <span>Open in editor</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-            {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
-            )}
-          </div>
-        )}
     </FlowModal>
   );
 }

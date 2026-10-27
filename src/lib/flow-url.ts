@@ -1,6 +1,6 @@
 // Which create / tailor / improve flow is open on the dashboard lives in its
 // URL — /dashboard?flow=tailor&fs=… (plus &template=… or &profile=… for a
-// CV started from one) — so a refresh reopens it and Back closes it. The step
+// CV started from one, &cv=… to tailor a saved CV) — so a refresh reopens it and Back closes it. The step
 // inside it is ?step=… (see flow-steps). `fs` names this one opening of the
 // flow: once it's closed or finished, Back onto its old steps shows the
 // dashboard instead of reopening it empty. `from` is the dashboard page it was
@@ -16,6 +16,8 @@ export interface OpenFlow {
   from: string;
   template?: string;
   profile?: string;
+  /** A saved CV to start from (Tailor). */
+  cv?: string;
 }
 
 const KINDS: readonly FlowKind[] = ["create", "tailor", "improve"];
@@ -28,11 +30,12 @@ function safeFrom(from: string | null | undefined): string {
 
 export function dashboardFlowHref(
   kind: FlowKind,
-  options: { template?: string; profile?: string; from?: string } = {}
+  options: { template?: string; profile?: string; cv?: string; from?: string } = {}
 ): string {
   const params = new URLSearchParams({ flow: kind, fs: Math.random().toString(36).slice(2, 10) });
   if (options.template) params.set("template", options.template);
   if (options.profile) params.set("profile", options.profile);
+  if (options.cv) params.set("cv", options.cv);
   const from = safeFrom(options.from);
   if (from !== "/dashboard") params.set("from", from);
   return `/dashboard?${params.toString()}`;
@@ -48,6 +51,7 @@ export function readOpenFlow(params: URLSearchParams): OpenFlow | null {
     from: safeFrom(params.get("from")),
     template: params.get("template") ?? undefined,
     profile: params.get("profile") ?? undefined,
+    cv: params.get("cv") ?? undefined,
   };
 }
 

@@ -129,7 +129,7 @@ export const PROFILE_SECTIONS: SectionDef[] = [
     key: "links",
     label: "Links",
     noun: "link",
-    hint: "Portfolio, GitHub, LinkedIn — whatever fits this role.",
+    hint: "Portfolio, GitHub, LinkedIn: whatever fits this role.",
     fields: [
       { key: "label", label: "Label", placeholder: "e.g. GitHub" },
       { key: "url", label: "URL", required: true },

@@ -24,7 +24,7 @@ interface DashboardTopBarProps {
 }
 
 const itemClass =
-  "w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 transition-colors cursor-pointer";
+  "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950 transition-colors cursor-pointer";
 
 // The phone drawer's links: the same look as the landing page's phone menu.
 const drawerLink = "block py-1.5 text-[17px] font-medium tracking-tight text-neutral-950";
@@ -134,7 +134,7 @@ export function DashboardTopBar({ title, onStartTour, mobileNavItems, activeHref
                   <div className={drawerHeading}>Account</div>
                   {!isPro && (
                     <Link href="/dashboard/upgrade" onClick={() => setOpen(false)} className={`${drawerLink} flex items-center gap-2 !text-accent-strong`}>
-                      <Crown className="h-4 w-4" /> Upgrade to Pro
+                      <Crown className="h-4 w-4" /> Upgrade
                     </Link>
                   )}
                   <Link href="/dashboard/settings" onClick={() => setOpen(false)} className={drawerLink}>
@@ -173,7 +173,7 @@ export function DashboardTopBar({ title, onStartTour, mobileNavItems, activeHref
 
         {/* Desktop: the account dropdown. */}
         {open && (
-          <div role="menu" className="hidden md:block absolute right-0 mt-2 w-60 rounded-lg border border-neutral-300 bg-white shadow-xl p-1.5 z-50">
+          <div role="menu" className="hidden md:block absolute right-0 mt-2 w-56 rounded-xl border border-neutral-200 bg-white shadow-lg p-1.5 z-50">
 
             <Link href="/dashboard/help" role="menuitem" onClick={() => setOpen(false)} className={itemClass}>
               <HelpCircle className="w-4 h-4 text-neutral-500" />

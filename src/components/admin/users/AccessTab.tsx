@@ -54,7 +54,7 @@ function grantDetails(g: Entitlement): string {
     case "LIMIT_ADJUSTMENT":
       return `Flow: ${g.flow ?? "—"} · ${(g.amount ?? 0) > 0 ? "+" : ""}${g.amount ?? 0}`;
     default:
-      return "Full Pro";
+      return g.kind === "PLUS_ACCESS" ? "Plus" : g.kind === "LIFETIME_PLUS" ? "Plus, for life" : "Full Pro";
   }
 }
 
@@ -190,7 +190,19 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
   const [resetOpen, setResetOpen] = useState(false);
   const [resetFlows, setResetFlows] = useState<FlowKey[]>([]);
 
-  const activeProGrant = detail.entitlements.some((g) => g.kind === "PRO_ACCESS" && access.activeGrantIds.includes(g.id));
+  // A grant that gives a plan (Pro, Plus or Plus Lifetime).
+  const PLAN_GRANTS = ["PRO_ACCESS", "PLUS_ACCESS", "LIFETIME_PLUS"];
+  const activeProGrant = detail.entitlements.some((g) => PLAN_GRANTS.includes(g.kind) && access.activeGrantIds.includes(g.id));
+  const tier = access.tier ?? (access.isPro ? "pro" : "free");
+  const period = access.plan?.period ?? null;
+  // What this plan's limit is before any grant, to show next to the effective limit.
+  const planDefault = (f: FlowKey): number | null => {
+    const d = access.planDefaults;
+    if (!d?.free) return null;
+    if (tier === "free") return d.free.generations;
+    if (tier === "plus") return d.plus[period ?? "monthly"][f];
+    return d.proFairUse[period && period !== "lifetime" ? period : "monthly"][f];
+  };
   const anyUsed = FLOWS.some((f) => access.limits[f].used > 0);
 
   const openReset = () => {
@@ -293,13 +305,15 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
               [
                 "Plan",
                 <span key="plan" className="flex flex-wrap items-center gap-1.5">
-                  <ProBadge isPro={access.isPro} proSource={access.proSource} />
-                  {access.billingPro && activeProGrant && <span className="text-xs text-neutral-500">(also has an active Pro grant)</span>}
+                  <ProBadge isPro={access.isPro} tier={access.tier} proSource={access.proSource} lifetime={access.plan?.source === "lifetime"} />
+                  {period && <span className="text-xs text-neutral-500">{period === "quarterly" ? "3 months" : period}</span>}
+                  {access.plan?.legacy && <span className="text-xs text-neutral-500">(old single-plan price)</span>}
+                  {access.billingPro && activeProGrant && <span className="text-xs text-neutral-500">(also has an active plan grant)</span>}
                 </span>,
               ],
               ["Paid subscription", <YesNo key="b" on={access.billingPro} onLabel="Active" offLabel="None" />],
               [
-                "Pro grant ends",
+                "Plan grant ends",
                 activeProGrant ? (
                   access.proGrantExpiresAt ? (
                     <span>
@@ -309,7 +323,7 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
                     "No end date"
                   )
                 ) : (
-                  <span className="text-neutral-400">No active Pro grant</span>
+                  <span className="text-neutral-400">No active plan grant</span>
                 ),
               ],
               ["Beta program", <YesNo key="beta" on={access.beta} onLabel="Member" offLabel="No" />],
@@ -340,9 +354,11 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
 
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
-              <h3 className="text-xs font-semibold text-neutral-700">Free uses per flow</h3>
+              <h3 className="text-xs font-semibold text-neutral-700">
+                {tier === "free" ? "Free CVs (shared by every flow)" : `Usage this period${access.plan?.periodEndsAt ? `, resets ${formatDateTime(access.plan.periodEndsAt)}` : ""}`}
+              </h3>
               {canGrant && (
-                <Button size="sm" onClick={openReset} disabled={!anyUsed} title={anyUsed ? undefined : "No free uses have been spent"}>
+                <Button size="sm" onClick={openReset} disabled={!anyUsed} title={anyUsed ? undefined : "Nothing has been used yet"}>
                   <RotateCcw className="w-3.5 h-3.5" />
                   Reset usage counters
                 </Button>
@@ -362,25 +378,29 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
                 <tbody>
                   {FLOWS.map((f) => {
                     const l = access.limits[f];
-                    const def = access.planDefaults[f];
-                    const adjusted = l.limit !== null && l.limit !== def;
+                    const def = planDefault(f);
+                    const adjusted = l.limit !== null && def !== null && l.limit !== def;
                     return (
                       <tr key={f} className="border-b border-neutral-100 last:border-0">
                         <td className="px-3 py-2 font-medium">{FLOW_LABELS[f]}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{l.used}</td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {l.limit === null ? (
-                            <Badge tone="good" title={access.isPro ? "Pro is unmetered" : "Unlimited-generations exemption"}>
+                            <Badge tone="good" title="Unlimited-generations exemption">
                               Unmetered
                             </Badge>
                           ) : (
-                            <span className={adjusted ? "font-semibold text-accent-strong" : ""} title={adjusted ? "Adjusted by an active grant" : undefined}>
+                            <span
+                              className={adjusted ? "font-semibold text-accent-strong" : ""}
+                              title={l.hidden ? "Pro's fair-use cap: enforced, never shown to the user" : adjusted ? "Adjusted by an active grant" : undefined}
+                            >
                               {l.limit}
+                              {l.hidden && <span className="ml-1 text-[10px] font-semibold text-neutral-400">fair use</span>}
                             </span>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-neutral-500">{def}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{l.remaining === null ? "—" : l.remaining}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-neutral-500">{def ?? "-"}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{l.remaining === null ? "-" : l.remaining}</td>
                       </tr>
                     );
                   })}
@@ -388,8 +408,12 @@ export function AccessTab({ detail }: { detail: UserDetail }) {
               </table>
             </div>
             <p className="mt-2 text-xs text-neutral-500">
-              Limit = plan default + active limit adjustments (never below 0). Pro and the “Unlimited generations” exemption make every flow unmetered; the used
-              counter still counts free uses spent before.
+              {tier === "free"
+                ? "Free users share one pool of free CVs across every flow: plan default + active free-CV grants (never below 0). After that they pay per CV at download."
+                : tier === "plus"
+                  ? "Plus limits per billing period (Lifetime: per month), from the Plans settings. Past them the user can pay per CV or upgrade."
+                  : "Pro is shown to the user as unlimited; these fair-use caps are enforced but never shown."}{" "}
+              The “Unlimited generations” exemption makes every flow unmetered.
             </p>
           </div>
         </div>

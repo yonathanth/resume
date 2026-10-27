@@ -32,7 +32,18 @@ import { serializeCvContentToText } from "@/lib/cv-mapper";
 async function analyzeAndPersist(
   sourceText: string,
   profileId: string | undefined,
-  options: { templateId: string; jobDescription?: string; focusInstructions?: string; email?: string; flowType: CvFlowType }
+  options: {
+    templateId: string;
+    jobDescription?: string;
+    focusInstructions?: string;
+    email?: string;
+    flowType: CvFlowType;
+    /** Past the free CV / a Plus limit: carry on, pay for this CV at download. */
+    payLater?: boolean;
+    /** The saved resume / profile being reworked (priced as tailored / improved). */
+    sourceCvId?: string;
+    sourceProfileId?: string;
+  }
 ): Promise<{ profileId: string | null; cvDocumentId: string | null; document: ApiCvDocument | GenerateCvMismatch }> {
   // The template is chosen before analysis so the AI only writes the sections
   // it shows (plus its notes) and asks about the ones it needs but can't find.
@@ -43,6 +54,9 @@ async function analyzeAndPersist(
     focusInstructions: options.focusInstructions,
     email: options.email,
     flowType: options.flowType,
+    payLater: options.payLater,
+    sourceCvId: options.sourceCvId,
+    sourceProfileId: options.sourceProfileId,
   });
   if ("mismatch" in analyzed) {
     return { profileId: profileId ?? null, cvDocumentId: null, document: analyzed };
@@ -51,9 +65,11 @@ async function analyzeAndPersist(
   const doc = await createCvDocument(profileId, options.templateId);
   let document: ApiCvDocument | GenerateCvMismatch;
   try {
+    // The charge from the analysis goes with the save (see the backend's chargeToken).
     document = await generateCv(doc.id, {
       analyzedContent: analyzed.candidateData,
       jobDescription: options.jobDescription,
+      chargeToken: analyzed.chargeToken,
     });
   } catch (err) {
     // Don't leave an empty draft behind in Past Projects.
@@ -86,11 +102,13 @@ export function useAnalyzeFreestyle() {
       sourceText,
       templateId,
       flowType,
+      payLater,
     }: {
       sourceText: string;
       templateId: string;
       flowType: CvFlowType;
-    }): Promise<AnalyzeFreestyleResult> => analyzeAndPersist(sourceText, undefined, { templateId, flowType }),
+      payLater?: boolean;
+    }): Promise<AnalyzeFreestyleResult> => analyzeAndPersist(sourceText, undefined, { templateId, flowType, payLater }),
   });
 }
 
@@ -110,10 +128,12 @@ export function useAnalyzeUpload() {
       file,
       templateId,
       flowType,
+      payLater,
     }: {
       file: File;
       templateId: string;
       flowType: CvFlowType;
+      payLater?: boolean;
     }): Promise<AnalyzeUploadResult> => {
       const cvImport = await uploadCvImport(file);
       if (cvImport.status === "failed" || !cvImport.rawText) {
@@ -126,6 +146,7 @@ export function useAnalyzeUpload() {
         templateId,
         email: cvImport.extractedData?.personal?.email,
         flowType,
+        payLater,
       });
       return { profileId, cvDocumentId, sourceText: cvImport.rawText, document };
     },
@@ -150,9 +171,11 @@ export interface AnalyzeExistingInput {
   /** A short instruction for what to emphasize/rewrite toward — sent as its
    * own high-priority prompt block instead of being folded into sourceText. */
   focusInstructions?: string;
-  /** Which dashboard tab this flow started from — only spent when an AI
-   * call actually happens (hasNewInput below); a plain copy is free. */
+  /** Which dashboard tab this flow started from — only charged when an AI
+   * call actually happens (hasNewInput below, or the later refine); a plain copy is free. */
   flowType: CvFlowType;
+  /** Past the free CV / a Plus limit: carry on, pay for this CV at download. */
+  payLater?: boolean;
 }
 
 export interface AnalyzeExistingResult {
@@ -195,7 +218,8 @@ export function useAnalyzeExisting() {
         input.extraDetails?.trim() || input.jobDescription?.trim() || input.focusInstructions?.trim()
       );
       if (!hasNewInput) {
-        const doc = await createCvDocument(input.targetProfileId, input.templateId);
+        // A copy of a resume still to be paid for stays locked (sourceCvId).
+        const doc = await createCvDocument(input.targetProfileId, input.templateId, input.sourceCvId);
         const document = await updateCvContent(doc.id, { content: sourceDoc.content });
         return {
           profileId: input.targetProfileId ?? null,
@@ -213,6 +237,9 @@ export function useAnalyzeExisting() {
         jobDescription: input.jobDescription,
         focusInstructions: input.focusInstructions,
         flowType: input.flowType,
+        payLater: input.payLater,
+        sourceCvId: input.sourceCvId,
+        sourceProfileId: input.sourceProfileId,
       });
       return { profileId, cvDocumentId, sourceText, document };
     },
@@ -277,6 +304,10 @@ export interface RefineCvInput {
    * improvement-goal field) — sent as its own high-priority prompt block
    * instead of being folded into sourceText. */
   focusInstructions?: string;
+  /** The flow — charges the CV here when it's a copy not charged yet. */
+  flowType?: CvFlowType;
+  /** Past the free CV / a Plus limit: carry on, pay for this CV at download. */
+  payLater?: boolean;
 }
 
 async function applyPersonalFields(
@@ -320,9 +351,11 @@ export function useRefineCv() {
         email: input.email?.trim() || undefined,
         enhancementLevel: input.enhancementLevel,
         focusInstructions: input.focusInstructions,
-        // This document already exists — this call is a continuation of the
-        // flow that was already charged, not a new one.
+        // This document already exists: free when it's already charged, and
+        // charged now when it's a copy of a saved resume / profile.
         cvDocumentId: input.cvDocumentId,
+        flowType: input.flowType,
+        payLater: input.payLater,
       });
       if ("mismatch" in analyzed) return analyzed;
 

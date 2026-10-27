@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { CtaButton } from "@/components/CtaButton";
 import { MenuToggleIcon } from "@/components/MenuToggleIcon";
 
@@ -47,6 +48,9 @@ export function Navbar({ theme = "light" }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const isDark = theme === "dark";
+  const pathname = usePathname();
+  // The page you're on (its section, e.g. /templates/classic → Templates).
+  const isCurrent = (href: string) => !href.includes("#") && (pathname === href || pathname.startsWith(`${href}/`));
 
   // The phone menu covers the page: hold the page still and let Escape close it.
   useEffect(() => {
@@ -100,11 +104,26 @@ export function Navbar({ theme = "light" }: NavbarProps) {
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-[16px] font-medium">
-            {NAV_LINKS.map((link) => (
-              <Link key={link.href} href={link.href} className={`transition-colors duration-150 ${linkClass}`}>
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) => {
+              const current = isCurrent(link.href);
+              return (
+                <Link
+                  key={link.href}
+                  href={link.href}
+                  aria-current={current ? "page" : undefined}
+                  className={`group relative transition-colors duration-200 ${current ? "text-accent" : linkClass}`}
+                >
+                  {link.label}
+                  {/* A short centred underline: grows in under the current page, faintly on hover for the others. */}
+                  <span
+                    aria-hidden="true"
+                    className={`absolute -bottom-0.5 left-1/2 h-[2px] w-5 -translate-x-1/2 origin-center rounded-full bg-accent transition-transform duration-300 ease-out ${
+                      current ? "nav-underline-in scale-x-100" : "scale-x-0 opacity-60 group-hover:scale-x-100"
+                    }`}
+                  />
+                </Link>
+              );
+            })}
           </div>
         </div>
 
@@ -147,7 +166,12 @@ export function Navbar({ theme = "light" }: NavbarProps) {
               <ul className="flex flex-col gap-2">
                 {section.links.map((link, i) => (
                   <li key={link.href} className="menu-item-in" style={{ animationDelay: `${s * 120 + (i + 1) * 35}ms` }}>
-                    <Link href={link.href} onClick={close} className="text-[18px] font-medium tracking-tight">
+                    <Link
+                      href={link.href}
+                      onClick={close}
+                      aria-current={isCurrent(link.href) ? "page" : undefined}
+                      className={`text-[18px] font-medium tracking-tight ${isCurrent(link.href) ? "text-accent" : ""}`}
+                    >
                       {link.label}
                     </Link>
                   </li>

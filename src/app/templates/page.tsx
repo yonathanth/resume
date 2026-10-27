@@ -10,7 +10,7 @@ import { TemplatesGallery } from "@/components/TemplatesGallery";
 export const metadata: Metadata = pageMetadata({
   title: "Free resume templates",
   description:
-    "Free, recruiter-tested resume templates that read cleanly in applicant tracking systems — simple one-pagers, professional layouts, two-column designs and academic CVs.",
+    "Free, recruiter-tested resume templates that read cleanly in applicant tracking systems: simple one-pagers, professional layouts, two-column designs and academic CVs.",
   path: "/templates",
 });
 

@@ -5,6 +5,7 @@ import { Plus, Search, X } from "lucide-react";
 import { ResumeDraft, TemplateId } from "./create-flow/types";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ResumeCard } from "./ResumeCard";
+import { useDashboard } from "./DashboardContext";
 import { DashboardMoxie } from "./DashboardMoxie";
 import { SortMenu } from "./SortMenu";
 
@@ -40,6 +41,7 @@ export function PastProjectsView({
   onDeleteDraft,
   onNewResume,
 }: PastProjectsViewProps) {
+  const { handleTailorDraft } = useDashboard();
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortBy>("edited");
   const [pendingAction, setPendingAction] = useState<{ type: "delete" | "duplicate"; draft: ResumeDraft } | null>(null);
@@ -147,6 +149,7 @@ export function PastProjectsView({
               onOpen={() => onOpenDraft?.(draft)}
               onDuplicate={() => requestAction("duplicate", draft)}
               onDelete={onDeleteDraft ? () => requestAction("delete", draft) : undefined}
+              onTailor={() => handleTailorDraft(draft)}
             />
           ))}
         </div>

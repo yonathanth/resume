@@ -16,12 +16,12 @@ import {
   Menu,
   ScrollText,
   Settings,
-  Shield,
   TrendingUp,
   Users,
   X,
   ArrowUpRight,
 } from "lucide-react";
+import { MoxieLogo } from "@/components/moxie/MoxieLogos";
 import { ApiError, clearAccessToken, getAccessToken, logout, restoreSession } from "@/lib/api";
 import { getAdminMe, type AdminMe, type Permission } from "@/lib/admin-api";
 
@@ -94,11 +94,12 @@ function NavLinks({ pathname, onNavigate }: { pathname: string; onNavigate?: () 
 function Brand() {
   return (
     <div className="flex items-center gap-2.5">
-      <span className={`w-8 h-8 rounded-lg flex items-center justify-center ${ACCENT_TILE}`}>
-        <Shield className="w-4 h-4" />
-      </span>
+      <MoxieLogo size={32} />
       <div className="leading-tight">
-        <div className="text-[15px] font-bold tracking-tight text-neutral-950">GoMoxie Admin</div>
+        <div className="flex items-center gap-1.5 text-[15px] font-bold tracking-tight text-neutral-950">
+          gomoxie
+          <span className="rounded bg-accent px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wide text-white">Admin</span>
+        </div>
         <div className="text-[11px] text-neutral-500">Management console</div>
       </div>
     </div>

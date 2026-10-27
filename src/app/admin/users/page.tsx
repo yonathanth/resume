@@ -109,7 +109,7 @@ export default function AdminUsersPage() {
       header: "Plan",
       cell: (u) => (
         <div>
-          <ProBadge isPro={u.isPro} proSource={u.proSource} />
+          <ProBadge isPro={u.isPro} tier={u.tier} proSource={u.proSource} />
           {(u.subscriptionProvider || u.subscriptionStatus) && (
             <div className="mt-0.5 text-[11px] text-neutral-500 whitespace-nowrap">
               {[u.subscriptionProvider, u.subscriptionStatus?.replace(/_/g, " ")].filter(Boolean).join(" · ")}

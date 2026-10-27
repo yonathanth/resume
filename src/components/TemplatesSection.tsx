@@ -45,7 +45,7 @@ export function TemplatesSection() {
             Recruiter-tested templates that read cleanly in any applicant tracking system.
           </p>
           <div className="mt-8">
-            <CtaButton href="/templates" plainArrow>
+            <CtaButton href="/templates" plainArrow shine="subtle">
               Browse templates
             </CtaButton>
           </div>

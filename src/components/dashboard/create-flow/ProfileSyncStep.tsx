@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BookmarkPlus, Check, ChevronDown, RotateCcw, User } from "lucide-react";
+import { BookmarkPlus, ChevronDown, User } from "lucide-react";
 import {
   ApiError,
   ProfileChangeDetail,
   ProfileChangeSummary,
-  revertProfileChange,
   suggestProfileForCv,
   syncCvIntoProfile,
 } from "@/lib/api";
 import { useInvalidateProfiles } from "@/hooks/use-profiles";
+import { useBackgroundProfileSync } from "@/hooks/use-background-profile-sync";
 import { useUpdateProfile as useUpdateAccount } from "@/hooks/use-auth";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { MoxieMoment } from "@/components/moxie";
@@ -22,9 +22,10 @@ import { CenteredSpinner } from "@/components/CenteredSpinner";
 // The last step of making a CV: offer to keep the matching career profile up
 // to date (or start one). Shown after the CV is ready, so it never stands
 // between the user and their CV. Behaviour follows the account's
-// profileAutoSync setting: "ask" shows the card, "always" updates the
-// matching profile straight away (with Undo), "never" skips updates.
-// Creating a new profile always asks.
+// profileAutoSync setting: "ask" shows the card, "never" skips updates, and
+// "always" never reaches this step — the flows sync in the background instead
+// (see useBackgroundProfileSync). If the setting only turns out to be
+// "always" here, it hands over to the background sync and moves on.
 
 interface ProfileSyncStepProps {
   cvDocumentId: string;
@@ -43,15 +44,6 @@ interface ProfileSyncStepProps {
   /** Returns true when the error was a Pro paywall (and handled). */
   onProRequired: (err: unknown) => boolean;
 }
-
-type Applied = {
-  profileId: string;
-  title: string;
-  changeId: string | null;
-  version: number;
-  summary: ProfileChangeSummary;
-  details: ProfileChangeDetail[] | null;
-};
 
 const BUTTON_PRIMARY =
   "w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md disabled:opacity-60 disabled:cursor-not-allowed";
@@ -114,28 +106,12 @@ export function ProfileSyncStep({
   const invalidateProfiles = useInvalidateProfiles();
   const updateAccount = useUpdateAccount();
 
-  // Loads the suggestion — and, when the account says "always", applies the
-  // update to the matching profile right away (the card then offers Undo).
-  // Cached per CV with no refetching, so the update happens at most once.
+  const background = useBackgroundProfileSync();
+
+  // What the CV would add to its profile, or to a new one.
   const suggestion = useQuery({
     queryKey: ["profile-suggestion", cvDocumentId, factsOnly, sourceProfile?.id ?? null],
-    queryFn: async () => {
-      const found = await suggestProfileForCv({ cvDocumentId, factsOnly, profileId: sourceProfile?.id });
-      if (sourceProfile || found.autoSync !== "always" || !found.match || isEmptyChange(found.match.preview)) {
-        return { found, autoApplied: null };
-      }
-      const result = await syncCvIntoProfile({ cvDocumentId, factsOnly, profileId: found.match.profileId });
-      invalidateProfiles(result.profile.id);
-      const autoApplied: Applied = {
-        profileId: result.profile.id,
-        title: result.profile.title,
-        changeId: result.changeId,
-        version: result.profile.version,
-        summary: result.summary,
-        details: result.details ?? null,
-      };
-      return { found, autoApplied };
-    },
+    queryFn: () => suggestProfileForCv({ cvDocumentId, factsOnly, profileId: sourceProfile?.id }),
     // A CV from a profile with nothing new to add has nothing to ask about.
     enabled: !(sourceProfile && !hasNewDetails),
     retry: false,
@@ -145,15 +121,23 @@ export function ProfileSyncStep({
 
   const [newTitle, setNewTitle] = useState(roleTitle);
   const [alwaysUpdate, setAlwaysUpdate] = useState(false);
-  const [showDetails, setShowDetails] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<{ id: string; title: string } | null>(null);
   // The profile it was just saved to — Moxie files it away, then on to the editor.
   const [savedTo, setSavedTo] = useState<string | null>(null);
 
-  const data = suggestion.data?.found;
-  const applied = suggestion.data?.autoApplied ?? null;
+  const data = suggestion.data;
+  const automatic = data?.autoSync === "always";
+
+  // Updates are automatic: no step — sync in the background and open the editor.
+  const handedOver = useRef(false);
+  useEffect(() => {
+    if (!automatic || handedOver.current) return;
+    handedOver.current = true;
+    background.syncCv({ cvDocumentId, factsOnly, sourceProfileId: sourceProfile?.id, roleTitle });
+    onFinish();
+  }, [automatic, background, cvDocumentId, factsOnly, sourceProfile?.id, roleTitle, onFinish]);
   // A CV written from a profile goes back to that profile, whatever its role matched.
   const target = sourceProfile
     ? {
@@ -184,20 +168,6 @@ export function ProfileSyncStep({
       }
       setError(err instanceof ApiError ? err.message : "Could not update your profile. Your CV is saved either way.");
     } finally {
-      setBusy(false);
-    }
-  };
-
-  const undo = async () => {
-    if (!applied) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (applied.changeId) await revertProfileChange(applied.profileId, applied.changeId, applied.version);
-      invalidateProfiles(applied.profileId);
-      onFinish();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not undo. You can restore it from the profile's History tab.");
       setBusy(false);
     }
   };
@@ -244,35 +214,8 @@ export function ProfileSyncStep({
     );
   }
 
-  // ---- loading
-  if (suggestion.isLoading) return <CenteredSpinner caption="Checking your career profiles…" className="py-16" />;
-
-  // ---- applied automatically ("always")
-  if (applied) {
-    return (
-      <div>
-        {header(`Updated your ${applied.title} profile`, describeChangeCounts(applied.summary) || "It already had everything in this CV.")}
-        <p className="text-xs text-neutral-500 text-center -mt-2 mb-4">Profile updates are set to automatic. You can change that in Account Settings.</p>
-        {!isEmptyChange(applied.summary) && (
-          <DetailsToggle label="See what was added">
-            <ChangeDetails summary={applied.summary} details={applied.details} />
-          </DetailsToggle>
-        )}
-        {children}
-        {footer}
-        <div className="space-y-2">
-          <button type="button" disabled={busy} onClick={onFinish} className={BUTTON_PRIMARY}>
-            <Check className="w-4 h-4" /> Continue
-          </button>
-          {applied.changeId && (
-            <button type="button" disabled={busy} onClick={undo} className={`${BUTTON_SECONDARY} flex items-center justify-center gap-1.5`}>
-              <RotateCcw className="w-3.5 h-3.5" /> Undo
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
+  // ---- loading (or handing over to the background sync)
+  if (suggestion.isLoading || automatic) return <CenteredSpinner caption="Checking your career profiles…" className="py-16" />;
 
   // ---- suggestion failed: never block the CV over it
   if (suggestion.isError && !sourceProfile) {

@@ -104,7 +104,7 @@ const AFTER_EXPERIENCE = [
     role: "Senior Software Engineer",
     company: "Abay Fintech",
     place: "Addis Ababa",
-    dates: "2021 — Present",
+    dates: "2021 - Present",
     bullets: [
       "Led a 5-engineer squad rebuilding the mobile wallet in React Native, lifting monthly active users from 180K to 420K in 14 months.",
       "Cut payment failure rate 37% by redesigning retry and idempotency logic across 6 Node.js microservices.",
@@ -116,7 +116,7 @@ const AFTER_EXPERIENCE = [
     role: "Software Engineer",
     company: "Entoto Systems",
     place: "Addis Ababa",
-    dates: "2019 — 2021",
+    dates: "2019 - 2021",
     bullets: [
       "Built a Java/Spring inventory platform used by 120+ retail branches, replacing paper logs and saving 30 staff-hours a week.",
       "Raised automated test coverage from 18% to 81%, halving production incidents quarter over quarter.",
@@ -283,7 +283,7 @@ export function RealResultsSection() {
           <span className="text-neutral-400">Make them count.</span>
         </h2>
         <div className="mt-8">
-          <CtaButton href="/signup">Try it with your resume</CtaButton>
+          <CtaButton href="/signup" shine="subtle">Try it with your resume</CtaButton>
         </div>
       </Reveal>
 

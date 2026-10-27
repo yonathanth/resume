@@ -11,7 +11,7 @@ export const PAYMENT_CONFIRMED_REDIRECT_MS = 3000;
 
 const COPY: Record<PaymentReturnState, { line: string; note?: string }> = {
   pending: { line: "Confirming your payment…" },
-  confirmed: { line: "You're on gomoxie pro!", note: "Taking you to your dashboard…" },
+  confirmed: { line: "Payment confirmed!", note: "Taking you back…" },
   timeout: {
     line: "Still confirming your payment",
     note: "This can take a moment. We'll update your account as soon as it's confirmed.",
@@ -19,7 +19,7 @@ const COPY: Record<PaymentReturnState, { line: string; note?: string }> = {
 };
 
 /**
- * What the payment return pages (Chapa, Polar) show while a payment is
+ * What the payment return page shows while a payment is
  * confirmed: Moxie inspecting a coin through her glasses — then, once it
  * goes through, a crown drops onto her and she jumps for joy.
  */

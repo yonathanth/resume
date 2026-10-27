@@ -7,7 +7,7 @@ export const SITE = {
   url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://gomoxie.app").replace(/\/$/, ""),
   tagline: "AI resumes that land interviews",
   description:
-    "Create a resume, tailor it to any job posting, or improve the one you have — with AI, in minutes. ATS-friendly templates, PDF download, free to start.",
+    "Create a resume, tailor it to any job posting, or improve the one you have with AI, in minutes. ATS-friendly templates, PDF download, free to start.",
   locale: "en_US",
   /** The brand's accent (see --accent in globals.css). */
   accent: "#ff5e1f",

@@ -53,7 +53,7 @@ export function VerifyEmailView({ token }: { token: string | null }) {
   const confirmed = verifyMutation.isSuccess;
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center bg-[#0a0a0a] px-6 font-sans text-white">
+    <div className="fixed inset-0 flex h-dvh w-full items-center justify-center overflow-y-auto overflow-x-hidden overscroll-none bg-[#0a0a0a] px-6 font-sans text-white">
       <div className="w-full max-w-[380px] py-10 text-center">
         <h1 className="text-[28px] font-bold leading-tight tracking-tight sm:text-[32px]">Confirm your email</h1>
         <p className="mt-4 text-[14.5px] leading-relaxed text-neutral-400">

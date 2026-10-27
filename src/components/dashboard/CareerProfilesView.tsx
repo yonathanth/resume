@@ -4,14 +4,14 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, User, Crown, FilePlus, Plus, Search, X } from "lucide-react";
-import { ApiCareerProfile, ApiError } from "@/lib/api";
+import { ApiCareerProfile, ApiError, canUseCareerProfiles } from "@/lib/api";
 import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ICON_TONES, OptionTone } from "./create-flow/OptionCard";
 import { DashboardMoxie } from "./DashboardMoxie";
 import { SortMenu } from "./SortMenu";
 import { ProfessionInput } from "./ProfessionInput";
-import { ProUpgradeModal } from "./ProUpgradeModal";
+import { CareerProfilesPaywall, ProUpgradeModal } from "./ProUpgradeModal";
 import { ChipListEditor, LABEL_CLASS } from "./career-profiles/ProfileSectionEditor";
 import { tempId } from "./career-profiles/profile-sections";
 import { CenteredSpinner } from "@/components/CenteredSpinner";
@@ -48,7 +48,7 @@ function profileFacts(profile: ApiCareerProfile): string[] {
 export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesViewProps) {
   const router = useRouter();
   const { data: profiles = [], isLoading } = useProfiles();
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const isPro = canUseCareerProfiles(useSubscriptionStatus().data);
   const createProfile = useCreateProfile();
 
   const [isNewOpen, setIsNewOpen] = useState(false);
@@ -182,7 +182,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
           <p className="mt-1 text-sm text-neutral-500 max-w-md mx-auto leading-relaxed">
             {isPro
               ? "One profile per role you go for."
-              : "Career profiles are part of gomoxie pro. Keep everything for a role in one place and build tailored CVs from it."}
+              : "Career profiles come with Plus and Pro. Keep everything for a role in one place and build tailored CVs from it."}
           </p>
           <button
             type="button"
@@ -190,7 +190,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
             className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-neutral-950 text-white font-semibold text-sm hover:bg-neutral-800 cursor-pointer"
           >
             {isPro ? <Plus className="w-4 h-4" /> : <Crown className="w-4 h-4 text-accent-light" />}
-            {isPro ? "Create a profile" : "Upgrade to Pro"}
+            {isPro ? "Create a profile" : "Upgrade"}
           </button>
         </div>
       ) : (
@@ -362,7 +362,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
         </div>
       )}
 
-      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Career profiles are part of gomoxie pro." />
+      <CareerProfilesPaywall isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} />
     </div>
   );
 }

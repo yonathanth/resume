@@ -14,7 +14,7 @@ import {
   CloudCheck,
   Compass,
   Download,
-  ExternalLink,
+  Pencil,
   ListChecks,
   Eye,
   FileText,
@@ -30,6 +30,7 @@ import {
   Mic,
   School,
   ShieldCheck,
+  Target,
   Wand,
   Trash2,
   Upload,
@@ -60,32 +61,24 @@ import {
   SkillGroup,
   WorkExperience,
 } from "./types";
-import {
-  ApiError,
-  createCvDocument,
-  previewCvPdf,
-  downloadCvPdf,
-  finalizeCvDocument,
-  updateCvContent,
-  type CvPolishPatch,
-  type CvReviewTip,
-} from "@/lib/api";
+import { ApiError, createCvDocument, downloadCvPdf, cvUnlockFromError, finalizeCvDocument, updateCvContent, type CvPolishPatch, type CvReviewTip, isPaidPlan } from "@/lib/api";
 import { useAnalyzeJobRequirements, usePolishCv, usePolishSummary, useReviewCv } from "@/hooks/use-cv-generation";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { checkTarget, jobRequirementsState, scoreEditorCv, type PolishTarget, type ScoreCheck } from "@/lib/cv-score";
-import { ProUpgradeModal } from "../ProUpgradeModal";
-import { CvScorePanel } from "./CvScorePanel";
+import { ProUpgradeModal, UnlockCvModal } from "../ProUpgradeModal";
+import { CvScorePanel, type CvScorePanelProps, type SectionStatus } from "./CvScorePanel";
 import { useCvPreview } from "@/hooks/use-cv-preview";
 import { useCvTemplates } from "@/hooks/use-cv-templates";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useMe } from "@/hooks/use-auth";
 import { bulletToText, flattenSkillGroups, newLocalId, toCVContentPatch } from "@/lib/cv-mapper";
-import { getMissingDetails, type MissingDetail } from "@/lib/missing-details";
+import { getMissingDetails } from "@/lib/missing-details";
 import { resolvePreviewPath, type EditorTarget } from "@/lib/preview-paths";
 import { getCvFileName } from "@/lib/utils";
-import { MoxieLoader } from "@/components/moxie";
 import { useToast } from "@/components/Toaster";
 import { CvPreviewFrame } from "./CvPreviewFrame";
+import { useRouter } from "next/navigation";
+import { dashboardFlowHref } from "@/lib/flow-url";
 import { TemplateThumbnail } from "./TemplateThumbnail";
 import { ICON_TONES, OptionTone } from "./OptionCard";
 import { QuickTour, type TourStep } from "../QuickTour";
@@ -514,38 +507,6 @@ function SectionIcon({ section }: { section: string }) {
   );
 }
 
-/** The sections with gaps, each a button that opens it. */
-function MissingDetailsList({
-  items,
-  labelFor,
-  onPick,
-}: {
-  items: MissingDetail[];
-  labelFor: (section: string) => string;
-  onPick: (section: string) => void;
-}) {
-  return (
-    <ul className="mt-3 space-y-1">
-      {items.map((m) => (
-        <li key={m.section}>
-          <button
-            type="button"
-            onClick={() => onPick(m.section)}
-            className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left hover:bg-neutral-50 border border-transparent hover:border-neutral-200 transition-colors cursor-pointer"
-          >
-            <SectionIcon section={m.section} />
-            <span className="flex-1 min-w-0">
-              <span className="block text-sm font-semibold text-neutral-900 truncate">{labelFor(m.section)}</span>
-              <span className="block text-xs text-neutral-500 truncate">{m.detail}</span>
-            </span>
-            <ChevronRight className="w-4 h-4 text-neutral-300" />
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function TemplateGalleryCard({
   id,
   name,
@@ -581,7 +542,11 @@ function TemplateGalleryCard({
 
 export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }: CvEditorWorkspaceProps) {
   const toast = useToast();
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const subscriptionStatus = useSubscriptionStatus().data;
+  // AI polish comes with any paid plan (or a grant of just that feature).
+  const isPro = subscriptionStatus?.features?.aiPolish ?? isPaidPlan(subscriptionStatus);
+  // The full score breakdown comes with a paid plan; what's missing is shown to everyone.
+  const isSubscribed = isPaidPlan(subscriptionStatus) || isPro;
   const [cv, setCv] = useState<CvData>(initialData);
 
   // The name, email, phone and occupation given at sign-up fill any of those
@@ -608,7 +573,6 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
   }, [me]);
   const [isSaving, setIsSaving] = useState(false);
   const [showExportChecklist, setShowExportChecklist] = useState(false);
-  const [showMissingList, setShowMissingList] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const polishSummaryMutation = usePolishSummary();
   // Snapshots from the most recent "AI Polish" run, so the user can bounce
@@ -620,9 +584,27 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
   // Tour button runs it any time.
   const [showWalkthrough, setShowWalkthrough] = useState(() => typeof window !== "undefined" && !hasSeenEditorTour());
   const [zoomLevel, setZoomLevel] = useState<number>(100);
-  const [mobilePreviewOpen, setMobilePreviewOpen] = useState<boolean>(false);
+  // On phones a CV that already has content (opened from the list, or just
+  // made by a flow) opens on its preview; a blank one opens on the form.
+  const [mobilePreviewOpen, setMobilePreviewOpen] = useState<boolean>(
+    () =>
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 1023px)").matches &&
+      (initialData.experiences.length > 0 || initialData.education.length > 0 || initialData.summary.trim() !== "")
+  );
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState<boolean>(false);
   const formScrollRef = useRef<HTMLDivElement>(null);
+  // The phone's floating Preview button: out of the way while scrolling down the form.
+  const [previewButtonHidden, setPreviewButtonHidden] = useState(false);
+  const lastFormScrollRef = useRef(0);
+  const handleFormScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const top = e.currentTarget.scrollTop;
+    const delta = top - lastFormScrollRef.current;
+    lastFormScrollRef.current = top;
+    if (top < 48) setPreviewButtonHidden(false);
+    else if (delta > 6) setPreviewButtonHidden(true);
+    else if (delta < -6) setPreviewButtonHidden(false);
+  };
 
   // The switcher offers only the listed templates; the CV's own template is looked up among all of them, so one
   // using a hidden (photo) template still renders as it was made.
@@ -683,19 +665,19 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
         {
           target: "editor-mobile-preview",
           title: "See your CV",
-          body: "Tap Preview CV to see exactly what your PDF will look like. Anything still missing is highlighted there.",
+          body: "Tap Preview CV to see your pages exactly as they'll download, with your score and the download button.",
         },
       ]
     : [
         {
           target: "editor-preview",
           title: "Click the preview to edit",
-          body: "This is exactly what your PDF will look like. Click any line, or any highlighted gap, and its field opens in the form.",
+          body: "This is your PDF, page by page. Click any line and its field opens in the form.",
         },
         {
           target: "editor-gaps",
-          title: "Show gaps or the clean view",
-          body: "Show gaps highlights what's still missing. Switch to PDF view to see the finished page.",
+          title: "PDF view or show gaps",
+          body: "PDF view is the page as it downloads. Show gaps adds placeholders for what's still missing. Click one to fill it in.",
         },
       ];
   const editorTour: TourStep[] = [
@@ -720,7 +702,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
     {
       target: "editor-score",
       title: "Watch your score",
-      body: "Your CV is scored by the same checks as every other CV, and against the job if you add one. Click it to see what's costing points and jump straight to it.",
+      body: "Click your score to see what to add for a better one, and how much each adds. Add a job description to see how well you match it too.",
     },
     {
       target: "editor-download",
@@ -739,12 +721,17 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
   // All of the template's sections, photo included (the photo slot is flagged with the contact details).
   const missingDetails = getMissingDetails(cv, currentTemplate?.sections.map((s) => s.key) ?? templateSectionKeys);
   const sectionsWithGaps = new Set(missingDetails.map((m) => m.section));
+  // The chips in the score panel: each section, done / missing details / not added.
+  const sectionStatuses: SectionStatus[] = visibleSections.map((sec) => {
+    const gap = missingDetails.find((m) => m.section === sec.id);
+    return { key: sec.id, label: sec.label, state: !gap ? "done" : gap.empty ? "empty" : "partial", detail: gap?.detail };
+  });
 
   // The preview is the real template rendered by the backend — the same HTML
   // the PDF download is printed from (plus the missing-detail placeholders).
   const content = useMemo(() => toCVContentPatch(cv), [cv]);
-  // "Show gaps" (clickable placeholders for what's missing) by default; "PDF view" is the clean, as-downloaded page.
-  const [showGaps, setShowGaps] = useState(true);
+  // "PDF view" (the clean, as-downloaded page) by default; "Show gaps" adds clickable placeholders for what's missing.
+  const [showGaps, setShowGaps] = useState(false);
   const preview = useCvPreview(cv.templateStyle, content, showGaps);
 
   useEffect(() => {
@@ -930,7 +917,8 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
 
   // ---- CV score (lib/cv-score) ----
   // The same rules the backend stores the score with, run live on every edit.
-  const cvScore = useMemo(() => scoreEditorCv(cv, content), [cv, content]);
+  // Only the sections this template shows count for half-filled entries. (The React Compiler memoizes this.)
+  const cvScore = scoreEditorCv(cv, content, currentTemplate?.sections.map((s) => s.key) ?? templateSectionKeys);
   const jobState = jobRequirementsState(cv);
   const { isPaywallOpen, openPaywall, closePaywall, isProRequired } = useProGate();
   const analyzeJobMutation = useAnalyzeJobRequirements();
@@ -969,9 +957,10 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
     return () => clearTimeout(timer);
   }, [jobPending, analyzingJob, cv.jobDescription, runJobAnalysis]);
 
+  const focusSignalRef = useRef(0);
   const focusOn = (target: EditorTarget) => {
     setActiveSection(target.section);
-    if (target.field) setFocusTarget({ ...target, signal: Date.now() });
+    if (target.field) setFocusTarget({ ...target, signal: ++focusSignalRef.current });
     else formScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1069,6 +1058,9 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
   ].filter(Boolean) as { label: string; section: EditorSection }[];
   const sectionsMissingForExport = new Set(missingForExport.map((m) => m.section));
 
+  // A CV that must be paid for before it downloads (see UnlockCvModal).
+  const [unlockCv, setUnlockCv] = useState<ReturnType<typeof cvUnlockFromError>>(null);
+
   // Save → finalize (validates it's complete) → render server-side → save file.
   const handleDownload = async () => {
     if (missingForExport.length > 0) {
@@ -1094,6 +1086,12 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       toast.success("Your PDF is ready", { description: `Saved as ${fileName}`, moxie: "downloaded", placement: "top" });
       onDownloaded?.(id);
     } catch (err) {
+      // Made past the free CV: pay for it (or get a plan), then download.
+      const unlock = cvUnlockFromError(err);
+      if (unlock) {
+        setUnlockCv(unlock);
+        return;
+      }
       // One message at a time — retrying replaces it instead of stacking another.
       toast.error("Couldn't create the PDF", {
         id: "pdf-error",
@@ -1102,6 +1100,21 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       });
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  // "Tailor to a job": saves, then opens the Tailor flow on this CV (same template).
+  // Tailoring makes a new CV from it, so this one stays as it is.
+  const router = useRouter();
+  const [openingTailor, setOpeningTailor] = useState(false);
+  const handleTailorToJob = async () => {
+    setOpeningTailor(true);
+    try {
+      const id = await saveNow();
+      router.push(dashboardFlowHref("tailor", { cv: id, template: cv.templateStyle }));
+    } catch {
+      setOpeningTailor(false);
+      toast.error("Couldn't save your changes", { description: "Try again in a moment." });
     }
   };
 
@@ -1129,40 +1142,6 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       onBack();
     }
   };
-
-  // ---- PDF preview: the real file, to check page breaks before downloading ----
-  const [pdfPreview, setPdfPreview] = useState<{ status: "loading" } | { status: "ready"; url: string } | null>(null);
-  const pdfRequestRef = useRef(0);
-  const handlePreviewPdf = async () => {
-    const request = ++pdfRequestRef.current;
-    setPdfPreview({ status: "loading" });
-    try {
-      const blob = await previewCvPdf(cv.templateStyle, content);
-      if (request === pdfRequestRef.current) setPdfPreview({ status: "ready", url: URL.createObjectURL(blob) });
-    } catch (err) {
-      if (request !== pdfRequestRef.current) return;
-      setPdfPreview(null);
-      toast.error("Couldn't create the PDF preview", {
-        description: err instanceof ApiError ? err.message : "Please try again.",
-        action: { label: "Try again", onClick: () => void handlePreviewPdf() },
-      });
-    }
-  };
-  const closePdfPreview = useCallback(() => {
-    pdfRequestRef.current++; // a render still in flight is ignored when it lands
-    setPdfPreview(null);
-  }, []);
-  useEffect(() => {
-    if (pdfPreview?.status !== "ready") return;
-    const { url } = pdfPreview;
-    return () => URL.revokeObjectURL(url);
-  }, [pdfPreview]);
-  useEffect(() => {
-    if (!pdfPreview) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closePdfPreview();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pdfPreview, closePdfPreview]);
 
   const handlePolish = async () => {
     const beforePolish = cv.summary;
@@ -1216,15 +1195,45 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
 
 
 
+  // The same score panel sits in the top bar and on the phone preview.
+  const scorePanelProps: CvScorePanelProps = {
+    score: cvScore,
+    isPro,
+    isSubscribed,
+    sections: sectionStatuses,
+    onOpenSection: (section) => {
+      setMobilePreviewOpen(false);
+      openSection(section);
+    },
+    job: jobState,
+    jobDescription: cv.jobDescription ?? "",
+    onJobDescriptionChange: (jobDescription) => {
+      failedJdRef.current = null;
+      setJobError(null);
+      setCv((prev) => ({ ...prev, jobDescription }));
+    },
+    analyzingJob,
+    jobError,
+    onRetryJob: () => void runJobAnalysis(),
+    onGoTo: (check: ScoreCheck) => {
+      setMobilePreviewOpen(false);
+      focusOn(checkTarget(cv, check));
+    },
+    onPolish: (targets, key) => void handleScorePolish(targets, key),
+    polishingKey,
+    onReview: () => void handleReview(),
+    reviewing: reviewMutation.isPending,
+    tips: reviewTips,
+    onUpgrade: openPaywall,
+  };
+
   const positionKey = shownSection === "research" || shownSection === "teaching" || shownSection === "activities" ? shownSection : null;
 
-  // The preview's view toggle and "N to fill in" list — shown above the
-  // desktop preview and in the small-screen preview modal. `inModal`: picking
-  // a section from the list also closes the modal so the form is visible.
-  const renderPreviewControls = (inModal: boolean) => (
+  // The preview's view toggle, above the desktop preview.
+  const renderPreviewControls = () => (
     <div className="flex flex-wrap items-center gap-2 min-w-0">
       {/* What the preview shows: the CV exactly as it will download, or with its gaps highlighted. */}
-      <div data-tour={inModal ? undefined : "editor-gaps"} className="inline-flex p-1 rounded-lg bg-white border border-neutral-300 shadow-[0_1px_2px_rgba(0,0,0,0.05)]" role="group" aria-label="Preview view">
+      <div data-tour="editor-gaps" className="inline-flex p-1 rounded-lg bg-white border border-neutral-300 shadow-[0_1px_2px_rgba(0,0,0,0.05)]" role="group" aria-label="Preview view">
         {(
           [
             { gaps: false, label: "PDF view", icon: Eye, hint: "Exactly what your downloaded PDF will look like" },
@@ -1257,45 +1266,6 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
         })}
       </div>
 
-      {showGaps && (
-        <div className="relative">
-          {missingDetails.length > 0 ? (
-            <button
-              type="button"
-              onClick={() => setShowMissingList((v) => !v)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-accent-border bg-white text-sm font-semibold text-accent-strong hover:border-accent transition-colors cursor-pointer whitespace-nowrap"
-            >
-              {missingDetails.length} to fill in
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showMissingList ? "rotate-180" : ""}`} />
-            </button>
-          ) : (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-emerald-200 bg-white text-sm font-semibold text-emerald-700 whitespace-nowrap">
-              <CheckCircle2 className="w-4 h-4" />
-              Nothing missing
-            </span>
-          )}
-          {showMissingList && missingDetails.length > 0 && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMissingList(false)} />
-              <div className="absolute left-0 mt-2 z-50 w-80 max-w-[calc(100vw-3rem)] max-h-[60vh] overflow-y-auto rounded-lg border border-neutral-300 bg-white shadow-xl p-4">
-                <div className="text-sm font-semibold text-neutral-950">Missing from your CV</div>
-                <p className="mt-0.5 text-sm text-neutral-500 leading-relaxed">
-                  Highlighted text is a placeholder and won&apos;t print. Click it, or a section below, to fill it in.
-                </p>
-                <MissingDetailsList
-                  items={missingDetails}
-                  labelFor={sectionLabel}
-                  onPick={(section) => {
-                    openSection(section);
-                    setShowMissingList(false);
-                    if (inModal) setMobilePreviewOpen(false);
-                  }}
-                />
-              </div>
-            </>
-          )}
-        </div>
-      )}
     </div>
   );
 
@@ -1339,27 +1309,22 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
         </div>
 
         <div className="flex items-center gap-2">
-          <CvScorePanel
-            score={cvScore}
-            isPro={isPro}
-            job={jobState}
-            jobDescription={cv.jobDescription ?? ""}
-            onJobDescriptionChange={(jobDescription) => {
-              failedJdRef.current = null;
-              setJobError(null);
-              setCv((prev) => ({ ...prev, jobDescription }));
-            }}
-            analyzingJob={analyzingJob}
-            jobError={jobError}
-            onRetryJob={() => void runJobAnalysis()}
-            onGoTo={(check: ScoreCheck) => focusOn(checkTarget(cv, check))}
-            onPolish={(targets, key) => void handleScorePolish(targets, key)}
-            polishingKey={polishingKey}
-            onReview={() => void handleReview()}
-            reviewing={reviewMutation.isPending}
-            tips={reviewTips}
-            onUpgrade={openPaywall}
-          />
+          {/* From lg the score sits on the preview's toolbar instead. */}
+          <div className="lg:hidden">
+            <CvScorePanel {...scorePanelProps} tour={narrowScreen} />
+          </div>
+
+          {/* Tailor this CV to a job: the Tailor flow, starting from this CV. */}
+          <button
+            type="button"
+            onClick={() => void handleTailorToJob()}
+            disabled={openingTailor}
+            className={secondaryButtonClass}
+            title="Make a copy of this CV tailored to a job description"
+          >
+            {openingTailor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4 text-accent-strong" />}
+            <span className="hidden md:inline">Tailor to a job</span>
+          </button>
 
           {/* Below lg the preview column is hidden — this opens it full screen. */}
           <button
@@ -1391,12 +1356,6 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
             <LayoutTemplate className="w-4 h-4 text-neutral-500" />
             <span className="hidden sm:inline">Templates</span>
             <ChevronDown className="w-3.5 h-3.5 text-neutral-400" />
-          </button>
-
-          {/* On phones the preview modal has its own PDF button. */}
-          <button type="button" onClick={handlePreviewPdf} className={`${secondaryButtonClass} max-sm:hidden`} title="Open the real PDF to check page breaks">
-            <FileText className="w-4 h-4 text-neutral-500" />
-            <span className="hidden md:inline">Preview PDF</span>
           </button>
 
           <div className="relative">
@@ -1484,7 +1443,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       {/* ================= MAIN SPLIT WORKSPACE ================= */}
       <div className="flex-1 flex overflow-hidden relative">
         {/* LEFT COLUMN: THE FORM */}
-        <div ref={formScrollRef} data-tour="editor-form" className="w-full lg:w-[48%] h-full overflow-y-auto bg-[#fafafa] border-r border-neutral-200">
+        <div ref={formScrollRef} onScroll={handleFormScroll} data-tour="editor-form" className="w-full lg:w-[48%] h-full overflow-y-auto bg-[#fafafa] border-r border-neutral-200">
 
           <div className="p-6 sm:p-8 space-y-6">
             {/* ---- CONTACT ---- */}
@@ -2214,7 +2173,8 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
         <div data-tour="editor-preview" className="hidden lg:block flex-1 h-full relative">
         <div className="h-full bg-[#ebebed] flex flex-col overflow-y-auto">
           <div className="sticky top-0 z-10 w-full px-6 lg:px-8 py-3 bg-[#ebebed]/90 backdrop-blur flex items-center justify-between gap-3 select-none">
-            {renderPreviewControls(false)}
+            {renderPreviewControls()}
+            <CvScorePanel {...scorePanelProps} tour={!narrowScreen} />
           </div>
           <div className="px-6 lg:px-8 pb-8 flex flex-col items-center">
             <div className="relative w-full max-w-[720px]">
@@ -2265,119 +2225,78 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       </div>
 
       {/* ================= MOBILE PREVIEW ================= */}
-      <div className="lg:hidden fixed bottom-6 left-1/2 -translate-x-1/2 z-40 pointer-events-auto">
+      {/* Hidden while scrolling down the form, back on the way up or at the top. */}
+      <div
+        className={`lg:hidden fixed bottom-10 left-1/2 -translate-x-1/2 z-40 transition-all duration-300 ${
+          previewButtonHidden ? "opacity-0 translate-y-6 pointer-events-none" : "opacity-100 translate-y-0"
+        }`}
+      >
         <button
           type="button"
           data-tour="editor-mobile-preview"
           onClick={() => setMobilePreviewOpen(true)}
-          className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-neutral-950 text-white font-semibold text-sm shadow-2xl shadow-neutral-950/40 hover:bg-neutral-800 transition-all active:scale-95 cursor-pointer border border-neutral-800"
+          className="inline-flex items-center gap-2 pl-4 pr-5 py-2.5 rounded-full bg-neutral-950 hover:bg-neutral-800 text-sm font-semibold text-white shadow-[0_10px_28px_-10px_rgba(0,0,0,0.5)] active:scale-[0.98] transition cursor-pointer"
         >
           <Eye className="w-4 h-4 text-accent-light" />
-          <span>Preview CV</span>
+          Preview CV
         </button>
       </div>
 
+      {/* Full screen on phones: score and Download on top, the pages, Edit at the bottom. */}
       {mobilePreviewOpen && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-neutral-950/70 backdrop-blur-sm flex flex-col p-3 sm:p-6 overflow-hidden">
-          <div className="bg-white rounded-2xl flex-1 flex flex-col overflow-hidden shadow-2xl border border-neutral-200">
-            <div className="px-4 py-3 border-b border-neutral-200 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-neutral-950">Preview</span>
-                <button type="button" onClick={handlePreviewPdf} className={`${secondaryButtonClass} !py-1 !px-2.5`}>
-                  <FileText className="w-4 h-4" />
-                  PDF
-                </button>
-              </div>
-              <button
-                type="button"
-                onClick={() => setMobilePreviewOpen(false)}
-                className="p-1.5 rounded-md text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 cursor-pointer"
-                aria-label="Close preview"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="px-4 py-2.5 border-b border-neutral-200 bg-[#ebebed]/60">
-              {renderPreviewControls(true)}
-            </div>
-            <div className="flex-1 overflow-y-auto bg-neutral-100/70">
-              <CvPreviewFrame
-                html={preview.html}
-                onPick={(path) => {
-                  setMobilePreviewOpen(false);
-                  handlePick(path);
-                }}
-              />
-            </div>
-            <div className="p-4 border-t border-neutral-200 flex items-center justify-between gap-3 bg-white">
-              <button type="button" onClick={() => setMobilePreviewOpen(false)} className={`${secondaryButtonClass} flex-1`}>
-                Back to editing
-              </button>
-              <button
-                type="button"
-                disabled={isDownloading}
-                onClick={() => {
-                  if (missingForExport.length > 0) setMobilePreviewOpen(false);
-                  handleDownload();
-                }}
-                className={`${ACCENT_BUTTON} flex-1`}
-              >
-                {isDownloading ? "Preparing…" : "Download PDF"}
-              </button>
-            </div>
+        <div className="lg:hidden fixed inset-0 z-50 bg-[#ebebed] flex flex-col" role="dialog" aria-modal="true" aria-label="Your CV">
+          <div className="shrink-0 h-12 pl-1.5 pr-4 bg-white border-b border-neutral-200 flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleDone}
+              disabled={isSaving}
+              className="p-2 rounded-lg text-neutral-500 hover:text-neutral-950 hover:bg-neutral-50 transition-colors cursor-pointer disabled:opacity-50"
+              aria-label="Back to the dashboard"
+            >
+              {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowLeft className="w-4 h-4" />}
+            </button>
+            <span className="min-w-0 truncate text-sm font-semibold text-neutral-950">{cv.title || "Untitled resume"}</span>
           </div>
-        </div>
-      )}
-
-      {/* ================= PDF PREVIEW ================= */}
-      {/* While it's being made, Moxie stamps it on her own over the screen; the preview opens once it's ready. */}
-      {pdfPreview?.status === "loading" && (
-        <MoxieLoader
-          animation="stamp"
-          crowned={isPro}
-          messages={["Creating your PDF…", "Laying out your pages…", "Setting the type…", "Getting it print-ready…"]}
-        />
-      )}
-      {pdfPreview?.status === "ready" && (
-        <div className="fixed inset-0 z-50 bg-neutral-950/60 backdrop-blur-sm flex p-3 sm:p-8" role="dialog" aria-modal="true" aria-label="PDF preview">
-          <div className="bg-white rounded-lg w-full max-w-5xl mx-auto flex flex-col overflow-hidden shadow-2xl border border-neutral-300">
-            <div className="px-4 sm:px-6 py-4 border-b border-neutral-200 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <span className={`w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-gradient-to-b border ${ICON_TONES.accent}`}>
-                  <FileText className="w-4 h-4" />
-                </span>
-                <h2 className="text-base font-bold text-neutral-950 tracking-tight truncate">PDF preview</h2>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <a href={pdfPreview.url} target="_blank" rel="noreferrer" className={secondaryButtonClass} title="Open in a new tab">
-                  <ExternalLink className="w-4 h-4" />
-                  <span className="hidden sm:inline">Open</span>
-                </a>
-                <button
-                  type="button"
-                  disabled={isDownloading}
-                  onClick={() => {
-                    if (missingForExport.length > 0) closePdfPreview();
-                    handleDownload();
-                  }}
-                  className={ACCENT_BUTTON}
-                >
-                  {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  <span className="hidden sm:inline">Download PDF</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={closePdfPreview}
-                  className="p-2 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
-                  aria-label="Close PDF preview"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+          <div className="shrink-0 p-3 bg-white border-b border-neutral-200 grid grid-cols-2 gap-2">
+            <CvScorePanel {...scorePanelProps} labelOnPhones fill tour={false} phoneDropdownTop="top-[8rem]" />
+            <button
+              type="button"
+              disabled={isDownloading}
+              onClick={() => {
+                if (missingForExport.length > 0) setMobilePreviewOpen(false);
+                handleDownload();
+              }}
+              className={`${ACCENT_BUTTON} h-full`}
+            >
+              {isDownloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {isDownloading ? "Preparing…" : "Download"}
+            </button>
+          </div>
+          <div className="relative flex-1 overflow-y-auto">
+            <div
+              className={`absolute top-0 inset-x-0 h-0.5 overflow-hidden z-10 transition-opacity ${preview.isRendering ? "opacity-100" : "opacity-0"}`}
+              aria-hidden
+            >
+              <div className="progress-slide h-full w-1/3 rounded-full bg-accent" />
             </div>
-            <div className="flex-1 min-h-0 bg-neutral-100">
-              <iframe src={pdfPreview.url} title="PDF preview" className="w-full h-full border-0" />
-            </div>
+            <CvPreviewFrame
+              html={preview.html}
+              title="Your CV"
+              onPick={(path) => {
+                setMobilePreviewOpen(false);
+                handlePick(path);
+              }}
+            />
+          </div>
+          <div className="shrink-0 p-3 bg-white border-t border-neutral-200">
+            <button
+              type="button"
+              onClick={() => setMobilePreviewOpen(false)}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-neutral-950 hover:bg-neutral-800 text-white text-sm font-semibold transition-colors cursor-pointer"
+            >
+              <Pencil className="w-4 h-4" />
+              Edit
+            </button>
           </div>
         </div>
       )}
@@ -2429,8 +2348,10 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
       <ProUpgradeModal
         isOpen={isPaywallOpen}
         onClose={closePaywall}
-        reason="AI polish rewrites your summary, bullets and skills to fix what's costing points. It's part of FitCV Pro."
+        title="Your full score comes with Plus and Pro"
+        reason="See every check behind your score, and let AI polish rewrite your summary, bullets and skills to fix what's costing points."
       />
+      <UnlockCvModal unlock={unlockCv} onClose={() => setUnlockCv(null)} />
 
       {/* Spotlight tour over the real editor — shown before editing a CV that opened incomplete. */}
       {showWalkthrough && (

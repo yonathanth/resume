@@ -1,6 +1,7 @@
 import type { CvData } from "@/components/dashboard/create-flow/types";
 import type { CVContentDTO } from "@/lib/api";
 import type { EditorTarget } from "@/lib/preview-paths";
+import { entryIdAt } from "@/lib/missing-details";
 import { scoreCv, type CvScore, type ScoreCheck, type ScoreInput, type ScoreJobRequirements } from "./engine";
 
 export * from "./engine";
@@ -28,10 +29,10 @@ export function jobRequirementsState(cv: Pick<CvData, "jobDescription" | "jobReq
   return stored.data ? { status: "ready", data: stored.data } : { status: "invalid" };
 }
 
-/** Scores the editor's CV exactly as the backend will score it once saved. */
-export function scoreEditorCv(cv: CvData, content: CVContentDTO): CvScore {
+/** Scores the editor's CV exactly as the backend will score it once saved (with its template's sections). */
+export function scoreEditorCv(cv: CvData, content: CVContentDTO, sections: string[]): CvScore {
   const job = jobRequirementsState(cv);
-  return scoreCv(content as ScoreInput, job.status === "ready" ? job.data : null);
+  return scoreCv(content as ScoreInput, job.status === "ready" ? job.data : null, { sections });
 }
 
 /** Where "Go to" takes the user for a check: the section, and the entry/field to focus when there is one. */
@@ -53,8 +54,11 @@ export function checkTarget(cv: CvData, check: ScoreCheck): EditorTarget {
       const group = cv.skillGroups[0];
       return { section: "skills", entryId: group?.id, field: group ? "items" : undefined };
     }
-    default:
-      return { section: check.section };
+    default: {
+      // Optional sections (projects, languages…): the half-filled entry.
+      const entryId = check.index !== undefined ? entryIdAt(cv, check.section, check.index) : undefined;
+      return entryId ? { section: check.section, entryId } : { section: check.section };
+    }
   }
 }
 

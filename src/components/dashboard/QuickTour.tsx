@@ -37,7 +37,7 @@ const DASHBOARD_STEPS: TourStep[] = [
   {
     target: "past-projects",
     title: "Past Projects",
-    body: "Every resume you've made. Open one to edit it, duplicate it for a new application, or download the PDF.",
+    body: "Every resume you've made. Open one to edit it, tailor it to a new job, or download the PDF.",
   },
   {
     target: "templates",

@@ -309,18 +309,18 @@ function CrabOval({ size, className }: MarkProps) {
 }
 
 export const MOXIE_LOGOS: { name: string; note: string; Mark: React.ComponentType<MarkProps>; mono?: boolean; round: 1 | 2 | 3 }[] = [
-  { name: "Peepers", note: "Her body and eyes on stalks — the closest to her, simplified.", Mark: Peepers, round: 1 },
+  { name: "Peepers", note: "Her body and eyes on stalks, the closest to her, simplified.", Mark: Peepers, round: 1 },
   { name: "Tile", note: "App-icon square, just her face. Strongest as a favicon.", Mark: Tile, round: 1 },
   { name: "Peekaboo", note: "Round face, eyes perched on top. Friendly, holds up small.", Mark: Peekaboo, round: 1 },
-  { name: "Page pal", note: "Peeking over a resume she's holding — says what we do.", Mark: PagePal, round: 1 },
+  { name: "Page pal", note: "Peeking over a resume she's holding. Says what we do.", Mark: PagePal, round: 1 },
   { name: "Mono", note: "Peepers in one colour, for print and dark or busy backgrounds.", Mark: Mono, mono: true, round: 1 },
-  { name: "Stalks", note: "Only her eyes on stalks — the barest, most graphic mark.", Mark: Stalks, round: 1 },
-  { name: "Check", note: "Her stalks bend into a tick — job-ready, passes the scan.", Mark: Check, round: 2 },
+  { name: "Stalks", note: "Only her eyes on stalks, the barest, most graphic mark.", Mark: Stalks, round: 1 },
+  { name: "Check", note: "Her stalks bend into a tick: job-ready, passes the scan.", Mark: Check, round: 2 },
   { name: "R", note: "A lowercase r for GoMoxie, its shoulder reaching into her eye.", Mark: LetterR, round: 2 },
   { name: "Peek page", note: "A resume tile with her eyes resting on top. Tile-simple, says resume.", Mark: PeekPage, round: 2 },
-  { name: "Shell", note: "A hermit crab whose shell is a resume — the page is her home.", Mark: Shell, round: 2 },
-  { name: "Nib", note: "A pen nib with her eyes on top — she writes it for you.", Mark: Nib, round: 2 },
-  { name: "Case", note: "A briefcase with her eyes peeking over — off to the job.", Mark: Case, round: 2 },
-  { name: "Crab", note: "Peepers with her pincers raised — still minimal, now clearly a crab.", Mark: Crab, round: 3 },
+  { name: "Shell", note: "A hermit crab whose shell is a resume. The page is her home.", Mark: Shell, round: 2 },
+  { name: "Nib", note: "A pen nib with her eyes on top. She writes it for you.", Mark: Nib, round: 2 },
+  { name: "Case", note: "A briefcase with her eyes peeking over, off to the job.", Mark: Case, round: 2 },
+  { name: "Crab", note: "Peepers with her pincers raised. Still minimal, now clearly a crab.", Mark: Crab, round: 3 },
   { name: "Crab oval", note: "Her real oval body, pincers up and three little legs.", Mark: CrabOval, round: 3 },
 ];

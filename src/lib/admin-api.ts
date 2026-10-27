@@ -259,6 +259,8 @@ export interface UserListItem {
   lastLoginAt: string | null;
   signInMethods: ("password" | "google")[];
   isPro: boolean;
+  /** "free" | "plus" | "pro" — optional only for an older backend. */
+  tier?: PlanTier;
   proSource: "subscription" | "grant" | null;
   subscriptionProvider: string | null;
   subscriptionStatus: string | null;
@@ -281,7 +283,7 @@ export interface UserListQuery extends Query {
 
 export const listUsers = (query: UserListQuery) => get<Paged<UserListItem>>("/users", query);
 
-export type EntitlementKind = "PRO_ACCESS" | "FEATURE" | "LIMIT_ADJUSTMENT" | "EXEMPTION";
+export type EntitlementKind = "PRO_ACCESS" | "PLUS_ACCESS" | "LIFETIME_PLUS" | "FEATURE" | "LIMIT_ADJUSTMENT" | "EXEMPTION";
 export type FeatureKey = "careerProfiles" | "polishSummary" | "cvImport" | "aiPolish";
 export type GrantableFeature = FeatureKey | "beta";
 export type ExemptionKey = "aiRateLimit" | "generationQuota";
@@ -314,9 +316,25 @@ export interface FlowLimit {
   limit: number | null;
   used: number;
   remaining: number | null;
+  /** Pro's fair-use cap: enforced, never shown to the user. */
+  hidden?: boolean;
 }
 
+export type PlanTier = "free" | "plus" | "pro";
+
 export interface AccessSnapshot {
+  tier?: PlanTier;
+  isPaid?: boolean;
+  plan?: {
+    tier: PlanTier;
+    period: "weekly" | "monthly" | "quarterly" | "lifetime" | null;
+    source: "subscription" | "grant" | "lifetime" | null;
+    legacy: boolean;
+    periodEndsAt: string | null;
+  };
+  hasLifetime?: boolean;
+  /** The free pool (any flow). */
+  free?: FlowLimit;
   isPro: boolean;
   proSource: "subscription" | "grant" | null;
   billingPro: boolean;
@@ -326,7 +344,8 @@ export interface AccessSnapshot {
   exemptions: Record<ExemptionKey, boolean>;
   limits: Record<FlowKey, FlowLimit>;
   activeGrantIds: string[];
-  planDefaults: Record<FlowKey, number>;
+  /** The plans setting (free CVs, Plus limits, Pro fair-use caps). */
+  planDefaults: PlansSettings;
 }
 
 export interface ChapaPaymentRow {
@@ -412,6 +431,8 @@ export const deleteUser = (id: string, confirmEmail: string, reason: string) => 
 
 export type GrantInput = { reason: string; note?: string; durationDays?: number; expiresAt?: string } & (
   | { kind: "PRO_ACCESS" }
+  | { kind: "PLUS_ACCESS" }
+  | { kind: "LIFETIME_PLUS" }
   | { kind: "FEATURE"; feature: GrantableFeature }
   | { kind: "LIMIT_ADJUSTMENT"; flow: FlowKey; amount: number }
   | { kind: "EXEMPTION"; feature: ExemptionKey }
@@ -458,6 +479,8 @@ export interface BillingSummary {
 export const getBillingSummary = () => get<BillingSummary>("/billing/summary");
 
 export interface SubscriptionRow {
+  /** "Pro · Monthly" etc.; null when the product isn't recognized. */
+  planName?: string | null;
   id: string;
   email: string;
   fullName: string | null;
@@ -566,8 +589,17 @@ export const resumeUserSubscription = (userId: string, reason: string) =>
 
 export type FeatureAccessLevel = "all" | "pro" | "beta" | "off";
 
+/** Plan numbers (prices live in Polar). See the backend's settings.service.ts "plans". */
+export interface PlansSettings {
+  free: { generations: number; unpaidCvCap: number };
+  plus: Record<"weekly" | "monthly" | "quarterly" | "lifetime", Record<FlowKey, number>>;
+  proFairUse: Record<"weekly" | "monthly" | "quarterly", Record<FlowKey, number>>;
+  lifetimeOffer: { enabled: boolean; display: "seats" | "countdown"; seatLimit: number | null; endsAt: string | null };
+}
+
 export interface SettingsValues {
-  limits: { freeUsesPerFlow: Record<FlowKey, number>; aiRequestsPerMinute: number; aiRequestsPerDay: number };
+  limits: { aiRequestsPerMinute: number; aiRequestsPerDay: number };
+  plans: PlansSettings;
   features: Record<FeatureKey, FeatureAccessLevel>;
   platform: { registrationEnabled: boolean; aiGenerationPaused: boolean; banner: { enabled: boolean; message: string; tone: "info" | "warning" } };
   aiPricing: { models: { model: string; inputPerMillionUsd: number; outputPerMillionUsd: number }[] };

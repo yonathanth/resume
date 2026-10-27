@@ -69,7 +69,7 @@ export function Footer() {
             </Link>
             <p className="mt-5 flex items-start gap-2.5 text-sm sm:text-base text-neutral-400 leading-relaxed">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-              Craft resumes that land interviews — tailored to every job, ready in minutes.
+              Craft resumes that land interviews, tailored to every job, ready in minutes.
             </p>
           </div>
 

@@ -82,7 +82,7 @@ export function ProfilePicker({
             <span className="min-w-0 flex-1">
               <span className={`block truncate text-sm font-semibold ${usable ? "text-neutral-900" : "text-neutral-400"}`}>{profile.title}</span>
               <span className="block truncate text-xs text-neutral-500">
-                {usable ? facts : "Empty — add your experience on the Career Profiles page first"}
+                {usable ? facts : "Empty. Add your experience on the Career Profiles page first"}
               </span>
             </span>
             {loadingId === profile.id ? (

@@ -1,7 +1,8 @@
 "use client";
 
+import { isPaidPlan, type GenerateCvMismatch } from "@/lib/api";
 import React, { useCallback, useEffect, useState } from "react";
-import { ArrowRight, Loader2, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Compass, Loader2, X } from "lucide-react";
 import { MoxieLoader, type MoxieLoaderProps } from "@/components/moxie";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { TemplatePicker } from "./TemplatePicker";
@@ -59,7 +60,7 @@ export function AiWaitLoader({
   /** The work finished — Moxie's ta-da (see useAiDone). */
   done?: boolean;
 }) {
-  const crowned = useSubscriptionStatus().data?.isPro ?? false;
+  const crowned = isPaidPlan(useSubscriptionStatus().data);
   const config = AI_WAITS[wait];
   const messages =
     wait === "read-file" && fileName ? [`Reading ${fileName}…`, ...config.messages.slice(1)] : config.messages;
@@ -302,4 +303,143 @@ export function JobGaps({ gaps, afterReview = false }: { gaps: string[]; afterRe
       </ul>
     </div>
   );
+}
+
+export interface MismatchOption {
+  label: string;
+  onClick: () => void;
+}
+
+/**
+ * When the AI won't tailor a CV to a job because the job is in another field
+ * (it never invents experience), the same dialog in every flow: what happened,
+ * in plain words, what the job asks for, and what the user can do next.
+ * `options[0]` is the main choice.
+ */
+export function JobMismatchDialog({
+  mismatch,
+  options,
+  onClose,
+}: {
+  mismatch: GenerateCvMismatch | null;
+  options: MismatchOption[];
+  onClose: () => void;
+}) {
+  const [showWhy, setShowWhy] = useState(false);
+  if (!mismatch) return null;
+  const shownMissing = mismatch.missing.slice(0, 3);
+  const moreMissing = mismatch.missing.slice(3, 10);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-neutral-950/40" onClick={onClose}>
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="job-mismatch-title"
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-6 sm:p-7 shadow-2xl animate-in fade-in zoom-in-95"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1.5 rounded-full text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+        <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700">
+          <Compass className="h-5 w-5" />
+        </span>
+        <h2 id="job-mismatch-title" className="mt-4 text-lg font-bold tracking-tight text-neutral-950">
+          This job is in a different field
+        </h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-neutral-600">
+          Your experience doesn&apos;t overlap with what this job asks for, and we only write what&apos;s true about you,
+          so we can&apos;t tailor your CV to it.
+        </p>
+        {shownMissing.length > 0 && (
+          <div className="mt-4">
+            <div className="text-xs font-semibold text-neutral-500">The job asks for</div>
+            <ul className="mt-1.5 space-y-1">
+              {shownMissing.map((item) => (
+                <li key={item} className="flex items-start gap-2 text-sm text-neutral-700">
+                  <span className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-300" />
+                  <span className="line-clamp-2">{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(mismatch.reason || moreMissing.length > 0) && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowWhy((v) => !v)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-500 hover:text-neutral-900 cursor-pointer"
+              aria-expanded={showWhy}
+            >
+              {showWhy ? "Hide details" : moreMissing.length ? `Why, and ${moreMissing.length} more` : "Why?"}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${showWhy ? "rotate-180" : ""}`} />
+            </button>
+            {showWhy && (
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-lg bg-neutral-50 border border-neutral-200 p-3 space-y-2">
+                {mismatch.reason && <p className="text-xs leading-relaxed text-neutral-600">{mismatch.reason}</p>}
+                {moreMissing.length > 0 && (
+                  <ul className="space-y-1">
+                    {moreMissing.map((item) => (
+                      <li key={item} className="flex items-start gap-2 text-xs text-neutral-600">
+                        <span className="mt-[6px] h-1 w-1 shrink-0 rounded-full bg-neutral-400" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        <div className="mt-5 flex flex-col gap-2">
+          {options.map((option, i) => (
+            <button
+              key={option.label}
+              type="button"
+              onClick={option.onClick}
+              className={
+                i === 0
+                  ? "w-full py-3 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
+                  : "w-full py-3 rounded-lg border border-neutral-200 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 transition-colors cursor-pointer"
+              }
+            >
+              {option.label}
+            </button>
+          ))}
+          {options.length === 0 && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 rounded-lg bg-neutral-950 text-white text-sm font-semibold hover:bg-neutral-800 transition-colors cursor-pointer"
+            >
+              OK
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** What a finished flow says about job gaps, in its notice instead of an extra step. */
+export function gapsNotice(gaps: string[]): string | undefined {
+  if (gaps.length === 0) return undefined;
+  const shown = gaps.slice(0, 3).join("; ");
+  const more = gaps.length > 3 ? ` and ${gaps.length - 3} more` : "";
+  return `Not on your CV yet: ${shown}${more}. Add any you have in the editor.`;
+}
+
+/** Runs `run` once, when it's rendered — for a step that has nothing left to show (e.g. a flow restored at its end). */
+export function RunOnMount({ run }: { run: () => void }) {
+  useEffect(() => {
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on mount
+  }, []);
+  return null;
 }

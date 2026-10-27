@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { CenteredSpinner } from "@/components/CenteredSpinner";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAllDrafts, CV_DRAFTS_QUERY_KEY } from "@/hooks/use-cv-drafts";
 import {
@@ -46,9 +47,11 @@ interface DashboardContextValue {
   updateDraftFromSavedCv: (savedCv: CvData) => void;
   handleUseTemplate: (templateId: TemplateId) => void;
   handleCreateCvFromProfile: (profileId: string) => void;
+  /** Opens the Tailor flow on a saved CV, keeping its template. */
+  handleTailorDraft: (draft: ResumeDraft) => void;
   handleNewResume: () => void;
   /** Opens a flow on the Builder — in its URL, so a refresh reopens it and Back closes it (see flow-url). */
-  openFlow: (flow: FlowKind, options?: { template?: string; profile?: string }) => void;
+  openFlow: (flow: FlowKind, options?: { template?: string; profile?: string; cv?: string }) => void;
   /** Closes the open flow (✕): back to the plain dashboard URL. */
   closeFlow: (session: string, from?: string) => void;
   /** A flow finished: its CV opens on its own editor page, in place of the flow's URL. */
@@ -78,6 +81,12 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   }, [allDrafts]);
 
   const [activeEditingCv, setActiveEditingCv] = useState<CvData | null>(null);
+  // A finished flow is opening its CV in the editor (see openFinishedCv): the
+  // address it started from. The cover shows only while the page is still
+  // there, so it lifts by itself once the editor's address takes over.
+  const [openingFrom, setOpeningFrom] = useState<string | null>(null);
+  const currentAddress = typeof window === "undefined" ? "" : `${pathname}${window.location.search}`;
+  const openingCv = openingFrom !== null && openingFrom === currentAddress;
 
 
   // Opens a draft in its own dedicated editor page (a real route, not an
@@ -125,7 +134,8 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const handleDuplicateDraft = async (draft: ResumeDraft) => {
     try {
       const original = await getCvDocument(draft.id);
-      const newDoc = await createCvDocument(original.profileId ?? undefined, original.templateId);
+      // sourceCvId: a copy of a CV still to be paid for stays locked.
+      const newDoc = await createCvDocument(original.profileId ?? undefined, original.templateId, original.id);
       const copyTitle = `${draft.title} (Copy)`;
       await updateCvContent(newDoc.id, { content: original.content, title: copyTitle });
       const duplicated: ResumeDraft = {
@@ -167,7 +177,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
 
   // Every flow opens through its URL (see flow-url): from any dashboard page,
   // it lands on the Builder with the flow open on top.
-  const openFlow = (flow: FlowKind, options: { template?: string; profile?: string } = {}) => {
+  const openFlow = (flow: FlowKind, options: { template?: string; profile?: string; cv?: string } = {}) => {
     router.push(dashboardFlowHref(flow, { ...options, from: pathname }), { scroll: false });
   };
 
@@ -181,6 +191,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   };
 
   const openFinishedCv = async (cv: CvData, session: string, flow: FlowKind) => {
+    // Cover the page while the CV is saved and the editor opens, so the
+    // dashboard never flashes between the flow and the editor.
+    setOpeningFrom(`${window.location.pathname}${window.location.search}`);
     markFlowClosed(session);
     try {
       const id = await ensureSavedCv(cv);
@@ -195,12 +208,14 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       clearTryHandoff();
       router.replace("/dashboard", { scroll: false });
       setActiveEditingCv(cv);
+      setOpeningFrom(null);
     }
   };
 
   const handleUseTemplate = (templateId: TemplateId) => openFlow("create", { template: templateId });
   const handleCreateCvFromProfile = (profileId: string) => openFlow("create", { profile: profileId });
   const handleNewResume = () => openFlow("create");
+  const handleTailorDraft = (draft: ResumeDraft) => openFlow("tailor", { cv: draft.id, template: draft.templateId });
 
   const goToPastProjects = () => router.push("/dashboard/past-projects");
   const goToTemplates = () => router.push("/dashboard/templates");
@@ -222,6 +237,7 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
         updateDraftFromSavedCv,
         handleUseTemplate,
         handleCreateCvFromProfile,
+        handleTailorDraft,
         handleNewResume,
         openFlow,
         closeFlow,
@@ -231,6 +247,11 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+      {openingCv && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-[#fbfbfb] animate-in fade-in duration-300">
+          <CenteredSpinner caption="Opening your CV…" />
+        </div>
+      )}
     </DashboardContext.Provider>
   );
 }

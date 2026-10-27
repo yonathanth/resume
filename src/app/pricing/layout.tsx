@@ -5,7 +5,7 @@ import { pageMetadata } from "@/lib/metadata";
 export const metadata: Metadata = pageMetadata({
   title: "Pricing",
   description:
-    "Start free with one use of every tool — create, tailor and improve. Go Pro for unlimited AI resumes from $4.99 a week. Cancel anytime.",
+    "Your first AI CV is free. Plus from $3.99 a week, Pro with unlimited AI resumes from $6.99 a week, or pay per CV. Cancel anytime.",
   path: "/pricing",
 });
 

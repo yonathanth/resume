@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ArrowUpRight, Info, Lock, Plus, RefreshCw, Terminal, Trash2 } from "lucide-react";
 import { getHealth, getSettings, updateSetting, type Health, type SettingKey, type SettingsResponse, type SettingsValues } from "@/lib/admin-api";
 import { changePassword } from "@/lib/api";
-import { errorText, formatDateTime, formatNumber } from "@/lib/admin-format";
+import { errorText, formatDateTime, formatNumber, SHOW_CHAPA } from "@/lib/admin-format";
 import { useAdmin, useCan } from "@/components/admin/AdminShell";
 import { useToast } from "@/components/Toaster";
 import {
@@ -210,7 +210,7 @@ function PlatformCard({ data, canWrite }: { data: SettingsResponse; canWrite: bo
         />
         <ToggleRow
           label="Pause AI generation"
-          description="When on, every AI endpoint answers 503 (temporarily unavailable) and nothing is charged against anyone's free uses or limits."
+          description="When on, every AI endpoint answers 503 (temporarily unavailable) and nothing is charged against anyone's free CV or plan limits."
           checked={value.aiGenerationPaused}
           onChange={(v) => update((p) => ({ ...p, aiGenerationPaused: v }))}
           disabled={!canWrite}
@@ -692,9 +692,11 @@ function HealthBody({ h }: { h: Health }) {
           {h.polar.organization && <p>Organization: {h.polar.organization}</p>}
           {h.polar.latencyMs !== null && <p>API latency {formatNumber(h.polar.latencyMs)} ms</p>}
         </HealthItem>
-        <HealthItem label="Chapa" tone={h.chapa.configured ? "good" : "warn"} status={h.chapa.configured ? "Configured" : "Not configured"}>
-          <p>API version: {h.chapa.apiVersion}</p>
-        </HealthItem>
+        {SHOW_CHAPA && (
+          <HealthItem label="Chapa" tone={h.chapa.configured ? "good" : "warn"} status={h.chapa.configured ? "Configured" : "Not configured"}>
+            <p>API version: {h.chapa.apiVersion}</p>
+          </HealthItem>
+        )}
         <HealthItem
           label="Google sign-in"
           tone={h.google.signInConfigured && h.google.redirectConfigured ? "good" : h.google.signInConfigured ? "warn" : "neutral"}

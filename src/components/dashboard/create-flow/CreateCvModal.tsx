@@ -1,13 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  Upload,
-  PenLine,
   PenTool,
   ArrowRight,
   X,
-  FileCheck,
   User,
   Lightbulb,
   Check,
@@ -19,17 +16,17 @@ import {
   TemplateId,
   DEFAULT_TEMPLATE_ID,
 } from "./types";
-import { AiWaitLoader, FlowStepWithLoader, TemplateStep, JobGaps, useAiDone, type AiWait } from "./FlowUI";
+import { AiWaitLoader, FlowStepWithLoader, JobMismatchDialog, RunOnMount, TemplateStep, gapsNotice, useAiDone, type AiWait } from "./FlowUI";
 import { OptionCard, SOFT_TONES } from "./OptionCard";
 import {
   useAnalyzeFreestyle,
-  useAnalyzeUpload,
   useAnalyzeExisting,
   useRefineCv,
   splitClarificationAnswers,
 } from "@/hooks/use-cv-generation";
 import { applyCvContent, createBlankCv } from "@/lib/cv-mapper";
-import { ApiError, ClarificationQuestion, CVContentDTO, canUseCareerProfiles } from "@/lib/api";
+import { ApiError, ClarificationQuestion, CVContentDTO, canUseCareerProfiles, type GenerateCvMismatch } from "@/lib/api";
+import { useToast } from "@/components/Toaster";
 import {
   ClarifyingQuestionsForm,
   getQuestionFormState,
@@ -43,9 +40,10 @@ import { useAccountGate } from "@/components/account-gate/AccountGate";
 import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
 import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
 import { ProfileSyncStep } from "./ProfileSyncStep";
-import { ProfilePicker } from "./ProfilePicker";
+import { ProfilePicker, isProfileUsable } from "./ProfilePicker";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
-import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
+import { CareerProfilesPaywall, ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
+import { useBackgroundProfileSync } from "@/hooks/use-background-profile-sync";
 
 interface CreateCvModalProps {
   isOpen: boolean;
@@ -61,13 +59,8 @@ type Step =
   | "select-method"
   | "select-career-profile"
   | "profile-extras"
-  | "scratch-choice"
   | "scratch-freestyle"
   | "scratch-missing"
-  | "upload-cv"
-  | "upload-analyzing"
-  | "upload-instructions"
-  | "upload-missing"
   | "job-ask"
   | "job-target"
   | "save-profile-prompt";
@@ -86,17 +79,22 @@ const FREESTYLE_GUIDE = [
   { title: "Anything else relevant", hint: "Projects, volunteering, awards" },
 ];
 
-type TemplateNext = { kind: "freestyle" } | { kind: "upload"; file: File } | { kind: "profile" };
+type TemplateNext = { kind: "freestyle" } | { kind: "profile" };
+
+// "Insert sample story" fills the story box: a shortcut for testing, so only in development.
+const SHOW_SAMPLE_STORY = process.env.NODE_ENV === "development";
+const SAMPLE_STORY =
+  "Senior Cloud Architect with 7 years leading AWS & Kubernetes platforms at Stripe and Vercel. Cut cloud spend by $320K, managed 12M daily requests with Go & Terraform, UC Berkeley CS graduate.";
 
 /**
  * What's kept across a refresh: everything typed and chosen, and the AI's
- * results so far (not a picked file) — and how the flow was opened, so the
+ * results so far — and how the flow was opened, so the
  * dashboard reopens it the same way (from a template, a profile, or plain).
  */
 export interface CreateDraft {
   openedWith: { template?: TemplateId; profileId?: string };
   step: Step;
-  templateNext: Exclude<TemplateNext, { kind: "upload" }> | null;
+  templateNext: TemplateNext | null;
   templateBackStep: Step;
   selectedProfileId: string;
   fromProfile: boolean;
@@ -109,7 +107,6 @@ export interface CreateDraft {
   optionalJd: string;
   jobBackStep: Step;
   flowExtraDetails: string;
-  uploadedFileName: string | null;
   cvDocumentId: string | null;
   latestContent: CVContentDTO | undefined;
   analyzedSourceText: string;
@@ -119,26 +116,20 @@ export interface CreateDraft {
   jobGaps: string[];
 }
 
-/** The steps in the URL, which need data to show, and which only last while the AI works. */
-const CREATE_STEPS: FlowStepConfig<Step, CreateDraft> = {
-  first: "select-method",
+/** The steps in the URL, and which need data to show. `first` is the story for a guest (no career profiles to offer). */
+const createSteps = (first: Step): FlowStepConfig<Step, CreateDraft> => ({
+  first,
   slugs: {
     "select-method": "start",
     "select-career-profile": "profiles",
     "profile-extras": "profile-details",
-    "scratch-choice": "write",
     "scratch-freestyle": "about-you",
-    "upload-cv": "upload",
-    "upload-analyzing": "reading",
     "select-template-first": "template",
     "scratch-missing": "details",
-    "upload-instructions": "upload-notes",
-    "upload-missing": "upload-details",
     "job-ask": "job",
     "job-target": "job-post",
     "save-profile-prompt": "finish",
   },
-  transient: { "upload-analyzing": "upload-cv" },
   available: (step, d) => {
     switch (step) {
       case "select-template-first":
@@ -150,19 +141,16 @@ const CREATE_STEPS: FlowStepConfig<Step, CreateDraft> = {
         // Asked before a profile's CV is generated, or after the AI wrote one.
         return Boolean(d?.cvDocumentId || d?.selectedProfileId);
       case "scratch-missing":
-      case "upload-instructions":
-      case "upload-missing":
       case "save-profile-prompt":
         return Boolean(d?.cvDocumentId);
       default:
         return true;
     }
   },
-};
+});
 
-/** Where a restored flow reopens: a step mid-AI-wait goes back to the one it started from (a picked file isn't kept). */
+/** Where a restored flow reopens. */
 function resumeStep(draft: CreateDraft): Step {
-  if (draft.step === "upload-analyzing") return "upload-cv";
   if (draft.step === "select-template-first" && !draft.templateNext) return draft.templateBackStep;
   return draft.step;
 }
@@ -176,12 +164,15 @@ export function CreateCvModal({
 }: CreateCvModalProps) {
   // Progress kept across a refresh (or a trip to checkout): see useSaveFlowDraft below.
   const saved = useRestoredFlowDraft<CreateDraft>("create");
+  // Signed out (the /try pages): no career profiles, so the story is the first step (and an account before the AI).
+  const { isGuest, requireAccount } = useAccountGate();
+  const firstStep: Step = isGuest ? "scratch-freestyle" : "select-method";
   // Opened from a career profile: straight to choosing the template for it. (Each
   // opening mounts afresh, so this is just where it starts — unless it's restoring.)
   const fromProfileStart = !saved && initialProfileId ? initialProfileId : null;
   // The step lives in the URL, so Back / Forward move between steps (see flow-steps).
   const [step, setStep, trackStepData] = useFlowStep<Step, CreateDraft>(
-    CREATE_STEPS,
+    createSteps(firstStep),
     saved
       ? { step: resumeStep(saved), data: saved }
       : fromProfileStart
@@ -202,8 +193,12 @@ export function CreateCvModal({
 
   // Career profiles are Pro-only: free users see the option with a Pro
   // badge, and the end-of-flow "save to a profile" step is skipped for them.
-  const { data: availableProfiles = [] } = useProfiles();
+  const { data: availableProfiles = [], isSuccess: profilesLoaded } = useProfiles();
   const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
+  // The career-profile option on a free plan: what profiles do, and the upgrade.
+  const [profilesPaywallOpen, setProfilesPaywallOpen] = useState(false);
+  // Profile updates set to automatic: no last step, the profile is updated in the background.
+  const backgroundSync = useBackgroundProfileSync();
 
   const [selectedProfileId, setSelectedProfileId] = useState<string>(saved?.selectedProfileId ?? fromProfileStart ?? "");
   // True when this CV is being generated from a profile — it's already
@@ -215,7 +210,7 @@ export function CreateCvModal({
   // Selection states
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? initialTemplate ?? DEFAULT_TEMPLATE_ID);
 
-  // Free style state — left blank until real data exists (typed, uploaded,
+  // Free style state — left blank until real data exists (typed,
   // or picked from a saved profile); never seeded with sample text.
   const [freestyleText, setFreestyleText] = useState(saved?.freestyleText ?? "");
   const [targetRole, setTargetRole] = useState(saved?.targetRole ?? "");
@@ -230,24 +225,19 @@ export function CreateCvModal({
   const [jobBackStep, setJobBackStep] = useState<Step>(saved?.jobBackStep ?? "scratch-missing");
   const [showWritingGuide, setShowWritingGuide] = useState(false);
 
-  // Facts the user adds in this flow that aren't in the upload/profile yet
+  // Facts the user adds in this flow that aren't in the profile yet
   // ("Anything else / anything new?"). They go into the CV, and a profile
   // can be offered them afterwards.
   const [flowExtraDetails, setFlowExtraDetails] = useState(saved?.flowExtraDetails ?? "");
 
-  // Upload state
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(saved?.uploadedFileName ?? null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Real backend integration covers freestyle, upload, and "start from
-  // career profile" — the "guided" (Filling Form) sub-flow has no actual
-  // data-entry UI built yet, so there's nothing real to send the backend;
-  // it stays local-only. Downstream logic keys off `cvDocumentId` actually
-  // being set, not the method itself.
+  // The CV the AI writes, from the story or a career profile.
   const [cvDocumentId, setCvDocumentId] = useState<string | null>(saved?.cvDocumentId ?? null);
   const [latestContent, setLatestContent] = useState<CVContentDTO | undefined>(saved?.latestContent ?? undefined);
   const [analyzedSourceText, setAnalyzedSourceText] = useState(saved?.analyzedSourceText ?? "");
   const [flowError, setFlowError] = useState<string | null>(null);
+  // The AI won't tailor to a job in another field — the user picks what to do next.
+  const [mismatch, setMismatch] = useState<GenerateCvMismatch | null>(null);
+  const toast = useToast();
   // What the first AI analysis already incorporated — refine only needs a
   // new AI call when the user added something beyond this (or beyond plain
   // personal details, which are written directly).
@@ -265,27 +255,14 @@ export function CreateCvModal({
   const { data: me } = useMe();
   const [jobGaps, setJobGaps] = useState<string[]>(saved?.jobGaps ?? []);
 
-  // The guided (Filling Form) sub-flow's own source-of-truth choice, made
-  // before the user ever sees the editor: attach an existing profile's
-  // latest CV (real fetch, no AI), explicitly start a new profile, or skip
-  // entirely. "create" and "skip" both leave the form genuinely blank —
-  // they only differ in intent, not in what gets pre-filled.
-  // True only once a real fetch attempt has run for the profile currently
-  // selected in this step — `selectedProfileId` alone isn't enough to gate
-  // "Continue" because it defaults to the first available profile's id
-  // before the user has clicked anything here.
-
   // A CV document created mid-flow should never outlive an abandoned
   // session — only a completed flow keeps it (see markCompleted() below).
   const { markCompleted } = useDraftCvLifecycle(isOpen, cvDocumentId);
 
   const analyzeMutation = useAnalyzeFreestyle();
-  const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
   const proGate = useProGate();
-  // Signed out (the /try pages): no career profiles, and an account before the AI.
-  const { isGuest, requireAccount } = useAccountGate();
   const { done: aiDone, celebrate } = useAiDone();
 
   // Generates the CV from the chosen profile's own content (see
@@ -304,9 +281,10 @@ export function CreateCvModal({
         flowType: "create",
         extraDetails: flowExtraDetails || undefined,
         jobDescription: jobDescription || undefined,
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setCvDocumentId(docId);
@@ -326,24 +304,24 @@ export function CreateCvModal({
         setStep("scratch-missing");
       } else {
         await celebrate(jobDescription.trim() ? "tailor" : "write");
-        goToProfileStep(document.content, gaps.length > 0, docId);
+        goToProfileStep(document.content, gaps, docId);
       }
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => generateFromProfile(jobDescription))) return;
       setFlowError(err instanceof Error ? err.message : "Could not build your CV from this profile. Please try again.");
     }
   };
 
   const draft: CreateDraft = {
     openedWith: { template: initialTemplate, profileId: initialProfileId ?? undefined },
-    step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, selectedProfileId,
+    step, templateNext, templateBackStep, selectedProfileId,
     fromProfile, selectedTemplate, freestyleText, targetRole, fullName, email, phone, optionalJd, jobBackStep,
-    flowExtraDetails, uploadedFileName, cvDocumentId, latestContent, analyzedSourceText, analyzedInputs,
+    flowExtraDetails, cvDocumentId, latestContent, analyzedSourceText, analyzedInputs,
     clarifyingQuestions, questionAnswers, jobGaps,
   };
   // Back / Forward check the step they land on against this.
   useEffect(() => trackStepData(draft));
-  useSaveFlowDraft<CreateDraft>("create", draft, step !== "select-method");
+  useSaveFlowDraft<CreateDraft>("create", draft, step !== firstStep);
 
   if (!isOpen) return null;
 
@@ -367,9 +345,10 @@ export function CreateCvModal({
         sourceText: text,
         templateId,
         flowType: "create",
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return;
       }
       setCvDocumentId(docId);
@@ -390,54 +369,8 @@ export function CreateCvModal({
         setStep("job-ask");
       }
     } catch (err) {
-      if (proGate.isProRequired(err)) return;
+      if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId))) return;
       setFlowError(err instanceof ApiError ? err.message : "Could not analyze your story. Please try again.");
-    }
-  };
-
-  // Upload flow equivalent: OCRs/extracts the file server-side, then runs
-  // the extracted text through the same AI parse as the freestyle flow.
-  const handleUploadFile = async (file: File, templateId: TemplateId = selectedTemplate) => {
-    setFlowError(null);
-    // Signed out (the /try pages): an account first — nothing goes to the AI before one exists.
-    if (!(await requireAccount())) return;
-    setUploadedFileName(file.name);
-    setStep("upload-analyzing");
-
-    try {
-      const { cvDocumentId: docId, sourceText, document } = await analyzeUploadMutation.mutateAsync({
-        file,
-        templateId,
-        flowType: "create",
-      });
-
-      if ("mismatch" in document) {
-        setFlowError(document.reason);
-        setStep("upload-cv");
-        return;
-      }
-
-      setCvDocumentId(docId);
-      setLatestContent(document.content);
-      setAnalyzedSourceText(sourceText);
-      setAnalyzedInputs({ jd: "", extra: "" });
-      setClarifyingQuestions(document.questions ?? []);
-      setQuestionAnswers({});
-      const personal = document.content?.personal ?? {};
-      setFullName(personal.full_name ?? "");
-      setTargetRole(personal.title ?? "");
-      setPhone(personal.phone ?? "");
-      setFlowExtraDetails("");
-      setStep("upload-instructions");
-    } catch (err) {
-      if (proGate.isProRequired(err)) {
-        setStep("upload-cv");
-        return;
-      }
-      setFlowError(
-        err instanceof Error ? err.message : "Could not read this file. Please try a different one."
-      );
-      setStep("upload-cv");
     }
   };
 
@@ -482,20 +415,21 @@ export function CreateCvModal({
         email: personal.email || email || undefined,
         personal,
         requiresRewrite,
+        flowType: "create",
+        payLater: proGate.payLater(),
       });
       if ("mismatch" in document) {
-        setFlowError(document.reason);
+        setMismatch(document);
         return false;
       }
       setLatestContent(document.content);
       const gaps = document.jobAnalysis !== undefined ? document.jobAnalysis?.gaps ?? [] : jobGaps;
       if (document.jobAnalysis !== undefined) setJobGaps(gaps);
       await celebrate(jobDescription.trim() ? "tailor" : "write");
-      // Gaps are worth reading before the editor opens, so keep the step then.
-      goToProfileStep(document.content, gaps.length > 0);
+      goToProfileStep(document.content, gaps);
       return true;
     } catch (err) {
-      if (!proGate.isProRequired(err)) {
+      if (!proGate.isProRequired(err, () => void handleContinueFromMissing(jobDescription))) {
         setFlowError(err instanceof ApiError ? err.message : "Could not update your CV. Please try again.");
       }
       return false;
@@ -508,10 +442,24 @@ export function CreateCvModal({
 
   // The last step: offer to keep a career profile up to date (see
   // ProfileSyncStep). Skipped for free users and for a CV made from a profile
-  // with nothing new to add — unless there are job gaps worth reading first.
-  const goToProfileStep = (content: CVContentDTO | undefined, keepStep = false, docId: string | null = cvDocumentId) => {
-    const nothingToOffer = !canUseProfiles || !docId || (fromProfile && !hasNewDetails);
-    if (nothingToOffer && !keepStep) {
+  // with nothing new to add. What the job asks for that the CV doesn't show is
+  // said in a notice, not a step of its own.
+  const goToProfileStep = (content: CVContentDTO | undefined, gaps: string[] = [], docId: string | null = cvDocumentId) => {
+    const gapsText = gapsNotice(gaps);
+    if (gapsText) toast.info("Tailored to the job", { id: "job-gaps", description: gapsText, duration: 9000 });
+    const nothingNew = !canUseProfiles || !docId || (fromProfile && !hasNewDetails);
+    // Automatic updates: done in the background, with a short notice, and no step for it.
+    const automatic = backgroundSync.autoSync === "always";
+    if (!nothingNew && automatic && docId) {
+      backgroundSync.syncCv({
+        cvDocumentId: docId,
+        factsOnly: fromProfile || Boolean(optionalJd.trim()),
+        sourceProfileId: fromProfile ? selectedProfileId : null,
+        roleTitle: (targetRole || content?.personal?.title || "").trim(),
+      });
+    }
+    const nothingToOffer = nothingNew || automatic;
+    if (nothingToOffer) {
       handleFinish(content, docId);
       return;
     }
@@ -521,7 +469,6 @@ export function CreateCvModal({
   // Runs the step that sends things to the AI, now that a template is chosen.
   const runAfterTemplate = (next: NonNullable<typeof templateNext>, templateId: TemplateId) => {
     if (next.kind === "freestyle") handleAnalyzeStory(templateId);
-    else if (next.kind === "upload") handleUploadFile(next.file, templateId);
     else setStep("profile-extras");
   };
 
@@ -536,15 +483,6 @@ export function CreateCvModal({
     setTemplateNext(next);
     setTemplateBackStep(backStep);
     setStep("select-template-first");
-  };
-
-  const continueAfterUploadExtras = () => {
-    if (clarifyingQuestions.length) {
-      setStep("upload-missing");
-    } else {
-      setJobBackStep("upload-instructions");
-      setStep("job-ask");
-    }
   };
 
   const openJobPrompt = () => {
@@ -627,9 +565,7 @@ export function CreateCvModal({
   };
 
   const tailoring = Boolean(optionalJd.trim());
-  const aiWait: AiWait | null = aiDone ?? (analyzeUploadMutation.isPending
-    ? "read-file"
-    : analyzeMutation.isPending
+  const aiWait: AiWait | null = aiDone ?? (analyzeMutation.isPending
       ? "read-story"
       : isFinishing
         ? tailoring
@@ -638,6 +574,8 @@ export function CreateCvModal({
         : null);
 
   const isTemplateStep = step === "select-template-first" && !aiWait;
+  // Faded until there's a profile to build from (shown as available while they load).
+  const hasUsableProfile = !profilesLoaded || availableProfiles.some(isProfileUsable);
 
   return (
     <div
@@ -669,7 +607,7 @@ export function CreateCvModal({
           stepKey={step}
           loader={
             aiWait && (
-              <AiWaitLoader wait={aiWait} done={aiDone !== null} fileName={uploadedFileName} />
+              <AiWaitLoader wait={aiWait} done={aiDone !== null} />
             )
           }
         >
@@ -691,20 +629,10 @@ export function CreateCvModal({
                 icon={PenTool}
                 tone="accent"
                 title="Start from scratch"
-                description="Type your career story or follow guided section prompts."
+                description="Tell us about yourself and we'll write your CV. You can edit everything after."
                 onClick={() => {
                   setFromProfile(false);
-                  setStep("scratch-choice");
-                }}
-              />
-              <OptionCard
-                icon={Upload}
-                tone="sky"
-                title="Upload old CV / resume"
-                description="Upload PDF/DOCX to parse, analyze, and boost your ATS score."
-                onClick={() => {
-                  setFromProfile(false);
-                  setStep("upload-cv");
+                  setStep("scratch-freestyle");
                 }}
               />
               {!isGuest && (
@@ -712,14 +640,17 @@ export function CreateCvModal({
                   icon={User}
                   tone="violet"
                   title="Start from career profile"
+                  state={!canUseProfiles ? "locked" : !hasUsableProfile ? "unavailable" : undefined}
                   description={
-                    canUseProfiles
-                      ? "Build from the experience and skills saved in one of your role profiles."
-                      : "A GoMoxie Pro feature: build from your saved role profiles."
+                    !canUseProfiles
+                      ? "Build from the experience and skills saved in a role profile."
+                      : !hasUsableProfile
+                        ? "You don't have a career profile with experience or skills yet."
+                        : "Build from the experience and skills saved in one of your role profiles."
                   }
                   onClick={() => {
                     if (!canUseProfiles) {
-                      proGate.openPaywall();
+                      setProfilesPaywallOpen(true);
                       return;
                     }
                     setStep("select-career-profile");
@@ -773,7 +704,7 @@ export function CreateCvModal({
 
         {/* ================= STEP: ANYTHING NEW? (optional) ================= */}
         {/* The profile already holds the user's history — this only collects
-            what happened since, same as "Anything else?" after an upload. */}
+            what happened since. */}
         {step === "profile-extras" && (
           <div>
             <div className="text-center mb-5">
@@ -820,50 +751,6 @@ export function CreateCvModal({
           </div>
         )}
 
-        {/* ================= STEP 2A: SCRATCH CHOICE ================= */}
-        {step === "scratch-choice" && (
-          <div>
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold tracking-tight text-neutral-950">
-                Choose Creation Style
-              </h2>
-              <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">
-                Describe your career narrative freely or use guided field prompts.
-              </p>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <OptionCard
-                icon={PenLine}
-                tone="violet"
-                title="Free Style"
-                description="Type your career journey as a description. AI drafts the CV and prompts for missing parts."
-                onClick={() => {
-                  setStep("scratch-freestyle");
-                }}
-              />
-              <OptionCard
-                icon={FileCheck}
-                tone="sky"
-                title="Filling Form (Guided)"
-                description="Guided field-by-field form directly in the split-screen editor & live preview."
-                onClick={() => {
-                  handleFinish();
-                }}
-              />
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setStep("select-method")}
-              className="w-full py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
-            >
-              Back
-            </button>
-            {flowError && <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>}
-          </div>
-        )}
-
         {/* ================= STEP 2A-1: FREE STYLE TEXT INPUT ================= */}
         {step === "scratch-freestyle" && (
           <div>
@@ -897,31 +784,29 @@ export function CreateCvModal({
                 />
               </div>
 
-              {/* Quick Prompt Pill */}
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-neutral-400">Need inspiration?</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setFreestyleText(
-                      "Senior Cloud Architect with 7 years leading AWS & Kubernetes platforms at Stripe and Vercel. Cut cloud spend by $320K, managed 12M daily requests with Go & Terraform, UC Berkeley CS graduate."
-                    )
-                  }
-                  className="text-xs font-semibold text-neutral-900 hover:underline cursor-pointer"
-                >
-                  Insert Sample Story
-                </button>
-              </div>
+              {SHOW_SAMPLE_STORY && (
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setFreestyleText(SAMPLE_STORY)}
+                    className="text-xs font-semibold text-neutral-900 hover:underline cursor-pointer"
+                  >
+                    Insert sample story (dev)
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setStep("scratch-choice")}
-                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
-              >
-                Back
-              </button>
+              {step !== firstStep && (
+                <button
+                  type="button"
+                  onClick={() => setStep("select-method")}
+                  className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
+                >
+                  Back
+                </button>
+              )}
               <button
                 type="button"
                 disabled={analyzeMutation.isPending}
@@ -932,7 +817,7 @@ export function CreateCvModal({
                   }
                   chooseTemplateThen({ kind: "freestyle" }, "scratch-freestyle");
                 }}
-                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex-1 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <span>{analyzeMutation.isPending ? "Analyzing..." : "Analyze & Continue"}</span>
                 <ArrowRight className="w-4 h-4" />
@@ -991,143 +876,6 @@ export function CreateCvModal({
                       : "Next"}
                 </span>
                 {!refineMutation.isPending && <ArrowRight className="w-4 h-4" />}
-              </button>
-            </div>
-            {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mt-3">{flowError}</p>
-            )}
-          </div>
-        )}
-
-        {/* ================= STEP 2B: UPLOAD CV ================= */}
-        {step === "upload-cv" && (
-          <div>
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold tracking-tight text-neutral-950">
-                Upload Old Resume
-              </h2>
-              <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">
-                Upload your existing PDF or Word file to extract and optimize.
-              </p>
-            </div>
-
-            {/* Drop Zone */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.png,.jpg,.jpeg"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) chooseTemplateThen({ kind: "upload", file }, "upload-cv");
-              }}
-            />
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-neutral-300 hover:border-neutral-950 rounded-2xl p-6 text-center transition-all cursor-pointer bg-neutral-50/50 hover:bg-neutral-100/50 mb-4"
-            >
-              <div className="w-10 h-10 rounded-full bg-neutral-100 text-neutral-700 flex items-center justify-center mx-auto mb-2.5">
-                <Upload className="w-5 h-5" />
-              </div>
-              <div className="text-sm font-bold text-neutral-950">
-                Click to browse or drop resume here
-              </div>
-              <p className="text-xs text-neutral-400 mt-0.5">
-                Supports PDF, DOCX, TXT (up to 10MB)
-              </p>
-            </div>
-            {flowError && (
-              <p className="text-xs text-red-600 font-medium text-center mb-4">{flowError}</p>
-            )}
-
-            <button
-              type="button"
-              onClick={() => setStep("select-method")}
-              className="w-full py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
-            >
-              Back
-            </button>
-          </div>
-        )}
-
-        {/* STEP 2B-1 ("upload-analyzing") has no content of its own: it only
-            lasts while the upload is read, and the AI-wait loader covers that. */}
-
-        {/* ================= STEP 2B-1B: ANYTHING ELSE? (optional) ================= */}
-        {/* The upload was already turned into a full CV by the AI, following
-            the same rules as every other flow — this only collects anything
-            the file doesn't have. */}
-        {step === "upload-instructions" && (
-          <div>
-            <div className="text-center mb-5">
-              <h2 className="text-xl font-bold tracking-tight text-neutral-950">Anything else we should know?</h2>
-            </div>
-
-            <textarea
-              rows={5}
-              autoFocus
-              value={flowExtraDetails}
-              onChange={(e) => setFlowExtraDetails(e.target.value)}
-              placeholder="A recent job, project, certification or achievement that isn't in your CV yet"
-              className="w-full p-3 mb-6 rounded-xl bg-white border border-neutral-300 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent/10 resize-none"
-            />
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setFlowExtraDetails("");
-                  continueAfterUploadExtras();
-                }}
-                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                disabled={!flowExtraDetails.trim()}
-                onClick={continueAfterUploadExtras}
-                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>Continue</span>
-                <ArrowRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================= STEP 2B-2: UPLOAD MISSING DETAILS PROMPT ================= */}
-        {step === "upload-missing" && (
-          <div>
-            <div className="text-center mb-5">
-              <h2 className="text-xl font-bold tracking-tight text-neutral-950">
-                Complete Missing Details
-              </h2>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              {renderClarifyingQuestions()}
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={questionPages.isFirstPage ? () => setStep("upload-instructions") : questionPages.prev}
-                className="w-1/3 py-3 rounded-xl border border-neutral-200 text-sm font-bold text-neutral-700 hover:bg-neutral-100 transition-colors cursor-pointer"
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                disabled={questionPages.isLastPage ? !canSubmitAnswers : !questionPages.pageComplete}
-                onClick={questionPages.isLastPage ? openJobPrompt : questionPages.next}
-                className="w-2/3 py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <span>
-                  {questionPages.isLastPage ? "Continue" : "Next"}
-                </span>
-                <ArrowRight className="w-4 h-4" />
               </button>
             </div>
             {flowError && (
@@ -1238,7 +986,7 @@ export function CreateCvModal({
 
         {/* ================= STEP 4: KEEP A CAREER PROFILE UP TO DATE ================= */}
         {step === "save-profile-prompt" &&
-          (canUseProfiles && cvDocumentId ? (
+          (canUseProfiles && cvDocumentId && backgroundSync.autoSync !== "always" ? (
             <ProfileSyncStep
               key={cvDocumentId}
               cvDocumentId={cvDocumentId}
@@ -1257,24 +1005,39 @@ export function CreateCvModal({
               onProRequired={proGate.isProRequired}
             />
           ) : (
-            <div>
-              <div className="text-center mb-5">
-                <h2 className="text-xl font-bold tracking-tight text-neutral-950">Your CV Is Ready</h2>
-              </div>
-              <JobGaps gaps={jobGaps} />
-              <button
-                type="button"
-                onClick={() => handleFinish()}
-                className="w-full py-3.5 rounded-lg bg-neutral-950 text-white font-bold text-sm hover:bg-neutral-800 transition-all cursor-pointer shadow-md"
-              >
-                Continue
-              </button>
-            </div>
+            // Restored at the end with no profile offer: nothing left to ask, so on to the editor.
+            <RunOnMount run={() => void handleFinish()} />
           ))}
 
         </FlowStepWithLoader>
         </div>
       </div>
+
+      <JobMismatchDialog
+        mismatch={mismatch}
+        onClose={() => setMismatch(null)}
+        options={
+          optionalJd.trim()
+            ? [
+                {
+                  label: "Try a different job",
+                  onClick: () => {
+                    setMismatch(null);
+                    setOptionalJd("");
+                    setStep("job-target");
+                  },
+                },
+                {
+                  label: "Make my CV without a job",
+                  onClick: () => {
+                    setMismatch(null);
+                    skipJobTailoring();
+                  },
+                },
+              ]
+            : []
+        }
+      />
 
       {/* ================= WHAT TO INCLUDE MODAL ================= */}
       {showWritingGuide && (
@@ -1343,8 +1106,10 @@ export function CreateCvModal({
       <ProUpgradeModal
         isOpen={proGate.isPaywallOpen}
         onClose={proGate.closePaywall}
-        reason="You've already used your free Create generation. Upgrade to GoMoxie Pro for unlimited AI tailoring."
+        paywall={proGate.paywall}
+        onPayLater={proGate.canPayLater() ? proGate.continuePayLater : undefined}
       />
+      <CareerProfilesPaywall isOpen={profilesPaywallOpen} onClose={() => setProfilesPaywallOpen(false)} />
     </div>
   );
 }

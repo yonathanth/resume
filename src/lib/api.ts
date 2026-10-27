@@ -150,6 +150,7 @@ const SESSIONLESS_PATHS = new Set([
   "/api/v1/auth/logout",
   "/api/v1/admin/auth/login",
   "/api/v1/platform/status",
+  "/api/v1/pricing",
   "/api/v1/notifications/unsubscribe",
   "/api/v1/events/anonymous",
 ]);
@@ -845,6 +846,10 @@ export interface CVPositionDTO {
 
 export interface ApiCvDocument {
   id: string;
+  /** Pay-per-CV: what unlocking this CV's download costs, and when it was paid for. */
+  unlockProduct?: CvUnlockProduct | null;
+  lockedTier?: PlanTier | null;
+  unlockedAt?: string | null;
   profileId: string | null;
   profileVersion?: number | null;
   // The document's own display name, distinct from content.personal.title
@@ -872,6 +877,10 @@ export interface AnalyzeResult {
   candidateData: CVContentDTO;
   questions: ClarificationQuestion[];
   jobAnalysis: JobAnalysis | null;
+  /** A brand-new flow's charge — generateCv must pass it to save this content. */
+  chargeToken?: string;
+  /** How this CV was paid for; `lock` set when it must be paid for at download. */
+  billing?: { kind: "free" | "plan" | "pay_later" | "unmetered"; lock: { product: CvUnlockProduct; tier: PlanTier; price: number } | null } | null;
 }
 
 export interface GenerateCvMismatch {
@@ -1036,10 +1045,11 @@ export function syncCvIntoProfile(input: {
 }
 
 // Omit profileId to create a standalone CV not attached to any career profile.
-export function createCvDocument(profileId?: string, templateId = "default") {
+// sourceCvId: the CV this one copies — a CV still to be paid for stays locked in the copy.
+export function createCvDocument(profileId?: string, templateId = "default", sourceCvId?: string) {
   return apiFetch<ApiCvDocument>("/api/v1/cv", {
     method: "POST",
-    body: JSON.stringify({ profileId, templateId }),
+    body: JSON.stringify({ profileId, templateId, sourceCvId }),
   });
 }
 
@@ -1060,8 +1070,7 @@ export function deleteCvDocument(cvId: string) {
   });
 }
 
-// Which dashboard tab a CV flow started from — one free use each,
-// one-time-only (see entitlement.service.ts on the backend).
+// Which dashboard tab a CV flow started from (see entitlement.service.ts on the backend).
 export type CvFlowType = "create" | "tailor" | "improve";
 
 // Runs the same combined AI analysis /cv/analyze does, without persisting
@@ -1079,13 +1088,16 @@ export function analyzeCv(input: {
   // Enhance flow's improvement-goal field) — kept out of sourceText so the
   // AI treats it as a directive, not more candidate narrative.
   focusInstructions?: string;
-  // Required to start a brand new flow (charges that tab's one free use).
-  // Omit only when cvDocumentId is set.
+  // Which flow this is — charges the CV when it isn't charged yet.
   flowType?: CvFlowType;
-  // Set only for a flow's own refine/re-analysis call, once the document
-  // already exists — marks this as a continuation already paid for by the
-  // flow's first analyze call, so no second free use is spent.
+  // A flow's own refine/re-analysis call, once the document exists. Free when
+  // the CV is already charged; charged here when it isn't (a copied resume).
   cvDocumentId?: string;
+  // Past the free CV / a Plus limit: go on, and pay for this CV at download.
+  payLater?: boolean;
+  // The saved resume / career profile this flow reworks (prices it as tailored / improved).
+  sourceCvId?: string;
+  sourceProfileId?: string;
 }) {
   return apiFetch<AnalyzeResult | GenerateCvMismatch>("/api/v1/cv/analyze", {
     method: "POST",
@@ -1168,6 +1180,8 @@ export function generateCv(
     /** Replace the document's content instead of only filling empty fields
      * — for a deliberate re-generation (refine), not a first fill. */
     replaceContent?: boolean;
+    /** From analyzeCv — needed to save AI content into a CV not charged yet. */
+    chargeToken?: string;
   }
 ) {
   return apiFetch<ApiCvDocument | GenerateCvMismatch>(`/api/v1/cv/${cvId}/generate`, {
@@ -1243,101 +1257,143 @@ export type SubscriptionStatus =
 
 export type SubscriptionProvider = "POLAR" | "CHAPA" | null;
 
-// The three Polar subscription tiers — see createSubscriptionCheckout. Only
-// ever set when subscriptionProvider is "POLAR"; Chapa has one fixed product
-// (no tiers), and a pre-tier Polar subscriber (the retired single $5/month
-// product) reads as null too.
-export type SubscriptionPlan = "weekly" | "monthly" | "quarterly";
+export type PlanTier = "free" | "plus" | "pro";
+export type PaidTier = "plus" | "pro";
+/** A subscription's billing period. */
+export type BillingPeriod = "weekly" | "monthly" | "quarterly";
+/** Kept for older callers: a subscription's billing period. */
+export type SubscriptionPlan = BillingPeriod;
+export type CvUnlockProduct = "cv_new" | "cv_edit";
+
+export interface FlowUsage {
+  /** null = unlimited (Pro). */
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+}
 
 export interface SubscriptionStatusResult {
+  /** "free" | "plus" | "pro" — optional only for an older backend. */
+  tier?: PlanTier;
+  /** Plus or Pro. */
+  isPaid?: boolean;
+  /** Pro only (not Plus). */
   isPro: boolean;
-  // One free use per dashboard tab, one-time-only — not a shared pool.
   freeCreateUsed: boolean;
   freeTailorUsed: boolean;
   freeImproveUsed: boolean;
   subscriptionStatus: SubscriptionStatus;
   subscriptionProvider: SubscriptionProvider;
-  plan?: SubscriptionPlan | null;
+  /** The plan's billing period. */
+  plan?: BillingPeriod | "lifetime" | null;
+  planSource?: "subscription" | "grant" | "lifetime" | null;
+  /** On a retired single-plan subscription (now Plus). */
+  legacyPlan?: boolean;
+  /** When this period's limits reset. */
+  periodEndsAt?: string | null;
+  hasLifetime?: boolean;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  // True once the user has been Pro before (either provider) but isn't
-  // currently — shows a "your plan expired, renew" prompt instead of a
-  // first-time upgrade pitch.
+  // True once the user has paid before but has no paid plan now — shows a
+  // "your plan expired, renew" prompt instead of a first-time upgrade pitch.
   isExpired: boolean;
-  // Where Pro comes from: the paid subscription, or a complimentary grant
-  // from the GoMoxie team (then the subscription fields above stay as billing
-  // left them). Optional so an older backend still type-checks.
   proSource?: "subscription" | "grant" | null;
   proGrantExpiresAt?: string | null;
   // What this user may use right now — the backend enforces the same rules.
   features?: { careerProfiles: boolean; polishSummary: boolean; cvImport: boolean; aiPolish?: boolean };
-  freeUses?: Record<CvFlowType, { limit: number | null; used: number; remaining: number | null }>;
+  /** What each flow may still do on this plan (on Free, each is the shared free pool). */
+  freeUses?: Record<CvFlowType, FlowUsage>;
+  free?: FlowUsage;
+  unpaidCvs?: { count: number; cap: number };
 }
 
-/** Career profiles are Pro, unless the user was given just this feature. */
+/** The user's plan, falling back sensibly for an older backend. */
+export function planTier(status: SubscriptionStatusResult | undefined): PlanTier {
+  return status?.tier ?? (status?.isPro ? "pro" : "free");
+}
+
+/** Plus or Pro. */
+export function isPaidPlan(status: SubscriptionStatusResult | undefined): boolean {
+  return status?.isPaid ?? planTier(status) !== "free";
+}
+
+/** Career profiles come with Plus and Pro, or a grant of just this feature. */
 export function canUseCareerProfiles(status: SubscriptionStatusResult | undefined): boolean {
-  return status?.features?.careerProfiles ?? status?.isPro ?? false;
+  return status?.features?.careerProfiles ?? isPaidPlan(status);
 }
 
-// The single source of truth for Pro access and free-generation usage —
-// never derive either from client-side state.
+// The single source of truth for plan access and usage — never derive either
+// from client-side state.
 export function getSubscriptionStatus() {
   return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/status");
 }
 
-export type CheckoutProvider = "polar" | "chapa";
+/** The public price list (GET /api/v1/pricing) — signed out too. */
+export interface PricingCatalog {
+  currency: string;
+  free: { generations: number; unpaidCvCap: number };
+  plans: Record<PaidTier, Record<BillingPeriod, { price: number; available: boolean }>>;
+  plusLimits: Record<BillingPeriod, Record<CvFlowType, number>>;
+  lifetime: {
+    price: number;
+    limits: Record<CvFlowType, number>;
+    offer: {
+      available: boolean;
+      /** Shown on the pricing cards even before it can be bought (older backends: use `available`). */
+      listed?: boolean;
+      configured?: boolean;
+      display: "seats" | "countdown";
+      endsAt: string | null;
+      soldOut: boolean;
+      ended: boolean;
+    };
+  };
+  payPerCv: Record<CvUnlockProduct, { price: number; available: boolean }>;
+}
+
+export function getPricing() {
+  return apiFetch<PricingCatalog>("/api/v1/pricing");
+}
 
 export interface CheckoutResult {
   checkoutUrl: string;
-  // Only present for the Chapa path — the frontend needs this to force a
-  // re-verify (getPaymentStatus) when the user returns from Chapa's
-  // checkout, since Chapa's webhook can lag.
-  paymentId?: string;
 }
 
-// Starts a checkout with the chosen provider for GoMoxie Pro. `plan` only
-// matters for Polar (weekly $4.99 / monthly $9.99 / quarterly $24.99 — each
-// a distinct Polar product) and defaults to "monthly"; Chapa ignores it and
-// always sells its single fixed-period local product (80 ETB, no
-// auto-renewal). The backend identifies the user from the auth token — never
-// pass a user id here.
-export function createSubscriptionCheckout(provider: CheckoutProvider, plan: SubscriptionPlan = "monthly") {
+// Starts a Polar checkout for a Plus or Pro subscription. The backend
+// identifies the user from the auth token — never pass a user id here.
+export function createSubscriptionCheckout(tier: PaidTier, period: BillingPeriod = "monthly") {
   return apiFetch<CheckoutResult>("/api/v1/subscriptions/checkout", {
     method: "POST",
-    body: JSON.stringify({ provider, plan }),
+    body: JSON.stringify({ provider: "polar", tier, period }),
   });
 }
 
-export type CreditProduct = "new_cv" | "tailoring";
+export type OneTimePurchase = { product: "plus_lifetime" } | { product: "cv_unlock"; cvDocumentId: string };
 
-// Starts a one-time Polar checkout for a pay-per-use credit — one extra
-// Create ("new_cv", $3.99) or Tailor ("tailoring", $1.99) generation. Never
-// touches Pro status or the free per-tab counter; fulfillment (the +1 credit)
-// happens off the Polar webhook once payment is confirmed, same async
-// pattern as subscription checkout.
-export function createCreditCheckout(product: CreditProduct) {
+// A one-time Polar checkout: Plus Lifetime, or unlocking one CV's download.
+// Fulfillment happens off the Polar webhook once payment is confirmed.
+export function createPurchaseCheckout(purchase: OneTimePurchase) {
   return apiFetch<CheckoutResult>("/api/v1/purchases/checkout", {
     method: "POST",
-    body: JSON.stringify({ product }),
+    body: JSON.stringify(purchase),
   });
 }
 
-// Schedules cancellation at the end of the current billing period — Pro
-// access and the subscription stay active until then, nothing already paid
-// is refunded, and it simply won't renew afterward. Never an immediate
-// revoke. Returns the same shape as getSubscriptionStatus().
+// Schedules cancellation at the end of the current billing period — the plan
+// and the subscription stay active until then, nothing already paid is
+// refunded, and it simply won't renew afterward. Never an immediate revoke.
+// Returns the same shape as getSubscriptionStatus().
 export function cancelSubscription() {
   return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/cancel", { method: "POST" });
 }
 
-// Switches an active Polar subscription to another tier. The current plan
-// ends and the new one replaces it on the same subscription (prorated — never
-// billed twice). Also lifts a scheduled cancellation. Returns the same shape
-// as getSubscriptionStatus().
-export function changeSubscriptionPlan(plan: SubscriptionPlan) {
+// Switches an active subscription to another plan or billing period. The
+// current plan ends and the new one replaces it on the same subscription
+// (prorated — never billed twice). Also lifts a scheduled cancellation.
+export function changeSubscriptionPlan(tier: PaidTier, period: BillingPeriod) {
   return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/change-plan", {
     method: "POST",
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({ tier, period }),
   });
 }
 
@@ -1347,17 +1403,23 @@ export function resumeSubscription() {
   return apiFetch<SubscriptionStatusResult>("/api/v1/subscriptions/resume", { method: "POST" });
 }
 
+/** A download refused because the CV must be paid for first: what unlocking it costs. */
+export function cvUnlockFromError(err: unknown): { cvDocumentId: string; product: CvUnlockProduct; price: number } | null {
+  if (!(err instanceof ApiError) || err.code !== "CV_PAYMENT_REQUIRED") return null;
+  const { cvDocumentId, product, price } = err.details;
+  if (typeof cvDocumentId !== "string") return null;
+  return { cvDocumentId, product: product === "cv_edit" ? "cv_edit" : "cv_new", price: typeof price === "number" ? price : 2.99 };
+}
+
 // Not run through apiFetch: the response body is a raw PDF stream, not JSON.
 export async function downloadCvPdf(cvId: string): Promise<Blob> {
   const res = await authedFetch(`/api/v1/cv/${encodeURIComponent(cvId)}/download`);
 
   if (!res.ok) {
     const body = await res.json().catch(() => null);
-    throw new ApiError(
-      res.status,
-      body?.error?.code ?? "DOWNLOAD_FAILED",
-      body?.error?.message ?? "Could not download the PDF"
-    );
+    const { code, message, ...details } = body?.error ?? {};
+    // CV_PAYMENT_REQUIRED carries { cvDocumentId, product, price } for the unlock dialog.
+    throw new ApiError(res.status, code ?? "DOWNLOAD_FAILED", message ?? "Could not download the PDF", details);
   }
 
   return res.blob();
@@ -1390,26 +1452,6 @@ export function previewCvHtml(templateId: string, content: CVContentDTO, showMis
     method: "POST",
     body: JSON.stringify({ templateId, content, showMissing }),
   });
-}
-
-// The real PDF of unsaved editor content (no save, no finalize) — "Preview PDF".
-export async function previewCvPdf(templateId: string, content: CVContentDTO): Promise<Blob> {
-  const res = await authedFetch("/api/v1/cv/preview/pdf", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ templateId, content }),
-  });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new ApiError(
-      res.status,
-      body?.error?.code ?? "PREVIEW_FAILED",
-      body?.error?.message ?? "Could not create the PDF preview"
-    );
-  }
-
-  return res.blob();
 }
 
 // One of the user's saved CVs rendered with its own template — for resume cards.

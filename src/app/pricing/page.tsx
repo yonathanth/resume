@@ -1,77 +1,19 @@
 "use client";
 
 import React, { useState } from "react";
-import Link from "next/link";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Reveal } from "@/components/Reveal";
-import { ArrowRight, Check, ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useHasMounted } from "@/hooks/use-has-mounted";
-import { hasSession, type SubscriptionPlan } from "@/lib/api";
-import { useStartCreditCheckout, useStartProCheckout } from "@/hooks/use-subscription";
+import { hasSession } from "@/lib/api";
+import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { LifetimeDeal, PlanCards } from "@/components/pricing/PlanCards";
 
-// Free accounts get one free AI generation per dashboard tab — Create,
-// Tailor, Improve — one-time-only, not a shared pool (see
-// entitlement.service.ts's FlowType). Pro is unlimited.
-//
-// A signed-in visitor clicking "Get Pro"/a pay-per-use price starts real
-// checkout for that exact plan/product directly from this page (see
-// services/polar/plans.ts on the backend); a signed-out visitor goes to
-// /signup first, same as before — there's no anonymous checkout.
-
-const FREE_FEATURES = [
-  "1 free use each of Create, Tailor and Improve",
-  "Every recruiter-tested template",
-  "Import your old CV (PDF or DOCX)",
-  "Click-to-edit resume editor",
-  "PDF download",
-];
-
-const PRO_FEATURES = [
-  "Everything in Free",
-  "Unlimited AI resume generations",
-  "Unlimited tailoring to job posts",
-  "Unlimited resume improvements",
-  "Cancel anytime",
-];
-
-// Billing-cycle options for Pro — same feature set, different commitment
-// lengths. "Monthly" mirrors what used to be the single Pro card. `id` is
-// this backend's SubscriptionPlan key (see services/polar/plans.ts) — each
-// cycle is a distinct Polar product.
-const SUBSCRIPTION_PLANS: {
-  id: SubscriptionPlan;
-  name: string;
-  price: string;
-  period: string;
-  blurb: string;
-  popular: boolean;
-}[] = [
-  {
-    id: "weekly",
-    name: "Weekly",
-    price: "$4.99",
-    period: "/ week",
-    blurb: "A short burst of applications.",
-    popular: false,
-  },
-  {
-    id: "monthly",
-    name: "Monthly",
-    price: "$9.99",
-    period: "/ month",
-    blurb: "An active job search.",
-    popular: true,
-  },
-  {
-    id: "quarterly",
-    name: "3 Months",
-    price: "$24.99",
-    period: "/ 3 months",
-    blurb: "A longer search — the best value.",
-    popular: false,
-  },
-];
+// Free, Plus and Pro with a billing-period toggle, the Plus Lifetime deal and
+// pay-per-CV (see components/pricing/PlanCards.tsx). A signed-in visitor
+// starts checkout for that exact plan from here; a signed-out one goes to
+// /signup first — there's no anonymous checkout.
 
 interface FAQItem {
   question: string;
@@ -82,48 +24,34 @@ const faqs: FAQItem[] = [
   {
     question: "What can I do on the free plan?",
     answer:
-      "You get one free AI generation on each of the three tabs — Create, Tailor and Improve — plus every template, the full editor and PDF downloads. No card needed.",
+      "Your first AI CV is free (a new one, a tailored one or an improved one), with every template and the full editor. After that you can keep making CVs and pay only for the ones you download, or pick a plan.",
   },
   {
-    question: "What counts as a generation?",
+    question: "How does paying per CV work?",
     answer:
-      "Each tab — Create, Tailor and Improve — gives you one free AI generation, one time only. If the AI fails and gives you nothing usable, that free use is given back.",
+      "Make your CV, edit it as much as you like, and pay when you download it: $2.99 for a new CV, $1.99 for one tailored or improved from a CV you already have. Any paid plan also unlocks the CVs you made on the free plan.",
   },
   {
-    question: "Can I cancel anytime?",
+    question: "What's the difference between Plus and Pro?",
     answer:
-      "Yes. Cancel your Pro subscription from your account settings and you keep Pro until the end of the period you've already paid for. Nothing already paid is refunded.",
+      "Both include career profiles. Plus gives you a set number of tailorings, enhancements and new CVs each billing period. Pro has no limits on any of them, under our fair use policy.",
   },
   {
-    question: "I'm in Ethiopia — how do I pay?",
+    question: "What is Plus Lifetime?",
     answer:
-      "Choose Chapa at checkout and pay 80 ETB for one month of Pro. Chapa payments don't renew automatically, so you simply pay again when you want another month.",
+      "One payment for Plus forever: 20 tailorings, 12 enhancements and 5 new CVs every month, reset monthly. It's only offered for a limited time.",
+  },
+  {
+    question: "Can I cancel or switch plans anytime?",
+    answer:
+      "Yes. Switch between plans and billing periods from your account settings, prorated. If you cancel, you keep your plan until the end of the period you've already paid for. Nothing already paid is refunded.",
   },
   {
     question: "Which file formats are supported?",
     answer:
-      "You can import an existing CV as a PDF or Word (DOCX) file, and download your finished resume as a PDF — the format applicant tracking systems read most reliably.",
+      "You can start from an existing CV as a PDF or Word (DOCX) file, and download your finished resume as a PDF, the format applicant tracking systems read most reliably.",
   },
 ];
-
-function FeatureList({ items, strong }: { items: string[]; strong?: boolean }) {
-  return (
-    <ul className="space-y-3">
-      {items.map((item) => (
-        <li key={item} className="flex items-center gap-3 text-[14.5px] text-neutral-300">
-          <span
-            className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-              strong ? "bg-accent text-white" : "bg-neutral-800 text-neutral-400"
-            }`}
-          >
-            <Check className="h-3 w-3 stroke-[3]" />
-          </span>
-          {item}
-        </li>
-      ))}
-    </ul>
-  );
-}
 
 export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -131,8 +59,7 @@ export default function PricingPage() {
   // hasMounted guards this (not a direct typeof window check) so the server
   // render and the client's first hydration pass agree — see use-has-mounted.ts.
   const isSignedIn = hasMounted && hasSession();
-  const checkout = useStartProCheckout();
-  const creditCheckout = useStartCreditCheckout();
+  const { data: status } = useSubscriptionStatus();
 
   return (
     <div className="relative flex min-h-screen flex-col justify-between overflow-x-hidden bg-[#0a0a0a] font-sans text-white selection:bg-accent selection:text-white">
@@ -143,188 +70,19 @@ export default function PricingPage() {
       <Navbar theme="dark" />
 
       <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-36 sm:px-6 sm:pt-40 lg:px-8">
-        {/* Header */}
         <Reveal className="mx-auto max-w-2xl text-center">
           <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl sm:leading-[1.05]">
             Simple <span className="text-accent">pricing.</span>
           </h1>
+          <p className="mt-4 text-[16px] text-neutral-400">Start free. Pick a plan when you&apos;re applying a lot, or pay per CV when you&apos;re not.</p>
         </Reveal>
 
-        {/* Plans */}
-        <div className="mx-auto mt-14 grid max-w-6xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Free */}
-          <Reveal delay={100}>
-          <div className="flex h-full flex-col rounded-3xl border border-neutral-800 bg-[#141416] p-8">
-            <h2 className="text-[17px] font-semibold text-white">Free</h2>
-            <p className="mt-1 text-[14px] text-neutral-400">Try it on your next application.</p>
-            <div className="mt-6 flex items-baseline gap-1.5">
-              <span className="text-5xl font-bold tracking-tight text-white">$0</span>
-              <span className="text-[14px] text-neutral-500">forever</span>
-            </div>
-            <p className="mt-1.5 text-[13px] text-neutral-500">No card needed</p>
-            <Link
-              href="/signup"
-              className="mt-5 flex items-center justify-center rounded-full border border-neutral-700 bg-[#1e1e21] px-8 py-4 text-[15.5px] font-semibold tracking-[-0.01em] text-white transition-colors hover:border-neutral-600 hover:bg-neutral-800 active:scale-[0.98]"
-            >
-              Start for free
-            </Link>
+        <Reveal delay={100} className="mt-12">
+          <PlanCards theme="dark" signedIn={isSignedIn} status={status} periodOnCards />
+        </Reveal>
 
-            {/* Pay-per-use — folded into Free rather than given its own
-                card, since it's a top-up on the free plan, not a separate tier. */}
-            <div className="mt-5 rounded-2xl border border-neutral-800/90 bg-[#0f0f11] p-4">
-              <p className="text-[12.5px] font-semibold text-neutral-300">
-                Need just one or two? Pay as you go:
-              </p>
-              <ul className="mt-2 space-y-1.5 text-[13px] text-neutral-400">
-                <li className="flex items-center justify-between gap-2">
-                  <span>$1.99 per tailoring or enhancement</span>
-                  {isSignedIn && (
-                    <button
-                      type="button"
-                      onClick={() => creditCheckout.mutate("tailoring")}
-                      disabled={creditCheckout.isPending}
-                      className="shrink-0 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] font-semibold text-neutral-200 transition-colors hover:border-neutral-500 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      {creditCheckout.isPending && creditCheckout.variables === "tailoring" ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        "Buy"
-                      )}
-                    </button>
-                  )}
-                </li>
-                <li className="flex items-center justify-between gap-2">
-                  <span>$3.99 per new CV</span>
-                  {isSignedIn && (
-                    <button
-                      type="button"
-                      onClick={() => creditCheckout.mutate("new_cv")}
-                      disabled={creditCheckout.isPending}
-                      className="shrink-0 rounded-full border border-neutral-700 px-2.5 py-1 text-[11px] font-semibold text-neutral-200 transition-colors hover:border-neutral-500 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
-                    >
-                      {creditCheckout.isPending && creditCheckout.variables === "new_cv" ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        "Buy"
-                      )}
-                    </button>
-                  )}
-                </li>
-              </ul>
-              {creditCheckout.isError && (
-                <p className="mt-2 text-[12px] font-medium text-rose-400">Could not start checkout. Please try again.</p>
-              )}
-            </div>
-
-            <div className="mt-8 border-t border-neutral-800 pt-7">
-              <FeatureList items={FREE_FEATURES} />
-            </div>
-          </div>
-          </Reveal>
-
-          {/* Pro — Weekly / Monthly / 3 Months billing cycles */}
-          {SUBSCRIPTION_PLANS.map((plan, idx) => (
-            <Reveal key={plan.id} delay={200 + idx * 100}>
-              <div
-                className={`flex h-full flex-col rounded-3xl border p-8 ${
-                  plan.popular
-                    ? "border-accent/50 bg-[#18181b] shadow-[0_24px_60px_-30px_rgba(255,94,31,0.45)]"
-                    : "border-neutral-800 bg-[#141416]"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <h2 className="text-[17px] font-semibold text-white">{plan.name}</h2>
-                  {plan.popular && (
-                    <span className="rounded-full bg-accent/15 px-2.5 py-1 text-[12px] font-semibold text-accent-light">
-                      Most popular
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1 text-[14px] text-neutral-400">{plan.blurb}</p>
-                <div className="mt-6 flex items-baseline gap-1.5">
-                  <span className="text-5xl font-bold tracking-tight text-white">{plan.price}</span>
-                  <span className="text-[14px] text-neutral-500">{plan.period}</span>
-                </div>
-                {isSignedIn ? (
-                  <button
-                    type="button"
-                    onClick={() => checkout.mutate({ provider: "polar", plan: plan.id })}
-                    disabled={checkout.isPending}
-                    className={`group mt-5 flex items-center justify-center gap-2 rounded-full px-8 py-4 text-[15.5px] font-semibold tracking-[-0.01em] text-white transition-colors active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 cursor-pointer ${
-                      plan.popular
-                        ? "bg-accent hover:bg-accent-strong"
-                        : "border border-neutral-700 bg-[#1e1e21] hover:border-neutral-600 hover:bg-neutral-800"
-                    }`}
-                  >
-                    {checkout.isPending && checkout.variables?.plan === plan.id ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Redirecting...
-                      </>
-                    ) : (
-                      <>
-                        Get Pro
-                        {plan.popular && (
-                          <ArrowRight className="h-4 w-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
-                        )}
-                      </>
-                    )}
-                  </button>
-                ) : (
-                  <Link
-                    href="/signup"
-                    className={`mt-5 flex items-center justify-center gap-2 rounded-full px-8 py-4 text-[15.5px] font-semibold tracking-[-0.01em] text-white transition-colors active:scale-[0.98] ${
-                      plan.popular
-                        ? "group bg-accent hover:bg-accent-strong"
-                        : "border border-neutral-700 bg-[#1e1e21] hover:border-neutral-600 hover:bg-neutral-800"
-                    }`}
-                  >
-                    Get Pro
-                    {plan.popular && (
-                      <ArrowRight className="h-4 w-4 text-white/80 transition-transform duration-200 group-hover:translate-x-0.5" />
-                    )}
-                  </Link>
-                )}
-                <div className="mt-8 border-t border-neutral-800 pt-7">
-                  <FeatureList items={PRO_FEATURES} strong={plan.popular} />
-                </div>
-              </div>
-            </Reveal>
-          ))}
-        </div>
-
-        {checkout.isError && (
-          <p className="mx-auto mt-6 max-w-md text-center text-sm font-medium text-rose-400">
-            Could not start checkout. Please try again.
-          </p>
-        )}
-
-        {/* Chapa — local-market alternative, one fixed product (not tied to
-            any of the cycles above, so it gets its own single line rather
-            than appearing under every card). */}
-        <Reveal delay={500}>
-          <p className="mx-auto mt-8 max-w-xl text-center text-[13.5px] text-neutral-500">
-            In Ethiopia?{" "}
-            {isSignedIn ? (
-              <button
-                type="button"
-                onClick={() => checkout.mutate({ provider: "chapa" })}
-                disabled={checkout.isPending}
-                className="font-semibold text-accent-light underline decoration-accent/40 underline-offset-2 transition-colors hover:text-accent disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
-              >
-                {checkout.isPending && checkout.variables?.provider === "chapa"
-                  ? "Redirecting..."
-                  : "Pay with Chapa — 80 ETB for one month"}
-              </button>
-            ) : (
-              <Link
-                href="/signup"
-                className="font-semibold text-accent-light underline decoration-accent/40 underline-offset-2 transition-colors hover:text-accent"
-              >
-                Pay with Chapa — 80 ETB for one month
-              </Link>
-            )}
-          </p>
+        <Reveal delay={200}>
+          <LifetimeDeal theme="dark" signedIn={isSignedIn} status={status} />
         </Reveal>
 
         {/* FAQ */}

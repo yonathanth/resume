@@ -4,12 +4,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Crown, FilePlus, FileText, History, MoreHorizontal, RotateCcw, Trash2, User } from "lucide-react";
-import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO } from "@/lib/api";
+import { ApiError, ApiCareerProfileDetail, ApiProfileChange, ProfileContentDTO, canUseCareerProfiles } from "@/lib/api";
 import { useDeleteProfile, useProfile, useRevertProfileChange, useUpdateProfile } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { ConfirmDialog } from "@/components/dashboard/ConfirmDialog";
-import { ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
+import { CareerProfilesPaywall, ProUpgradeModal } from "@/components/dashboard/ProUpgradeModal";
 import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { ICON_TONES } from "@/components/dashboard/create-flow/OptionCard";
 import { DashboardMoxie } from "@/components/dashboard/DashboardMoxie";
@@ -42,7 +42,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
   const router = useRouter();
   const { handleCreateCvFromProfile } = useDashboard();
   const { data: profile, isLoading, error, refetch } = useProfile(profileId);
-  const isPro = useSubscriptionStatus().data?.isPro ?? false;
+  const isPro = canUseCareerProfiles(useSubscriptionStatus().data);
   const update = useUpdateProfile(profileId);
   const revert = useRevertProfileChange(profileId);
   const remove = useDeleteProfile();
@@ -456,7 +456,7 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
           }
         }}
       />
-      <ProUpgradeModal isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} reason="Editing career profiles is part of GoMoxie Pro." />
+      <CareerProfilesPaywall isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} />
     </div>
   );
 }

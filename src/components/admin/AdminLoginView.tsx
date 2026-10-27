@@ -2,7 +2,8 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Loader2, Shield } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { MoxieLogo } from "@/components/moxie/MoxieLogos";
 import { ApiError } from "@/lib/api";
 import { adminLogin } from "@/lib/admin-api";
 
@@ -39,13 +40,15 @@ export function AdminLoginView({ notice }: { notice: string | null }) {
   };
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center overflow-y-auto bg-[#0a0a0a] px-6 py-10 font-sans text-white">
+    <div className="fixed inset-0 flex h-dvh w-full items-center justify-center overflow-y-auto overflow-x-hidden overscroll-none bg-[#0a0a0a] px-6 py-10 font-sans text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]" />
       <div className="relative w-full max-w-[380px]">
-        <div className="mx-auto mb-6 flex h-11 w-11 items-center justify-center rounded-[13px] bg-white text-neutral-950">
-          <Shield className="h-5 w-5" />
-        </div>
-        <h1 className="text-center text-[26px] font-bold tracking-tight">GoMoxie Admin</h1>
+        {/* The site's brand: Moxie's logo and the gomoxie wordmark, marked as the admin side. */}
+        <MoxieLogo size={56} className="mx-auto mb-4" />
+        <h1 className="flex items-center justify-center gap-2 text-[26px] font-bold tracking-tight">
+          gomoxie
+          <span className="rounded-md bg-accent px-2 py-0.5 text-[12px] font-bold uppercase tracking-wide text-white">Admin</span>
+        </h1>
         <p className="mt-2 text-center text-[14px] text-neutral-400">Administrator accounts only. Sign-in attempts are logged.</p>
 
         <form onSubmit={submit} className="mt-8 flex flex-col gap-3">

@@ -26,7 +26,7 @@ export default function GoogleAuthCompletePage() {
   const quiet = hasMounted && (isOwnPopup() || peekTryHandoff() !== null);
   const wait = useMoxieWait(next === null && hasMounted && !quiet, {
     label: "Signing you in with Google…",
-    className: "h-screen w-full bg-[#0a0a0a] px-4",
+    className: "h-screen w-full bg-[#fbfbfb] px-4",
   });
 
   useEffect(() => {
@@ -57,8 +57,8 @@ export default function GoogleAuthCompletePage() {
 
   if (wait.node) return wait.node;
   return quiet ? (
-    <CenteredSpinner label="Signing you in with Google…" className="h-screen w-full bg-[#0a0a0a]" />
+    <CenteredSpinner label="Signing you in with Google…" className="h-screen w-full bg-[#fbfbfb]" />
   ) : (
-    <div className="h-screen w-full bg-[#0a0a0a]" />
+    <div className="h-screen w-full bg-[#fbfbfb]" />
   );
 }

@@ -28,15 +28,22 @@ export function templateFacts(template: ApiCvTemplate): string {
 
 interface TemplateCardProps {
   template: ApiCvTemplate;
-  onUse: () => void;
+  /** Starts a CV with this template — a click handler, or a link (the public gallery). */
+  onUse?: () => void;
+  useHref?: string;
+  /** Where the preview opens (defaults to the dashboard's template page). */
+  href?: string;
 }
 
-export function TemplateCard({ template, onUse }: TemplateCardProps) {
+const USE_BUTTON =
+  "group/use w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-accent-border bg-accent-soft text-accent-strong text-sm font-semibold hover:bg-accent hover:border-accent hover:text-white hover:shadow-[0_6px_16px_-8px_color-mix(in_srgb,var(--accent)_60%,transparent)] transition-all cursor-pointer";
+
+export function TemplateCard({ template, onUse, useHref, href }: TemplateCardProps) {
   return (
     <div className="flex flex-col gap-3">
       {/* The card opens the template's detail page. */}
       <Link
-        href={`/dashboard/templates/${template.id}`}
+        href={href ?? `/dashboard/templates/${template.id}`}
         title={`Preview ${template.name}`}
         // clip-path keeps the scaled preview iframe inside the rounded corners.
         className="group relative block aspect-[4/5] rounded-lg overflow-hidden [clip-path:inset(0_round_0.5rem)] border border-neutral-200 bg-white hover:border-accent-border transition-colors focus:outline-none focus-visible:border-accent"
@@ -70,14 +77,17 @@ export function TemplateCard({ template, onUse }: TemplateCardProps) {
         </div>
       </Link>
 
-      <button
-        type="button"
-        onClick={onUse}
-        className="group/use w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-accent-border bg-accent-soft text-accent-strong text-sm font-semibold hover:bg-accent hover:border-accent hover:text-white hover:shadow-[0_6px_16px_-8px_color-mix(in_srgb,var(--accent)_60%,transparent)] transition-all cursor-pointer"
-      >
-        Use this template
-        <ArrowRight className="w-4 h-4 group-hover/use:translate-x-0.5 transition-transform" />
-      </button>
+      {useHref ? (
+        <Link href={useHref} className={USE_BUTTON}>
+          Use this template
+          <ArrowRight className="w-4 h-4 group-hover/use:translate-x-0.5 transition-transform" />
+        </Link>
+      ) : (
+        <button type="button" onClick={onUse} className={USE_BUTTON}>
+          Use this template
+          <ArrowRight className="w-4 h-4 group-hover/use:translate-x-0.5 transition-transform" />
+        </button>
+      )}
     </div>
   );
 }

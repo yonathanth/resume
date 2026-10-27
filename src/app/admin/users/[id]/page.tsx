@@ -77,7 +77,9 @@ export default function AdminUserDetailPage({ params }: { params: Promise<{ id: 
             {account.role === "ADMIN" && <Badge tone="dark">Admin</Badge>}
             {account.status === "SUSPENDED" && <Badge tone="bad">Suspended</Badge>}
             {!account.emailVerifiedAt && <Badge tone="warn">Unverified</Badge>}
-            {access.isPro && <ProBadge isPro proSource={access.proSource} />}
+            {(access.tier ?? (access.isPro ? "pro" : "free")) !== "free" && (
+              <ProBadge isPro={access.isPro} tier={access.tier} proSource={access.proSource} lifetime={access.plan?.source === "lifetime"} />
+            )}
           </div>
           {name !== account.email && <p className="mt-0.5 text-sm text-neutral-600 break-all">{account.email}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500">

@@ -13,7 +13,7 @@ export default function Error({ error, retry }: { error: Error & { digest?: stri
   return (
     <main className="flex flex-1 flex-col items-center justify-center px-6 py-16 text-center">
       <Moxie animation="oops" size={200} decorative ticklish />
-      <h1 className="mt-4 text-xl font-bold tracking-tight text-neutral-950">Oops — something broke</h1>
+      <h1 className="mt-4 text-xl font-bold tracking-tight text-neutral-950">Oops, something broke</h1>
       <p className="mt-1.5 text-sm text-neutral-500">That didn&apos;t work. Let&apos;s try that again.</p>
       <div className="mt-6 flex items-center gap-2">
         <button

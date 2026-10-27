@@ -23,3 +23,37 @@ export function readAndClearLastChapaPaymentId(): string | null {
     return null;
   }
 }
+
+// What a Polar checkout was for, so the return page knows what to wait for
+// (the plan, the lifetime deal, or one CV's unlock) and where to go after.
+export type PendingPurchase =
+  | { kind: "plan"; tier: "plus" | "pro" }
+  | { kind: "lifetime" }
+  | { kind: "unlock"; cvDocumentId: string };
+
+const PENDING_PURCHASE_KEY = "gomoxie_pending_purchase";
+
+export function savePendingPurchase(purchase: PendingPurchase) {
+  try {
+    sessionStorage.setItem(PENDING_PURCHASE_KEY, JSON.stringify(purchase));
+  } catch {
+    // Best-effort — the return page falls back to "any paid plan".
+  }
+}
+
+export function readPendingPurchase(): PendingPurchase | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_PURCHASE_KEY);
+    return raw ? (JSON.parse(raw) as PendingPurchase) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingPurchase() {
+  try {
+    sessionStorage.removeItem(PENDING_PURCHASE_KEY);
+  } catch {
+    // Nothing to do.
+  }
+}

@@ -31,7 +31,7 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          You can sign up with an email and password or with Google. Keep your login details safe — you&apos;re
+          You can sign up with an email and password or with Google. Keep your login details safe: you&apos;re
           responsible for what happens under your account. Tell us through the Help center if you think someone else has
           access to it.
         </p>
@@ -45,7 +45,7 @@ const sections: LegalSection[] = [
       <>
         <p>
           The resumes, career profiles and files you add stay yours. You give us permission to store and process them
-          only so we can run gomoxie for you — for example to generate, preview and export your resumes.
+          only so we can run gomoxie for you, for example to generate, preview and export your resumes.
         </p>
         <p>
           You&apos;re responsible for what you put in your resume. Make sure the information is truthful and that you
@@ -74,8 +74,9 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          The free plan includes 3 AI generations. If an AI generation fails and gives you nothing usable, it&apos;s
-          given back. Pro gives you unlimited generations while it&apos;s active. Current prices are on the{" "}
+          The free plan includes one free AI CV. After that you can keep making CVs and pay for each one when you
+          download it, or choose a plan. If an AI generation fails and gives you nothing usable, it isn&apos;t counted.
+          Current prices are on the{" "}
           <Link href="/pricing" className="font-medium text-neutral-900 underline decoration-neutral-300 underline-offset-2">
             pricing page
           </Link>
@@ -83,14 +84,27 @@ const sections: LegalSection[] = [
         </p>
         <ul>
           <li>
-            <strong className="font-semibold text-neutral-800">Polar</strong> — a monthly subscription that renews
-            automatically until you cancel it in Settings. You keep Pro until the end of the period you&apos;ve paid for.
+            <strong className="font-semibold text-neutral-800">Plus and Pro</strong>: weekly, monthly or 3-month
+            subscriptions through Polar that renew automatically until you cancel them in Settings. You keep your plan
+            until the end of the period you&apos;ve paid for. Plus includes a set number of tailorings, enhancements and
+            new CVs each billing period.
           </li>
           <li>
-            <strong className="font-semibold text-neutral-800">Chapa</strong> — a one-off payment for one month of Pro.
-            It doesn&apos;t renew automatically.
+            <strong className="font-semibold text-neutral-800">Plus Lifetime</strong>: a one-time payment for Plus
+            for as long as gomoxie runs, with limits that reset every month.
+          </li>
+          <li>
+            <strong className="font-semibold text-neutral-800">Pay per CV</strong>: a one-time payment that unlocks
+            downloading one CV.
           </li>
         </ul>
+        <p id="fair-use" className="scroll-mt-28">
+          <strong className="font-semibold text-neutral-800">Fair use.</strong> Pro&apos;s tailorings, enhancements and
+          new CVs are unlimited for personal job searching. To keep the service fast and fair for everyone, we may
+          pause AI generation on an account whose use within a billing period goes far beyond any personal job search,
+          for example automated or bulk use, or making CVs for other people. Your plan stays active, and generation
+          resumes with your next billing period.
+        </p>
         <p>Payments already made aren&apos;t refunded, except where the law requires it.</p>
       </>
     ),

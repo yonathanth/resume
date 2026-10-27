@@ -1,5 +1,6 @@
 "use client";
 
+import { isPaidPlan } from "@/lib/api";
 import React, { Suspense, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DashboardSidebar, DashboardTab } from "@/components/dashboard/DashboardSidebar";
@@ -105,8 +106,8 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
   // Set when someone finishes onboarding: Moxie welcomes them by name.
   const [welcome, setWelcome] = useState<string | null>(null);
   const { data: subscription } = useSubscriptionStatus();
-  const isPro = subscription?.isPro ?? false;
-  const { data: me } = useMe();
+  const isPro = isPaidPlan(subscription);
+  const { data: me, isError: meFailed } = useMe();
   // Ends when the /try flow closes or finishes (they clear the handoff).
   const onboardingDeferred = deferredForTry && peekTryHandoff() !== null;
   const needsOnboarding = Boolean(me) && me?.onboardingCompleted === false && !onboardingDeferred;
@@ -130,6 +131,10 @@ function DashboardChrome({ children }: { children: React.ReactNode }) {
   // works no matter which page triggered it.
   // "How did your CV turn out?" — after a download, and on leaving the editor (on every page, the editor included).
   const ratingHost = <CvRatingHost onBusyChange={setRatingBusy} />;
+
+  // Until the account has loaded, show only the page's background: the
+  // dashboard would otherwise flash before the first-run questions appear.
+  if (!me && !meFailed) return <div className="h-screen w-full bg-[#fbfbfb]" aria-busy="true" />;
 
   if (activeEditingCv) {
     return (

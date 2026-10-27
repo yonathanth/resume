@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSubscriptionStatus } from "@/lib/api";
+import { getCvDocument, getSubscriptionStatus, planTier } from "@/lib/api";
+import { clearPendingPurchase, readPendingPurchase, type PendingPurchase } from "@/lib/payment-session";
 import { useRefreshSubscriptionStatus } from "@/hooks/use-subscription";
 import { PAYMENT_CONFIRMED_REDIRECT_MS, PaymentReturnView, type PaymentReturnState } from "@/components/PaymentReturnView";
 
@@ -31,17 +32,31 @@ export default function PolarReturnPage() {
     // that invocation's own (throwaway) loop.
     let cancelled = false;
 
+    // What the checkout was for (saved before leaving for Polar).
+    const pending: PendingPurchase | null = readPendingPurchase();
+    // An unlocked CV goes straight back to its editor, to download it.
+    const destination = pending?.kind === "unlock" ? `/dashboard/editor/${encodeURIComponent(pending.cvDocumentId)}` : "/dashboard";
     const goToDashboard = (delayMs: number) => {
       setTimeout(() => {
-        if (!cancelled) router.replace("/dashboard");
+        if (!cancelled) {
+          clearPendingPurchase();
+          router.replace(destination);
+        }
       }, delayMs);
+    };
+    const isDone = async (): Promise<boolean> => {
+      if (pending?.kind === "unlock") return Boolean((await getCvDocument(pending.cvDocumentId)).unlockedAt);
+      const status = await getSubscriptionStatus();
+      if (pending?.kind === "lifetime") return Boolean(status.hasLifetime);
+      const tier = planTier(status);
+      if (pending?.kind === "plan" && pending.tier === "pro") return tier === "pro";
+      return tier !== "free";
     };
 
     const poll = async () => {
       for (let attempt = 0; attempt < MAX_POLLS && !cancelled; attempt++) {
         try {
-          const status = await getSubscriptionStatus();
-          if (status.isPro) {
+          if (await isDone()) {
             if (cancelled) return;
             setState("confirmed");
             refreshStatus();

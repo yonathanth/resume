@@ -28,7 +28,7 @@ const INTENTS: { value: SignupIntent; title: string; description: string; icon: 
   { value: "create", title: "Start from scratch", description: "Answer a few questions, get a finished CV.", icon: FilePlus, tone: "accent" },
 ];
 
-const CAREER_STAGES: { value: CareerStage; label: string }[] = [
+export const CAREER_STAGES: { value: CareerStage; label: string }[] = [
   { value: "student", label: "Student or graduate" },
   { value: "entry", label: "Early career (0–2 yrs)" },
   { value: "mid", label: "Mid-level" },
@@ -386,7 +386,7 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
           <>
             <StepEyebrow>{eyebrow}</StepEyebrow>
             <h2 className="text-2xl font-bold tracking-tight text-neutral-950">How did you hear about us?</h2>
-            <p className="mt-1.5 text-sm text-neutral-500">Optional — it helps us reach more people like you.</p>
+            <p className="mt-1.5 text-sm text-neutral-500">Optional. It helps us reach more people like you.</p>
             <div className="mt-6 flex flex-wrap gap-2">
               {SOURCES.map(({ value, label }) => (
                 <Chip key={value} selected={source === value} onClick={() => setSource(source === value ? null : value)}>

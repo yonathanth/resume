@@ -12,8 +12,10 @@ type Duration = "7" | "30" | "90" | "custom" | "none";
 
 const KIND_OPTIONS: { value: Kind; label: string; hint: string }[] = [
   { value: "PRO_ACCESS", label: "Pro access", hint: "Everything a paying Pro user gets, without a payment." },
-  { value: "FEATURE", label: "Single feature", hint: "Opens one Pro or beta feature without full Pro." },
-  { value: "LIMIT_ADJUSTMENT", label: "Adjust free-use limit", hint: "Adds to (or takes from) the plan's free uses for one flow." },
+  { value: "PLUS_ACCESS", label: "Plus access", hint: "Plus with its monthly limits, without a payment." },
+  { value: "LIFETIME_PLUS", label: "Plus Lifetime", hint: "Plus for life, limits reset monthly. Counts toward the deal's seats." },
+  { value: "FEATURE", label: "Single feature", hint: "Opens one paid or beta feature without a plan." },
+  { value: "LIMIT_ADJUSTMENT", label: "Adjust free CVs", hint: "Adds to (or takes from) the free CVs a Free user gets." },
   { value: "EXEMPTION", label: "Exemption", hint: "Lifts a specific limit for this user." },
 ];
 
@@ -69,6 +71,9 @@ export function GrantModal({ userId, userEmail, onClose }: { userId: string; use
         return { ...common, kind, flow, amount: amountNum };
       case "EXEMPTION":
         return { ...common, kind, feature: exemption };
+      case "PLUS_ACCESS":
+      case "LIFETIME_PLUS":
+        return { ...common, kind };
       default:
         return { ...common, kind: "PRO_ACCESS" };
     }

@@ -27,13 +27,13 @@ export const FEATURE_LABELS: Record<GrantableFeature, string> = {
 
 export const EXEMPTION_LABELS: Record<ExemptionKey, string> = {
   aiRateLimit: "Skip AI rate limit",
-  generationQuota: "Unlimited generations without Pro",
+  generationQuota: "Unlimited generations",
 };
 
 export const PLAN_LABELS = {
-  pro: "Pro (any)",
-  paid: "Paid",
-  grant: "Complimentary only",
+  pro: "Plus or Pro (any)",
+  paid: "Paying subscribers",
+  grant: "Granted or Lifetime only",
   free: "Free",
 } as const;
 
@@ -47,12 +47,15 @@ export function describeGrant(e: Pick<Entitlement, "kind" | "feature" | "flow" |
   switch (e.kind) {
     case "PRO_ACCESS":
       return "Pro access";
+    case "PLUS_ACCESS":
+      return "Plus access";
+    case "LIFETIME_PLUS":
+      return "Plus Lifetime";
     case "FEATURE":
       return featureLabel(e.feature);
     case "LIMIT_ADJUSTMENT": {
       const amount = e.amount ?? 0;
-      const flow = e.flow ? FLOW_LABELS[e.flow] ?? e.flow : "?";
-      return `${amount > 0 ? "+" : ""}${amount} free ${flow.toLowerCase()} uses`;
+      return `${amount > 0 ? "+" : ""}${amount} free CVs`;
     }
     case "EXEMPTION":
       return `Exemption: ${featureLabel(e.feature)}`;
@@ -63,8 +66,10 @@ export function describeGrant(e: Pick<Entitlement, "kind" | "feature" | "flow" |
 
 export const KIND_LABELS: Record<Entitlement["kind"], string> = {
   PRO_ACCESS: "Pro access",
+  PLUS_ACCESS: "Plus access",
+  LIFETIME_PLUS: "Plus Lifetime",
   FEATURE: "Single feature",
-  LIMIT_ADJUSTMENT: "Free-use limit",
+  LIMIT_ADJUSTMENT: "Free CVs",
   EXEMPTION: "Exemption",
 };
 
@@ -86,11 +91,29 @@ export function GrantStateBadge({ state }: { state: GrantState }) {
   return <Badge tone={GRANT_STATE_TONES[state]}>{state}</Badge>;
 }
 
-export function ProBadge({ isPro, proSource }: { isPro: boolean; proSource: "subscription" | "grant" | null }) {
-  if (!isPro) return <Badge>Free</Badge>;
+/** The user's plan: Free, or Plus / Pro and where it comes from. */
+export function ProBadge({
+  isPro,
+  tier,
+  proSource,
+  lifetime = false,
+}: {
+  isPro: boolean;
+  tier?: "free" | "plus" | "pro";
+  proSource: "subscription" | "grant" | null;
+  /** The plan is Plus Lifetime. */
+  lifetime?: boolean;
+}) {
+  const plan = tier ?? (isPro ? "pro" : "free");
+  if (plan === "free") return <Badge>Free</Badge>;
+  const name = plan === "pro" ? "Pro" : "Plus";
+  const how = lifetime ? "lifetime" : proSource === "grant" ? "complimentary" : "paid";
   return (
-    <Badge tone="accent" title={proSource === "grant" ? "Pro from a manual grant (not a payment)" : "Pro from a paid subscription"}>
-      Pro · {proSource === "grant" ? "complimentary" : "paid"}
+    <Badge
+      tone="accent"
+      title={lifetime ? "Plus Lifetime" : proSource === "grant" ? `${name} from a manual grant (not a payment)` : `${name} from a paid subscription`}
+    >
+      {name} · {how}
     </Badge>
   );
 }

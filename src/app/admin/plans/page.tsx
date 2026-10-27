@@ -37,11 +37,12 @@ import {
   type Column,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/AdminShell";
+import { PlansSettingsCard } from "@/components/admin/PlansSettingsCard";
 import { useToast } from "@/components/Toaster";
 import { dateInputToIso, errorText, formatDate, formatDateTime, formatNumber, formatRelative } from "@/lib/admin-format";
 
-// Plans & Entitlements: the free-plan limits, what Pro includes, the per-
-// feature access rules, and the manual grants admins have made. Access is
+// Plans & Entitlements: the plans' numbers (Free, Plus, Pro, Lifetime), the
+// per-feature access rules, and the manual grants admins have made. Access is
 // decided in one place on the backend (access.service.ts); this page edits
 // its inputs, it doesn't decide access itself.
 
@@ -50,7 +51,7 @@ const FLOWS: FlowKey[] = ["create", "tailor", "improve"];
 
 const LEVELS: { value: FeatureAccessLevel; label: string; explain: string }[] = [
   { value: "all", label: "All", explain: "Everyone" },
-  { value: "pro", label: "Pro", explain: "Pro & users granted this feature" },
+  { value: "pro", label: "Paid", explain: "Plus & Pro, and users granted this feature" },
   { value: "beta", label: "Beta", explain: "Beta program & users granted this feature" },
   { value: "off", label: "Off", explain: "Nobody — kill switch" },
 ];
@@ -58,6 +59,8 @@ const LEVEL_BY_VALUE = Object.fromEntries(LEVELS.map((l) => [l.value, l])) as Re
 
 const KIND_LABELS: Record<EntitlementKind, string> = {
   PRO_ACCESS: "Pro access",
+  PLUS_ACCESS: "Plus access",
+  LIFETIME_PLUS: "Plus Lifetime",
   FEATURE: "Feature",
   LIMIT_ADJUSTMENT: "Limit adjustment",
   EXEMPTION: "Exemption",
@@ -113,39 +116,28 @@ function OptionalReason({ value, onChange }: { value: string; onChange: (v: stri
 
 // ---------------------------------------------------------------- free plan limits
 
-type LimitField = FlowKey | "perMinute" | "perDay";
+type LimitField = "perMinute" | "perDay";
 type LimitsForm = Record<LimitField, string>;
 
 const LIMIT_RANGES: Record<LimitField, { min: number; max: number }> = {
-  create: { min: 0, max: 1000 },
-  tailor: { min: 0, max: 1000 },
-  improve: { min: 0, max: 1000 },
   perMinute: { min: 1, max: 1000 },
   perDay: { min: 1, max: 100000 },
 };
 
 const LIMIT_LABELS: Record<LimitField, string> = {
-  create: "Free Create uses",
-  tailor: "Free Tailor uses",
-  improve: "Free Improve uses",
   perMinute: "AI requests per minute",
   perDay: "AI requests per day",
 };
 
 function limitsToForm(l: SettingsValues["limits"]): LimitsForm {
   return {
-    create: String(l.freeUsesPerFlow.create),
-    tailor: String(l.freeUsesPerFlow.tailor),
-    improve: String(l.freeUsesPerFlow.improve),
     perMinute: String(l.aiRequestsPerMinute),
     perDay: String(l.aiRequestsPerDay),
   };
 }
 
 function limitValue(l: SettingsValues["limits"], f: LimitField): number {
-  if (f === "perMinute") return l.aiRequestsPerMinute;
-  if (f === "perDay") return l.aiRequestsPerDay;
-  return l.freeUsesPerFlow[f];
+  return f === "perMinute" ? l.aiRequestsPerMinute : l.aiRequestsPerDay;
 }
 
 function validateLimit(field: LimitField, raw: string): string | null {
@@ -177,7 +169,6 @@ function LimitsCard({ settings }: { settings: SettingsResponse }) {
   const setField = (f: LimitField, v: string) => setDraft({ ...form, [f]: v });
 
   const next: SettingsValues["limits"] = {
-    freeUsesPerFlow: { create: Number(form.create), tailor: Number(form.tailor), improve: Number(form.improve) },
     aiRequestsPerMinute: Number(form.perMinute),
     aiRequestsPerDay: Number(form.perDay),
   };
@@ -186,13 +177,11 @@ function LimitsCard({ settings }: { settings: SettingsResponse }) {
     const result = await updateSetting("limits", next, reason || undefined);
     queryClient.setQueryData<SettingsResponse>(["admin", "settings"], (old) => (old ? { ...old, values: { ...old.values, limits: result.value } } : old));
     setDraft(null);
-    toast.success("Free plan limits saved");
+    toast.success("AI rate limits saved");
     await Promise.all([queryClient.invalidateQueries({ queryKey: ["admin", "settings"] }), queryClient.invalidateQueries({ queryKey: ["admin", "ai"] })]);
   };
 
-  const freeUseChanged = changed.some((f) => f === "create" || f === "tailor" || f === "improve");
-  const rateChanged = changed.some((f) => f === "perMinute" || f === "perDay");
-  const lowered = changed.filter((f) => Number(form[f]) < limitValue(current, f));
+  const rateChanged = changed.length > 0;
 
   const renderInput = (f: LimitField) => (
     <label key={f} className="block">
@@ -219,7 +208,7 @@ function LimitsCard({ settings }: { settings: SettingsResponse }) {
 
   return (
     <Card
-      title="Free plan limits"
+      title="AI rate limits"
       description={<LastChanged meta={settings.meta.limits} />}
       actions={
         canWrite ? (
@@ -250,17 +239,9 @@ function LimitsCard({ settings }: { settings: SettingsResponse }) {
     >
       <div className="space-y-5">
         <div>
-          <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-1">Free uses per flow</h3>
-          <p className="text-xs text-neutral-500 mb-3">
-            How many times a user without Pro can run each AI flow. 0 turns the free tier off for that flow. Per-user limit adjustments (grants) add to or
-            subtract from this. Pro users are unmetered.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">{FLOWS.map(renderInput)}</div>
-        </div>
-        <div>
           <h3 className="text-xs font-bold uppercase tracking-wide text-neutral-500 mb-1">AI rate limits</h3>
           <p className="text-xs text-neutral-500 mb-3">
-            Per-user caps on AI calls that protect the provider budget. They apply to everyone, Pro included, except users with an AI rate-limit exemption.
+            Per-user caps on AI calls that protect the provider budget. They apply to everyone, paid plans included, except users with an AI rate-limit exemption.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{(["perMinute", "perDay"] as LimitField[]).map(renderInput)}</div>
         </div>
@@ -268,7 +249,7 @@ function LimitsCard({ settings }: { settings: SettingsResponse }) {
 
       <ActionDialog
         open={confirming}
-        title="Save free plan limits"
+        title="Save AI rate limits"
         confirmLabel="Save limits"
         description="These limits take effect for the next request each user makes (other server instances pick them up within about 30 seconds)."
         onConfirm={save}
@@ -278,71 +259,16 @@ function LimitsCard({ settings }: { settings: SettingsResponse }) {
         <ImpactBox impact={impact}>
           {(d) => (
             <span className="space-y-1 block">
-              {freeUseChanged && (
-                <span className="block">
-                  Free-use changes affect the <b>{formatNumber(d.free)}</b> users without Pro. The <b>{formatNumber(d.pro)}</b> Pro users are unmetered and
-                  unaffected.
-                </span>
-              )}
               {rateChanged && (
                 <span className="block">
-                  Rate-limit changes apply to all <b>{formatNumber(d.total)}</b> users, Pro included (except those with an AI rate-limit exemption).
+                  Rate-limit changes apply to all <b>{formatNumber(d.total)}</b> users, paid plans included (except those with an AI rate-limit exemption).
                 </span>
               )}
             </span>
           )}
         </ImpactBox>
-        {lowered.some((f) => f === "create" || f === "tailor" || f === "improve") && (
-          <Note tone="warn">Lowering free uses doesn&apos;t reset anyone&apos;s usage: users who already used more than the new limit simply have none left.</Note>
-        )}
         <OptionalReason value={reason} onChange={setReason} />
       </ActionDialog>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------- Pro plan
-
-function ProPlanCard({ settings }: { settings: SettingsResponse }) {
-  const keys = Object.keys(settings.features) as FeatureKey[];
-  const proFeatures = keys.filter((k) => settings.values.features[k] === "pro");
-  const allFeatures = keys.filter((k) => settings.values.features[k] === "all");
-  const offFeatures = keys.filter((k) => settings.values.features[k] === "off");
-  return (
-    <Card title="Pro plan" description="What Pro includes today, from the current feature rules." actions={<SourceTag source="database" />}>
-      <div className="space-y-4 text-sm">
-        <ul className="space-y-2">
-          <li className="flex gap-2">
-            <InfinityIcon className="w-4 h-4 mt-0.5 shrink-0 text-accent-strong" />
-            <span>
-              <b>Unmetered Create, Tailor and Improve flows</b> — no free-use limit (AI rate limits still apply).
-            </span>
-          </li>
-          {proFeatures.map((k) => (
-            <li key={k} className="flex gap-2">
-              <Check className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
-              <span>
-                <b>{settings.features[k].label}</b> <span className="text-neutral-500">— {settings.features[k].description}</span>
-              </span>
-            </li>
-          ))}
-        </ul>
-        {proFeatures.length === 0 && <Note>No feature is currently set to &ldquo;Pro&rdquo;, so Pro adds only unmetered flows.</Note>}
-        {allFeatures.length > 0 && (
-          <p className="text-xs text-neutral-500">
-            Available to everyone (not a Pro benefit right now): {allFeatures.map((k) => settings.features[k].label).join(", ")}.
-          </p>
-        )}
-        {offFeatures.length > 0 && (
-          <p className="text-xs font-semibold text-rose-700">
-            Switched off for everyone, Pro included: {offFeatures.map((k) => settings.features[k].label).join(", ")}.
-          </p>
-        )}
-        <Note>
-          <b>Price</b> isn&apos;t set here. The Polar price is managed on the product in the Polar dashboard; the Chapa price comes from the backend&apos;s server
-          configuration. Pro comes from an active paid Polar/Chapa period, or from an admin&apos;s Pro grant.
-        </Note>
-      </div>
     </Card>
   );
 }
@@ -378,11 +304,11 @@ function FeaturesCard({ settings }: { settings: SettingsResponse }) {
       case "all":
         return `${label}: open to all ${formatNumber(d.total)} users.`;
       case "pro":
-        return `${label}: limited to the ${formatNumber(d.pro)} Pro users and users granted it; the ${formatNumber(d.free)} free users lose it unless granted.`;
+        return `${label}: limited to the ${formatNumber(d.pro)} Plus and Pro users and users granted it; the ${formatNumber(d.free)} free users lose it unless granted.`;
       case "beta":
-        return `${label}: limited to beta-program users and users granted it — Pro alone no longer opens it.`;
+        return `${label}: limited to beta-program users and users granted it. A paid plan alone no longer opens it.`;
       case "off":
-        return `${label}: off for all ${formatNumber(d.total)} users, Pro and admins included.`;
+        return `${label}: off for all ${formatNumber(d.total)} users, paid plans and admins included.`;
     }
   };
 
@@ -497,7 +423,7 @@ function FeaturesCard({ settings }: { settings: SettingsResponse }) {
           turningOff.length ? (
             <span>
               <b className="text-rose-700">You are switching off {turningOff.map((k) => settings.features[k].label).join(", ")} for everyone.</b> Nobody — including
-              paying Pro users, users granted the feature, and admins — will be able to use it until it&apos;s switched back on.
+              paying Plus and Pro users, users granted the feature, and admins — will be able to use it until it&apos;s switched back on.
             </span>
           ) : (
             "The new rules apply to each user's next request (other server instances pick them up within about 30 seconds)."
@@ -855,10 +781,10 @@ function PromotionsCard() {
     <Card title="Promotions & trials">
       <div className="space-y-3 text-sm text-neutral-700">
         <p>
-          A temporary promotion is a <b>time-boxed grant</b> on a user&apos;s page: Pro access, or a single feature, with an end date. It stops applying on its own
-          when it ends, and the user falls back to what billing says. Extra free uses can be given the same way with a limit adjustment.
+          A temporary promotion is a <b>time-boxed grant</b> on a user&apos;s page: Plus or Pro access, or a single feature, with an end date. It stops applying on
+          its own when it ends, and the user falls back to what billing says. Extra free CVs can be given the same way with a free-CV grant.
         </p>
-        <p>There is no automatic trial on the Pro plan today — new users start on the free plan with the free uses above.</p>
+        <p>There is no automatic trial today. New users start on Free with the free CVs set above.</p>
         <Link href="/admin/users" className="inline-flex items-center gap-1 text-xs font-semibold text-accent-strong hover:underline">
           Find a user to grant a promotion
           <ArrowUpRight className="w-3.5 h-3.5" />
@@ -875,20 +801,21 @@ export default function PlansPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Plans & Entitlements" description="Free plan limits, what Pro includes, feature access rules and manual grants." />
+      <PageHeader title="Plans & Entitlements" description="Free, Plus, Pro and Lifetime limits, feature access rules and manual grants." />
 
       <Note tone="info">
         <ul className="list-disc pl-4 space-y-0.5">
           <li>
-            <b>Free plan</b> — a limited number of free uses per flow (Create, Tailor, Improve), plus every feature whose rule is &ldquo;All&rdquo;.
+            <b>Free</b>: a shared pool of free AI CVs (any flow), then pay per CV at download, plus every feature whose rule is &ldquo;All&rdquo;.
           </li>
           <li>
-            <b>Pro</b> — paid via Polar or Chapa, or granted by an admin — makes those flows unmetered and opens the Pro features.
+            <b>Plus</b>: set limits per billing period (Lifetime resets monthly). <b>Pro</b>: unlimited to the user, with hidden fair-use caps. Both
+            come from a Polar subscription, Plus Lifetime, or an admin grant, and open the features whose rule is &ldquo;Paid&rdquo;.
           </li>
           <li>Manual grants never create payments or touch the subscription; they&apos;re recorded separately with an owner and a reason.</li>
           <li>Grants with an end date stop applying automatically when they expire — no job needs to run.</li>
           <li>
-            A feature switched <b>off</b> is off for everyone — Pro users, granted users and admins included.
+            A feature switched <b>off</b> is off for everyone, paid users, granted users and admins included.
           </li>
         </ul>
       </Note>
@@ -905,7 +832,7 @@ export default function PlansPage() {
         <>
           <div className="grid grid-cols-1 xl:grid-cols-[3fr_2fr] gap-5 items-start">
             <LimitsCard settings={settings.data} />
-            <ProPlanCard settings={settings.data} />
+            <PlansSettingsCard settings={settings.data} />
           </div>
           <FeaturesCard settings={settings.data} />
         </>

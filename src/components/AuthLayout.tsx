@@ -250,9 +250,9 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
   };
 
   return (
-    <div className="fixed inset-0 flex h-screen w-screen overflow-hidden bg-[#0a0a0a] font-sans text-white selection:bg-white selection:text-neutral-950">
+    <div className="fixed inset-0 flex h-dvh w-full overflow-hidden overscroll-none bg-[#0a0a0a] font-sans text-white selection:bg-white selection:text-neutral-950">
       {/* Left: the form */}
-      <div className="relative z-20 flex h-full w-full flex-col overflow-y-auto px-6 py-6 sm:px-10 lg:w-1/2 lg:px-14 xl:px-20">
+      <div className="relative z-20 flex h-full w-full flex-col overflow-y-auto overflow-x-hidden px-6 py-6 sm:px-10 lg:w-1/2 lg:px-14 xl:px-20">
         {/* Dot grid + a faint warm glow, as on the pricing page */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(#ffffff0a_1px,transparent_1px)] [background-size:24px_24px]" />
         <div className="pointer-events-none absolute left-1/2 top-1/3 h-[320px] w-[480px] -translate-x-1/2 -translate-y-1/2 bg-[radial-gradient(closest-side,rgba(255,122,46,0.10),transparent)] blur-3xl" />

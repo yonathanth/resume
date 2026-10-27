@@ -65,3 +65,7 @@ export function dateInputToIso(value: string, endOfDay = false): string | undefi
 export function errorText(err: unknown, fallback = "Something went wrong"): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
+
+// Chapa is no longer offered. Its admin views (payments, revenue, health) are
+// hidden but kept, so old Chapa records can be looked at again by flipping this.
+export const SHOW_CHAPA = false;

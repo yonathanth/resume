@@ -16,20 +16,20 @@ const sections: LegalSection[] = [
     body: (
       <ul>
         <li>
-          <strong className="font-semibold text-neutral-800">Account details</strong> — your email address and name.
+          <strong className="font-semibold text-neutral-800">Account details</strong>: your email address and name.
           If you sign in with Google, we receive your basic Google profile (name and email). Passwords are stored only
           in hashed form.
         </li>
         <li>
-          <strong className="font-semibold text-neutral-800">Resume content</strong> — the resumes, career profiles and
+          <strong className="font-semibold text-neutral-800">Resume content</strong>: the resumes, career profiles and
           job descriptions you create or paste in.
         </li>
         <li>
-          <strong className="font-semibold text-neutral-800">Uploaded CVs</strong> — when you import a CV, the file is
+          <strong className="font-semibold text-neutral-800">Uploaded CVs</strong>: when you import a CV, the file is
           read in memory and never stored; we keep the text extracted from it.
         </li>
         <li>
-          <strong className="font-semibold text-neutral-800">Subscription details</strong> — your plan, its status and
+          <strong className="font-semibold text-neutral-800">Subscription details</strong>: your plan, its status and
           payment records from our payment providers. We never see or store your full card or bank details.
         </li>
       </ul>
@@ -50,8 +50,8 @@ const sections: LegalSection[] = [
     title: "AI processing",
     body: (
       <p>
-        When you ask gomoxie to write or rewrite a resume, the relevant content — for example your experience and a job
-        description you pasted — is sent to our AI provider to produce the result. It&apos;s used to answer that request,
+        When you ask gomoxie to write or rewrite a resume, the relevant content (for example your experience and a job
+        description you pasted) is sent to our AI provider to produce the result. It&apos;s used to answer that request,
         not to advertise to you.
       </p>
     ),
@@ -64,7 +64,7 @@ const sections: LegalSection[] = [
         <ul>
           <li>our AI provider, to generate resume content;</li>
           <li>Google, if you choose to sign in with Google;</li>
-          <li>Polar and Chapa, to process payments;</li>
+          <li>Polar, to process payments;</li>
           <li>the hosting and database services that store your account.</li>
         </ul>
         <p>We may also disclose information when the law requires it.</p>
@@ -84,7 +84,7 @@ const sections: LegalSection[] = [
     body: (
       <p>
         We keep your data while your account is open. You can delete individual resumes and career profiles at any time,
-        or delete your whole account from Settings — that permanently removes your resumes, career profiles, imported CV
+        or delete your whole account from Settings. That permanently removes your resumes, career profiles, imported CV
         text and payment records. If you have an active Pro subscription, cancel it first so you aren&apos;t billed again.
       </p>
     ),

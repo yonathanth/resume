@@ -10,6 +10,7 @@ import { pageMetadata } from "@/lib/metadata";
 import { breadcrumbs } from "@/lib/structured-data";
 import { CATEGORY_COPY, fetchPublicTemplate, fetchPublicTemplates, templatePreviewUrl } from "@/lib/templates-server";
 import type { ApiCvTemplate } from "@/lib/api";
+import { TemplateCard } from "@/components/dashboard/TemplatesView";
 
 // One page per template (/templates/classic, /templates/sidebar, …): a real
 // preview, who it suits, what it includes, and a button that starts a CV with
@@ -82,55 +83,72 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
           </Link>
         </nav>
 
-        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-16">
-          <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-neutral-200 shadow-[0_24px_60px_-28px_rgba(15,17,21,0.35)] lg:sticky lg:top-28">
-            <TemplatePreview template={template} eager />
+        <div className="grid grid-cols-1 items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:gap-14">
+          {/* The real page, on a soft stage */}
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-100/70 p-4 sm:p-6 lg:sticky lg:top-28">
+            <div className="mx-auto w-full max-w-md overflow-hidden rounded-lg border border-neutral-200 shadow-[0_24px_60px_-28px_rgba(15,17,21,0.35)]">
+              <TemplatePreview template={template} eager />
+            </div>
           </div>
 
-          <div>
-            <span className="inline-flex rounded-full border border-accent-border bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-strong">
-              {template.category}
-            </span>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.05]">
-              {template.name} resume template
-            </h1>
-            <p className="mt-4 text-lg leading-relaxed text-neutral-600">{template.description}</p>
-            {copy && <p className="mt-3 text-base leading-relaxed text-neutral-600">{copy.blurb}</p>}
+          <div className="lg:pt-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full border border-accent-border bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-strong">
+                {template.category}
+              </span>
+              <span className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600">
+                {template.twoColumn ? "Two columns" : "One column"}
+              </span>
+              {template.hasPhoto && (
+                <span className="rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs font-medium text-neutral-600">Photo</span>
+              )}
+            </div>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-neutral-950 sm:text-4xl sm:leading-[1.1]">{template.name}</h1>
+            <p className="mt-3 text-base leading-relaxed text-neutral-600">
+              {template.description}
+              {copy && <> {copy.blurb}</>}
+            </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <CtaButton href={useHref}>Use this template — free</CtaButton>
+            <div className="mt-7 flex flex-wrap gap-3">
+              <CtaButton href={useHref}>Use this template</CtaButton>
               <CtaButton href="/templates" variant="secondary" plainArrow>
-                Browse all templates
+                All templates
               </CtaButton>
             </div>
-            <p className="mt-3 text-sm text-neutral-500">No account needed to start. Sign up when it&apos;s time to see your CV.</p>
+            <p className="mt-3 text-[13px] text-neutral-500">Free to start. No account needed until you see your CV.</p>
 
-            <dl className="mt-10 divide-y divide-neutral-200 rounded-lg border border-neutral-200 bg-white">
+            <div className="mt-9 space-y-3">
               {copy && (
-                <div className="grid grid-cols-1 gap-1 px-5 py-4 sm:grid-cols-[9rem_1fr]">
-                  <dt className="text-sm font-semibold text-neutral-900">Best for</dt>
-                  <dd className="text-sm text-neutral-600">{copy.bestFor}</dd>
+                <div className="rounded-xl border border-neutral-200 bg-white px-5 py-4">
+                  <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Best for</h2>
+                  <p className="mt-1 text-sm text-neutral-800">{copy.bestFor}</p>
                 </div>
               )}
-              <div className="grid grid-cols-1 gap-1 px-5 py-4 sm:grid-cols-[9rem_1fr]">
-                <dt className="text-sm font-semibold text-neutral-900">Layout</dt>
-                <dd className="text-sm text-neutral-600">{layout}</dd>
+              <div className="rounded-xl border border-neutral-200 bg-white px-5 py-4">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Layout</h2>
+                <p className="mt-1 text-sm text-neutral-800">{layout}</p>
               </div>
-              <div className="grid grid-cols-1 gap-1 px-5 py-4 sm:grid-cols-[9rem_1fr]">
-                <dt className="text-sm font-semibold text-neutral-900">Sections</dt>
-                <dd className="text-sm text-neutral-600">{template.sections.map((s) => s.label).join(", ")}</dd>
+              <div className="rounded-xl border border-neutral-200 bg-white px-5 py-4">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Sections</h2>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {template.sections.map((section) => (
+                    <span key={section.key} className="rounded-md bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700">
+                      {section.label}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </dl>
+            </div>
 
-            <ul className="mt-8 space-y-2.5">
+            <ul className="mt-6 space-y-2.5 rounded-xl border border-accent-border/60 bg-accent-soft/40 px-5 py-4">
               {[
-                "Reads cleanly in applicant tracking systems: real text, standard headings",
-                "Filled in for you by AI from your own story, or from the CV you already have",
-                "Switch to another template any time; nothing you've written is lost",
-                "Download as a PDF that looks the same on every screen",
+                "Reads cleanly in applicant tracking systems",
+                "Filled in by AI from your story or your current CV",
+                "Switch templates any time without losing anything",
+                "Downloads as a PDF that looks the same everywhere",
               ].map((point) => (
-                <li key={point} className="flex gap-2.5 text-sm text-neutral-700">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+                <li key={point} className="flex gap-2.5 text-sm text-neutral-800">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-accent-strong" strokeWidth={2.5} />
                   {point}
                 </li>
               ))}
@@ -139,19 +157,14 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
         </div>
 
         {related.length > 0 && (
-          <section className="mt-24" aria-labelledby="related-title">
-            <h2 id="related-title" className="text-2xl font-bold tracking-tight text-neutral-950">
+          <section className="mt-20" aria-labelledby="related-title">
+            <h2 id="related-title" className="text-xl font-bold tracking-tight text-neutral-950 sm:text-2xl">
               More templates like this
             </h2>
-            <div className="mt-6 grid grid-cols-1 gap-8 sm:grid-cols-3">
+            {/* The same cards as the templates gallery. */}
+            <div className="mt-6 grid grid-cols-1 gap-x-6 gap-y-10 sm:grid-cols-3">
               {related.map((t) => (
-                <Link key={t.id} href={`/templates/${t.id}`} className="group flex flex-col">
-                  <div className="overflow-hidden rounded-lg border border-neutral-200 transition-all duration-300 group-hover:-translate-y-1 group-hover:border-accent-border group-hover:shadow-[0_18px_40px_-24px_rgba(15,17,21,0.3)]">
-                    <TemplatePreview template={t} />
-                  </div>
-                  <span className="mt-3 text-base font-semibold tracking-tight text-neutral-950">{t.name}</span>
-                  <span className="text-sm text-neutral-500">{t.category}</span>
-                </Link>
+                <TemplateCard key={t.id} template={t} href={`/templates/${t.id}`} useHref={`/try/create?template=${encodeURIComponent(t.id)}`} />
               ))}
             </div>
           </section>

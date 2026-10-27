@@ -550,3 +550,13 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .auth-wall-col { animation: none !important; }
 }
+
+/* The site menu's current-page underline: grows out from its centre once. */
+@keyframes nav-underline-in {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.nav-underline-in { animation: nav-underline-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .nav-underline-in { animation: none; }
+}

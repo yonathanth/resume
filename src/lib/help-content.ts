@@ -16,7 +16,7 @@ export const FAQ_GROUPS: { topic: string; faqs: Faq[] }[] = [
       },
       {
         q: "What is a career profile?",
-        a: "A profile holds everything about you for one role you're going for, say \"Backend Engineer\" or \"Product Manager\": your experience, skills, education and projects. You get one per role. Fill it in yourself or save a CV to it, then every new CV for that role starts from all of it. Details you edit by hand are never overwritten by a later CV. A CV tailored to a job only adds facts (roles, skills, education), never its job-specific wording, and Improve a CV shows you the before and after before saving any reworded text to a profile. Career profiles are part of gomoxie pro; if you downgrade, they stay saved and readable.",
+        a: "A profile holds everything about you for one role you're going for, say \"Backend Engineer\" or \"Product Manager\": your experience, skills, education and projects. You get one per role. Fill it in yourself or save a CV to it, then every new CV for that role starts from all of it. Details you edit by hand are never overwritten by a later CV. A CV tailored to a job only adds facts (roles, skills, education), never its job-specific wording, and Improve a CV shows you the before and after before saving any reworded text to a profile. Career profiles come with Plus and Pro; if you downgrade, they stay saved and readable.",
       },
       {
         q: "Can I tailor a resume to a specific job?",
@@ -37,7 +37,7 @@ export const FAQ_GROUPS: { topic: string; faqs: Faq[] }[] = [
       },
       {
         q: "Is the preview what employers will see?",
-        a: "Yes. The preview is rendered with the same template as the exported file, so what you see in the editor is what gets downloaded.",
+        a: "Yes. The preview is rendered with the same template as the exported file and split into pages where the PDF breaks them, so what you see in the editor is what gets downloaded.",
       },
     ],
   },
@@ -46,7 +46,7 @@ export const FAQ_GROUPS: { topic: string; faqs: Faq[] }[] = [
     faqs: [
       {
         q: "How many resumes can I make for free?",
-        a: "The free plan includes 3 AI generations. Each time the AI drafts or rewrites a resume counts as one. Editing by hand, switching templates and downloading never count. pro makes AI generations unlimited.",
+        a: "Your first AI CV is free: a new one, a tailored one or an improved one. After that you can keep making CVs and pay only for the ones you download ($2.99 for a new CV, $1.99 for a tailored or improved one), or pick a plan. Editing by hand and switching templates never count.",
       },
       {
         q: "Does the AI make things up?",
@@ -58,12 +58,12 @@ export const FAQ_GROUPS: { topic: string; faqs: Faq[] }[] = [
     topic: "Plan & billing",
     faqs: [
       {
-        q: "How much is pro?",
-        a: "$5 a month through Polar, which renews automatically, or 80 ETB for one month through Chapa, which doesn't renew, so you pay again when it ends.",
+        q: "What do Plus and Pro cost?",
+        a: "Plus is from $3.99 a week, with a set number of tailorings, enhancements and new CVs each period. Pro is from $6.99 a week, with no limits. Both include career profiles, come weekly, monthly or every 3 months, and renew automatically until you cancel. See the pricing page for every option, including Plus Lifetime.",
       },
       {
         q: "What happens if I cancel?",
-        a: "Cancelling stops the next renewal. You keep pro until the end of the period you've paid for, and you can undo the cancellation before then from Account settings.",
+        a: "Cancelling stops the next renewal. You keep your plan until the end of the period you've paid for, and you can undo the cancellation before then from Account settings.",
       },
     ],
   },

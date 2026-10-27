@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import { paginatePreview } from "@/lib/preview-pagination";
 
 // An A4 sheet is 210mm ≈ 794px wide. Editor previews draw it inside a 24px
 // gutter; thumbnails ("bare") are just the sheet. The frame renders the HTML
@@ -30,8 +31,9 @@ interface CvPreviewFrameProps {
 
 /**
  * Shows backend-rendered CV HTML in an iframe, scaled to fit. The HTML comes
- * from the same template the PDF is printed from, so this is exactly what the
- * download will look like. The sandbox allows no scripts, forms or navigation;
+ * from the same template the PDF is printed from, so this is what the
+ * download will look like; editor previews are split into A4 pages where the
+ * PDF breaks them (lib/preview-pagination.ts). The sandbox allows no scripts, forms or navigation;
  * `allow-same-origin` only lets this component measure the document height.
  */
 export function CvPreviewFrame({
@@ -60,10 +62,27 @@ export function CvPreviewFrame({
     return () => observer.disconnect();
   }, []);
 
-  const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+  const handleLoad = async (e: React.SyntheticEvent<HTMLIFrameElement>) => {
     if (firstPageOnly) return;
-    const doc = e.currentTarget.contentDocument;
-    if (doc) setContentHeight(Math.max(NATURAL_PAGE_HEIGHT, doc.documentElement.scrollHeight));
+    const iframe = e.currentTarget;
+    const doc = iframe.contentDocument;
+    if (!doc) return;
+    if (!bare) {
+      // Measure with the template's own fonts, then split into pages. The
+      // iframe is made tall first: finding where a line starts needs it on screen.
+      await doc.fonts?.ready.catch(() => undefined);
+      if (iframe.contentDocument !== doc) return; // a newer render replaced it
+      iframe.style.height = `${doc.documentElement.scrollHeight * 2 + 2000}px`;
+      try {
+        paginatePreview(doc);
+      } catch {
+        // A layout it can't split still shows, as one long sheet.
+      }
+    }
+    // The body's own height: the document's would include the stretched viewport.
+    const height = Math.max(NATURAL_PAGE_HEIGHT, Math.ceil(doc.body.getBoundingClientRect().height));
+    iframe.style.height = `${height}px`;
+    setContentHeight(height);
   };
 
   const scale = containerWidth ? (containerWidth / NATURAL_WIDTH) * zoom : 0;

@@ -45,7 +45,7 @@ import {
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/AdminShell";
 import { useToast } from "@/components/Toaster";
-import { dateInputToIso, errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, formatNumber, formatRelative } from "@/lib/admin-format";
+import { dateInputToIso, errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, formatNumber, formatRelative, SHOW_CHAPA } from "@/lib/admin-format";
 
 // Subscriptions & Payments. What lives where:
 //   Polar — source of truth for Polar subscriptions, orders, refunds and
@@ -62,7 +62,7 @@ type TabId = "subscriptions" | "chapa" | "orders" | "disputes" | "webhooks";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "subscriptions", label: "Subscriptions" },
-  { id: "chapa", label: "Chapa payments" },
+  ...(SHOW_CHAPA ? [{ id: "chapa" as const, label: "Chapa payments" }] : []),
   { id: "orders", label: "Polar orders" },
   { id: "disputes", label: "Refunds & disputes" },
   { id: "webhooks", label: "Webhooks" },
@@ -248,30 +248,34 @@ function SummaryCards({ summary }: { summary: BillingSummary }) {
         hint={<Breakdown entries={Object.entries(s.byStatus).map(([k, v]) => [k, formatNumber(v)])} />}
         source="synced"
       />
-      <StatCard
-        label="Chapa payments"
-        value={formatNumber(sumValues(summary.chapa.byStatus))}
-        hint={<Breakdown entries={CHAPA_STATUSES.filter((k) => summary.chapa.byStatus[k]).map((k) => [k, formatNumber(summary.chapa.byStatus[k])])} />}
-        source="database"
-      />
-      <StatCard
-        label="Chapa successful revenue"
-        value={
-          summary.chapa.successfulRevenue.length === 0 ? (
-            <span className="text-base text-neutral-500">No successful payments</span>
-          ) : (
-            <span className="flex flex-col gap-0.5">
-              {summary.chapa.successfulRevenue.map((r) => (
-                <span key={r.currency} className={summary.chapa.successfulRevenue.length > 1 ? "text-lg" : ""}>
-                  {formatMoney(r.amount, r.currency)}
-                </span>
-              ))}
-            </span>
-          )
-        }
-        hint={summary.chapa.successfulRevenue.map((r) => `${formatNumber(r.count)} ${r.currency} payment${r.count === 1 ? "" : "s"}`).join(" · ") || undefined}
-        source="database"
-      />
+      {SHOW_CHAPA && (
+        <StatCard
+          label="Chapa payments"
+          value={formatNumber(sumValues(summary.chapa.byStatus))}
+          hint={<Breakdown entries={CHAPA_STATUSES.filter((k) => summary.chapa.byStatus[k]).map((k) => [k, formatNumber(summary.chapa.byStatus[k])])} />}
+          source="database"
+        />
+      )}
+      {SHOW_CHAPA && (
+        <StatCard
+          label="Chapa successful revenue"
+          value={
+            summary.chapa.successfulRevenue.length === 0 ? (
+              <span className="text-base text-neutral-500">No successful payments</span>
+            ) : (
+              <span className="flex flex-col gap-0.5">
+                {summary.chapa.successfulRevenue.map((r) => (
+                  <span key={r.currency} className={summary.chapa.successfulRevenue.length > 1 ? "text-lg" : ""}>
+                    {formatMoney(r.amount, r.currency)}
+                  </span>
+                ))}
+              </span>
+            )
+          }
+          hint={summary.chapa.successfulRevenue.map((r) => `${formatNumber(r.count)} ${r.currency} payment${r.count === 1 ? "" : "s"}`).join(" · ") || undefined}
+          source="database"
+        />
+      )}
       <StatCard
         label="Webhooks needing attention"
         value={formatNumber(webhookAttention)}
@@ -312,7 +316,8 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
 
   const columns: Column<SubscriptionRow>[] = [
     { key: "user", header: "User", cell: (r) => <UserLink id={r.id} email={r.email} name={r.fullName} /> },
-    { key: "provider", header: "Provider", cell: (r) => (r.subscriptionProvider ? <Badge>{r.subscriptionProvider}</Badge> : "—") },
+    { key: "plan", header: "Plan", cell: (r) => r.planName ?? <span className="text-neutral-400">-</span> },
+    { key: "provider", header: "Provider", cell: (r) => (r.subscriptionProvider ? <Badge>{r.subscriptionProvider}</Badge> : "-") },
     { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.subscriptionStatus} /> },
     {
       key: "paid",
@@ -401,7 +406,7 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
           >
             <option value="">Any provider</option>
             <option value="POLAR">Polar</option>
-            <option value="CHAPA">Chapa</option>
+            {SHOW_CHAPA && <option value="CHAPA">Chapa</option>}
           </select>
         </Field>
         <Field label="Status">

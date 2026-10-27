@@ -2,8 +2,9 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Copy, Download, MoreVertical, PenLine, Trash2 } from "lucide-react";
-import { ApiError, downloadCvPdf, finalizeCvDocument, getCvThumbnail } from "@/lib/api";
+import { ArrowRight, Copy, Download, MoreVertical, PenLine, Target, Trash2 } from "lucide-react";
+import { ApiError, cvUnlockFromError, downloadCvPdf, finalizeCvDocument, getCvThumbnail } from "@/lib/api";
+import { UnlockCvModal } from "./ProUpgradeModal";
 import { notifyCvDownloaded } from "@/lib/cv-rating";
 import { CvPreviewFrame } from "./create-flow/CvPreviewFrame";
 import { useToast } from "@/components/Toaster";
@@ -59,6 +60,8 @@ interface ResumeCardProps {
   onOpen: () => void;
   onDuplicate: () => void;
   onDelete?: () => void;
+  /** Start the Tailor flow from this CV. */
+  onTailor?: () => void;
   /** Show a Download PDF action. */
   allowDownload?: boolean;
   /** Lighter text, for places where the card shouldn't compete with the page's main actions. */
@@ -70,9 +73,10 @@ interface ResumeCardProps {
 const FROST_MASK = "linear-gradient(to top, black 60%, transparent 100%)";
 
 /** A saved resume: its real first page under a frosted title strip, with actions in a menu. */
-export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload = false, quiet = false }: ResumeCardProps) {
+export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, onTailor, allowDownload = false, quiet = false }: ResumeCardProps) {
   const toast = useToast();
   const [isDownloading, setIsDownloading] = useState(false);
+  const [unlockCv, setUnlockCv] = useState<ReturnType<typeof cvUnlockFromError>>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +103,9 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
       notifyCvDownloaded(draft.id);
       toast.success("Your PDF is ready", { description: `Saved as ${getCvFileName(draft.fullName, draft.title)}`, moxie: "downloaded", placement: "top" });
     } catch (err) {
-      toast.error(`Couldn't download "${draft.title}"`, { description: downloadErrorMessage(err) });
+      const unlock = cvUnlockFromError(err);
+      if (unlock) setUnlockCv(unlock);
+      else toast.error(`Couldn't download "${draft.title}"`, { description: downloadErrorMessage(err) });
     } finally {
       setIsDownloading(false);
     }
@@ -111,7 +117,7 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
   };
 
   const menuItemClass =
-    "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 transition-colors cursor-pointer disabled:opacity-50";
+    "w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-neutral-600 hover:bg-neutral-50 hover:text-neutral-950 transition-colors cursor-pointer disabled:opacity-50";
 
   return (
     <div className="relative group">
@@ -173,14 +179,20 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
         {menuOpen && (
           <div
             role="menu"
-            className="absolute right-0 mt-1.5 w-44 p-1 rounded-xl bg-white border border-neutral-200 shadow-lg"
+            className="absolute right-0 mt-1.5 w-52 p-1.5 rounded-xl bg-white border border-neutral-200 shadow-lg"
           >
+            {onTailor && (
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onTailor)} className={menuItemClass}>
+                <Target className="w-4 h-4 text-neutral-500" />
+                Tailor to a job
+              </button>
+            )}
             <button type="button" role="menuitem" onClick={() => runMenuAction(onOpen)} className={menuItemClass}>
-              <PenLine className="w-3.5 h-3.5" />
+              <PenLine className="w-4 h-4 text-neutral-500" />
               Edit
             </button>
             <button type="button" role="menuitem" onClick={() => runMenuAction(onDuplicate)} className={menuItemClass}>
-              <Copy className="w-3.5 h-3.5" />
+              <Copy className="w-4 h-4 text-neutral-500" />
               Duplicate
             </button>
             {allowDownload && (
@@ -191,7 +203,7 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
                 onClick={() => runMenuAction(handleDownload)}
                 className={menuItemClass}
               >
-                <Download className="w-3.5 h-3.5" />
+                <Download className="w-4 h-4 text-neutral-500" />
                 {isDownloading ? "Preparing PDF..." : "Download PDF"}
               </button>
             )}
@@ -204,7 +216,7 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
                   onClick={() => runMenuAction(onDelete)}
                   className={`${menuItemClass} text-rose-600 hover:bg-rose-50 hover:text-rose-700`}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-4 h-4" />
                   Delete
                 </button>
               </>
@@ -212,6 +224,7 @@ export function ResumeCard({ draft, onOpen, onDuplicate, onDelete, allowDownload
           </div>
         )}
       </div>
+      <UnlockCvModal unlock={unlockCv} onClose={() => setUnlockCv(null)} />
     </div>
   );
 }

@@ -57,13 +57,13 @@ export function CancelPlanModal({
           <>
             <h3 className="text-sm font-bold text-neutral-950 mb-1.5">Undo cancellation?</h3>
             <p className="text-xs text-neutral-500 leading-relaxed mb-2">
-              Your GoMoxie Pro plan is set to cancel on {periodEndLabel}. Undo this to keep it renewing
+              Your plan is set to cancel on {periodEndLabel}. Undo this to keep it renewing
               automatically.
             </p>
           </>
         ) : (
           <>
-            <h3 className="text-sm font-bold text-neutral-950 mb-1.5">Cancel GoMoxie Pro?</h3>
+            <h3 className="text-sm font-bold text-neutral-950 mb-1.5">Cancel your plan?</h3>
             <p className="text-xs text-neutral-500 leading-relaxed mb-2">
               You&apos;ll keep Pro access until {periodEndLabel}. Nothing already paid is refunded, and it
               won&apos;t renew after that.

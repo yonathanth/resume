@@ -40,7 +40,7 @@ type StatusKind = "ok" | "user" | "provider" | "app" | "platform";
 
 const STATUS_INFO: { status: string; kind: StatusKind; meaning: string }[] = [
   { status: "success", kind: "ok", meaning: "The call completed and returned usable output." },
-  { status: "limit_reached", kind: "user", meaning: "Refused before calling the provider: the user has used all free uses for this flow." },
+  { status: "limit_reached", kind: "user", meaning: "Refused before calling the provider: the user's free CV or plan limit is used up." },
   { status: "app_rate_limited", kind: "user", meaning: "Refused before calling the provider: the user went over GoMoxie's per-minute or per-day AI request limit." },
   { status: "paused", kind: "platform", meaning: "Refused because AI generation is paused in Platform Settings." },
   { status: "provider_rate_limited", kind: "provider", meaning: "The AI provider rejected the call for rate limits or quota on our API key." },
@@ -181,16 +181,6 @@ function CurrentConfig({ data }: { data: AiUsage }) {
           <dt className="text-xs font-semibold text-neutral-500">Requests per user</dt>
           <dd className="mt-0.5 font-medium tabular-nums">
             {formatNumber(current.limits.aiRequestsPerMinute)}/min · {formatNumber(current.limits.aiRequestsPerDay)}/day
-          </dd>
-        </div>
-        <div className="sm:col-span-2">
-          <dt className="text-xs font-semibold text-neutral-500">Free uses per flow</dt>
-          <dd className="mt-0.5 flex flex-wrap gap-1.5">
-            {Object.entries(current.limits.freeUsesPerFlow).map(([flow, n]) => (
-              <Badge key={flow}>
-                {flow}: {formatNumber(n)}
-              </Badge>
-            ))}
           </dd>
         </div>
       </dl>
@@ -558,7 +548,7 @@ function UsageBody({ data, endMs }: { data: AiUsage; endMs: number }) {
           hint={failureHint || "Provider errors, timeouts, rate limits, invalid output"}
           source="tracked"
         />
-        <StatCard label="Free limit reached" value={formatNumber(totals.limitReached)} hint="Refused: free uses for the flow used up" source="tracked" />
+        <StatCard label="Free limit reached" value={formatNumber(totals.limitReached)} hint="Refused: free CV or plan limit used up" source="tracked" />
         <StatCard label="App rate limited" value={formatNumber(totals.appRateLimited)} hint="Refused: per-minute/day request cap" source="tracked" />
         <StatCard label="Refused while paused" value={formatNumber(totals.paused)} hint="AI generation paused in settings" source="tracked" />
         <StatCard label="Tokens" value={formatNumber(totals.tokens)} hint="As reported by the provider, successful calls" source="tracked" />
