@@ -1,44 +1,24 @@
-/* The page's atmosphere: just a fine line grid around the hero, fading to
-   nothing at its edges. */
-.atmosphere {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-/* The hero area the grid (and its mouse spotlight) covers. */
-.heroGrid {
-  --mx: 50%;
-  --my: 30%;
-  --spot: 0;
-  position: absolute;
-  inset: 0 0 auto;
-  height: min(900px, 100svh);
-  /* Every layer fades out toward the edges, like the grid. */
-  mask-image: radial-gradient(ellipse 70% 62% at 50% 34%, #000 0%, rgb(0 0 0 / 0.7) 50%, transparent 82%);
-}
-
-.grid {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(to right, rgb(15 17 21 / 0.16) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(15 17 21 / 0.16) 1px, transparent 1px);
-  background-size: 56px 56px;
-  background-position: center top;
-}
-
-/* The cells lit around the pointer (see landing/HeroGrid.tsx). */
-.gridCanvas {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-
 .sectionScene {
   position: relative;
+}
+
+/* Every other section sits on a soft grey band, the full width of the screen —
+   the same grey as Moxie's bubble and tiles in the hero. */
+.panel {
+  position: relative;
+  background: #f4f4f3;
+}
+
+/* A faint warm wash over the top of the page, behind the hero, fading out before the Before/After. */
+.heroGlow {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: min(1100px, 130svh);
+  pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 50% 0%, rgba(255, 94, 31, 0.09), transparent 75%),
+    radial-gradient(35% 35% at 82% 38%, rgba(255, 155, 96, 0.1), transparent 70%),
+    radial-gradient(30% 30% at 12% 30%, rgba(255, 199, 168, 0.12), transparent 70%);
 }
 
 .detail {
@@ -101,11 +81,4 @@
     top: 0;
   }
 
-  .grid {
-    background-size: 40px 40px;
-  }
-
-  .gridCanvas {
-    display: none;
-  }
 }

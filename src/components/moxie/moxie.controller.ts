@@ -12,6 +12,8 @@ interface ControllerOptions {
   /** Wears the Pro crown through every animation. */
   crowned?: boolean;
   onComplete?: (animation: MoxieAnimation) => void;
+  /** Each time a loop starts another cycle — so things on the page can follow her beat. */
+  onCycle?: (animation: MoxieAnimation) => void;
 }
 
 /**
@@ -61,7 +63,7 @@ export class MoxieController {
       if (!preset.fromCurrentPose) tl.add(toNeutral(parts, SETTLE));
       if (preset.intro) tl.add(preset.intro(parts));
       tl.eventCallback("onComplete", () => {
-        if (preset.mode === "loop" && preset.cycle) this.runCycle(preset.cycle);
+        if (preset.mode === "loop" && preset.cycle) this.runCycle(animation, preset.cycle);
         else if (preset.mode === "once") this.finishReaction(animation, true);
         else this.options.onComplete?.(animation);
       });
@@ -127,10 +129,11 @@ export class MoxieController {
   }
 
   /** Loops are rebuilt every cycle so their randomised details never repeat exactly. */
-  private runCycle(cycle: MoxieTimelineFactory) {
+  private runCycle(animation: MoxieAnimation, cycle: MoxieTimelineFactory) {
     const tl = cycle(this.parts);
-    tl.eventCallback("onComplete", () => this.runCycle(cycle));
+    tl.eventCallback("onComplete", () => this.runCycle(animation, cycle));
     this.start(tl);
+    this.options.onCycle?.(animation);
   }
 
   private start(tl: gsap.core.Timeline) {

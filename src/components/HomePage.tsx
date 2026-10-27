@@ -13,7 +13,6 @@ import { Footer } from "@/components/Footer";
 import styles from "./HomePage.module.css";
 import { LandingDetail } from "./LandingDetail";
 import { HiredAtStrip } from "./landing/HiredAtStrip";
-import { HeroGrid } from "./landing/HeroGrid";
 import { ResultsCarousel } from "./landing/ResultsCarousel";
 
 // The single before & after ("Recruiters give you six seconds", Robel Kassa) —
@@ -34,10 +33,9 @@ export function HomePage() {
 
   return (
     <div className="min-h-screen bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
-      {/* Decorative atmosphere stays behind the content and never intercepts input. */}
-      <div className={styles.atmosphere} aria-hidden="true">
-        <HeroGrid />
-      </div>
+
+      {/* A warm wash behind the hero */}
+      <div className={styles.heroGlow} aria-hidden="true" />
 
       {/* Floating Pill Navigation */}
       <Navbar />
@@ -51,7 +49,7 @@ export function HomePage() {
         <HiredAtStrip />
 
         {/* How It Works (Directly below Hero) */}
-        <div className={styles.sectionScene}>
+        <div className={`${styles.sectionScene} ${styles.panel}`}>
           <LandingDetail kind="keywords" />
           <HowItWorks />
         </div>
@@ -66,7 +64,9 @@ export function HomePage() {
         {SHOW_SIX_SECONDS && <RealResultsSection />}
 
         {/* More before & afters to swipe through */}
-        <ResultsCarousel />
+        <div className={styles.panel}>
+          <ResultsCarousel />
+        </div>
 
         {/* Pricing (Free, Pro) */}
         <div className={styles.sectionScene}>

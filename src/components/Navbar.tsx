@@ -134,7 +134,7 @@ export function Navbar({ theme = "light" }: NavbarProps) {
           </Link>
           <span className={`h-5 w-px ${isDark ? "bg-neutral-800" : "bg-neutral-200"}`} />
           <CtaButton href="/signup" size="sm" variant={isDark ? "secondary" : "primary"}>
-            Get started
+            Try for free
           </CtaButton>
         </div>
 
@@ -204,7 +204,7 @@ export function Navbar({ theme = "light" }: NavbarProps) {
                 isDark ? "bg-white text-neutral-950" : "bg-neutral-950 text-white"
               }`}
             >
-              Get started
+              Try for free
             </Link>
           </div>
         </div>

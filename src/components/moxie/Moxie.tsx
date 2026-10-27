@@ -27,6 +27,8 @@ export interface MoxieProps extends Omit<React.HTMLAttributes<HTMLSpanElement>, 
   shadow?: boolean;
   /** Called when a reaction finishes or a hold (hide) reaches its pose. */
   onAnimationComplete?: (animation: MoxieAnimation) => void;
+  /** Called each time a loop starts another cycle (never with reduced motion, which has no loops). */
+  onCycle?: (animation: MoxieAnimation) => void;
   /**
    * She can be tickled: wiggle the pointer back and forth over her, or
    * double-tap her (finger or mouse), and she giggles, then carries on. A
@@ -79,6 +81,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
     title,
     shadow = true,
     onAnimationComplete,
+    onCycle,
     ticklish = false,
     onTickle,
     crowned = false,
@@ -92,6 +95,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
   const controllerRef = useRef<MoxieController | null>(null);
   const animationRef = useRef(animation);
   const onCompleteRef = useRef(onAnimationComplete);
+  const onCycleRef = useRef(onCycle);
   const pausedRef = useRef(paused);
   const crownedRef = useRef(crowned);
   const visibleRef = useRef(true);
@@ -104,6 +108,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
   useEffect(() => {
     animationRef.current = animation;
     onCompleteRef.current = onAnimationComplete;
+    onCycleRef.current = onCycle;
     pausedRef.current = paused;
     crownedRef.current = crowned;
   });
@@ -118,6 +123,7 @@ export const Moxie = forwardRef<MoxieHandle, MoxieProps>(function Moxie(
       reducedMotion,
       crowned: crownedRef.current,
       onComplete: (finished) => onCompleteRef.current?.(finished),
+      onCycle: (looping) => onCycleRef.current?.(looping),
     });
     controllerRef.current = controller;
     controller.setPaused(pausedRef.current || !visibleRef.current);

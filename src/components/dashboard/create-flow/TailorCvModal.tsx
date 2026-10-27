@@ -43,6 +43,7 @@ import { CareerProfilesPaywall, ProUpgradeModal } from "@/components/dashboard/P
 import { useBackgroundProfileSync } from "@/hooks/use-background-profile-sync";
 import { ProfileSyncStep } from "./ProfileSyncStep";
 import { useToast } from "@/components/Toaster";
+import { takeHeroHandoff } from "@/lib/hero-handoff";
 import { ProfilePicker, isProfileUsable } from "./ProfilePicker";
 import { ConfirmedGap, GapOutcome, GapReviewStep, gapsNotInContent, withAddedSkills } from "./GapReviewStep";
 
@@ -660,6 +661,20 @@ export function TailorCvModal({
         )}
 
         {/* ================= STEP 1: SELECT SOURCE (3 Options) ================= */}
+        {/* From the landing page's hero: the job is filled in, and a dropped CV goes on to the template step. */}
+        {step === "select-source" && !initialSourceCvId && (
+          <RunOnMount
+            run={() => {
+              const handoff = takeHeroHandoff();
+              if (handoff?.jobDescription) setJobDescription(handoff.jobDescription);
+              if (handoff?.file) {
+                setSourceType("new-cv");
+                setNewCvMethod("upload");
+                chooseTemplateThen({ kind: "upload", file: handoff.file }, "new-cv-upload");
+              }
+            }}
+          />
+        )}
         {/* Opened from a CV's card: read that CV (with its own template), then straight to the job. */}
         {step === "select-source" && initialSourceCvId && !saved && !cvDocumentId && (
           <RunOnMount run={() => void handlePrepareExistingSource(initialSourceCvId, selectedTemplate)} />

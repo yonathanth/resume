@@ -181,6 +181,11 @@ export const SMALL_SHOULDER = { x: 368, y: 328 } as const;
  * its front corner — a hug. `tilt` leans its top in toward her.
  */
 export const HUG_FILES = { x: 350, y: 266, width: 56, height: 72, tilt: -9 } as const;
+/**
+ * A single CV tucked under that same hugging arm (the hero's invite): pressed
+ * between her body and the arm, its bottom-right corner in the pincer.
+ */
+export const HUG_SHEET = { x: 356, y: 258, width: 44, height: 70, tilt: -11 } as const;
 /** The hugging arm's wrist, just past the folders' far edge — where the pincer turns back in over their front. */
 export const HUG_WRIST = { x: 418, y: 328 } as const;
 /** How far that pincer is turned from pointing up: round to point back in at her. */
@@ -248,6 +253,7 @@ export const PIVOTS = {
   hugFiles: `${SMALL_SHOULDER.x} ${SMALL_SHOULDER.y}`, // the hugging claw swings from the small claw's shoulder
   hugPincer: `${HUG_WRIST.x} ${HUG_WRIST.y}`, // its pincer squeezes from the wrist
   hugStack: `${HUG_FILES.x + HUG_FILES.width / 2} ${HUG_FILES.y + HUG_FILES.height}`, // the folders slip and tip about their bottom edge
+  hugSheet: `${HUG_SHEET.x + HUG_SHEET.width / 2} ${HUG_SHEET.y + HUG_SHEET.height}`, // the tucked CV, likewise
 } as const;
 
 /**
@@ -332,6 +338,9 @@ export const SIT = {
  * (from MOXIE_VIEWBOX): put that point on a line to sit her on it.
  */
 export const MOXIE_SEAT = { x: (305 - 131) / 320, y: (SIT.ledgeY - 96) / 320 } as const;
+
+/** Where her feet meet the ground (the shadow's centre), as a fraction of her box: put that point on a line to stand her on it. */
+export const MOXIE_GROUND = { x: (305 - 131) / 320, y: (393 - 96) / 320 } as const;
 
 /** Where the paywall's crown hangs (its bottom-centre): just above her big claw, out of its reach — and how much bigger than the one she wears. */
 export const CROWN_FLOAT = { x: 192, y: 112, scale: 1.35 } as const;

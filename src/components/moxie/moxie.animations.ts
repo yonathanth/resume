@@ -57,7 +57,7 @@ function transformLayers(p: MoxieParts) {
     p.stalkL, p.stalkR, p.stalkLineL, p.stalkLineR, p.eyeL, p.eyeR, p.pupilL, p.pupilR, p.glintL, p.glintR,
     p.lidL, p.lidR, p.face, p.pdfFile, p.coin, p.coinFace, p.crown, p.paperBack, p.paperSheet, p.groundPost, p.glassesL, p.glassesR,
     p.bladeA, p.bladeB, p.pencilTip, p.mouthO, p.side, p.sideTurn, p.sideBody, ...p.sideLegs, ...p.sidePupils, ...p.sideLids,
-    p.sideSweat, p.crownFloat, p.hugFiles, p.hugStack, p.hugPincer,
+    p.sideSweat, p.crownFloat, p.hugFiles, p.hugStack, p.hugSheet, p.hugPincer,
   ];
 }
 
@@ -99,7 +99,7 @@ export function toNeutral(p: MoxieParts, duration = 0.35, ease = "power2.inOut")
   const tl = gsap.timeline();
   tl.to(transformLayers(p), { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, duration, ease }, 0)
     .to(p.shadow, { x: 0, scaleX: 1, scaleY: 1, opacity: SHADOW_OPACITY, duration, ease }, 0)
-    .to([...p.sparkles, ...p.zs, p.side, p.sideSweat, p.crownFloat, p.lashL, p.lashR, ...propLayers(p)], { opacity: 0, duration: Math.min(duration, 0.25) }, 0)
+    .to([...p.sparkles, ...p.zs, p.side, p.sideSweat, p.crownFloat, p.lashL, p.lashR, p.laughL, p.laughR, ...propLayers(p)], { opacity: 0, duration: Math.min(duration, 0.25) }, 0)
     // Back to her front view, if she was seen from the side — and her own small claw, if a copy of it was hugging folders.
     .to([p.root, p.smallClaw], { opacity: 1, duration: Math.min(duration, 0.25) }, 0)
     // A snapped pencil is whole again (hidden with it) for next time.
@@ -1217,6 +1217,102 @@ const stamp: MoxiePreset = {
     holdPaper(tl, p, 0, 0, 0.4);
     readPose(tl, p, 0, 0.4);
     clawTo(tl, p, hoverOver(paperPoint(PAPER_SEAL.u, PAPER_SEAL.v), 1.5), 0, 0.4, "power2.inOut");
+    return tl;
+  },
+};
+
+/**
+ * The recruiter (the landing page's hero): glasses on, your CV held out and a
+ * rubber stamp ready in the other claw. She reads a few lines, mouthing them;
+ * lowers the sheet and looks right at you over her glasses — "hm?" — then
+ * smiles and gives two approving nods; back to the sheet, and ka-CHUNK:
+ * approved. A proud grin, and the next CV.
+ */
+const review: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    raiseSheet(tl, p, "cv", "stamp");
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+    let t = 0;
+
+    // Reads a few lines, mouthing them to herself.
+    mouth(tl, p, "talk", t);
+    for (let i = 0; i < 3; i++) {
+      look(tl, p, READ_GAZE.from.x, READ_GAZE.from.y, t, 0.12, "power3.out");
+      look(tl, p, READ_GAZE.to.x, READ_GAZE.to.y, t + 0.14, 0.55, "none");
+      mumble(tl, p, t + 0.12, 0.55);
+      tl.to(p.root, { y: -1, duration: 0.3 }, t + 0.2).to(p.root, { y: 0, duration: 0.3 }, t + 0.5);
+      t += 0.75;
+    }
+    mouth(tl, p, "smile", t - 0.06);
+
+    // Lowers it and looks right at you over her glasses — "hm?"
+    holdPaper(tl, p, 12, t, 0.35, "power2.out");
+    tl.to(p.root, { rotation: 0, duration: 0.35 }, t).to([p.lidL, p.lidR], { y: LID.open, duration: 0.25 }, t + 0.1);
+    stretchStalks(tl, p, 1.04, t, 0.35, "power2.out");
+    look(tl, p, 0, -10, t + 0.15, 0.3, "power2.out");
+    mouth(tl, p, "o", t + 0.2);
+    blink(tl, p, t + 0.95, LID.open);
+    // …a smile, and two approving nods.
+    mouth(tl, p, "smile", t + 1.2);
+    tl.to([p.lidL, p.lidR], { y: LID.happy, duration: 0.2 }, t + 1.25);
+    for (let k = 0; k < 2; k++) {
+      const nod = t + 1.35 + k * 0.34;
+      tl.to(p.root, { rotation: 3, y: 2, duration: 0.14, ease: "power2.out" }, nod).to(
+        p.root,
+        { rotation: 0, y: 0, duration: 0.2, ease: "power2.inOut" },
+        nod + 0.14,
+      );
+    }
+    t += 2.2;
+
+    // Back to the sheet — and stamp it: approved.
+    holdPaper(tl, p, 0, t, 0.4);
+    tl.to(p.root, { rotation: -2.5, duration: 0.4 }, t).to([p.lidL, p.lidR], { y: READ_LID, duration: 0.25 }, t);
+    stretchStalks(tl, p, 0.95, t, 0.4, "sine.inOut");
+    const spot = paperPoint(PAPER_SEAL.u, PAPER_SEAL.v);
+    mouth(tl, p, "tongue", t + 0.3);
+    look(tl, p, READ_GAZE.to.x - 2, READ_GAZE.to.y + 3, t + 0.3, 0.25);
+    clawTo(tl, p, hoverOver(spot), t + 0.3, 0.35, "power2.inOut");
+    clawTo(tl, p, hoverOver(spot, 2.2), t + 0.75, 0.3, "power2.out");
+    tl.to([p.lidL, p.lidR], { y: LID.squint, duration: 0.2 }, t + 0.8);
+    const hit = t + 1.25;
+    clawTo(tl, p, spot, hit - 0.1, 0.1, "power4.in");
+    mouth(tl, p, "o", hit, 0.05);
+    tl.set(p.paperSeal, { opacity: 1, scale: 1.6 }, hit)
+      .to(p.paperSeal, { scale: 1, duration: 0.3, ease: "back.out(3)" }, hit)
+      .to(p.root, { scaleY: 0.94, scaleX: 1.04, duration: 0.07, ease: "power2.out" }, hit)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.35, ease: "back.out(3)" }, hit + 0.07)
+      .to([p.lidL, p.lidR], { y: LID.open, duration: 0.1 }, hit);
+    holdPaper(tl, p, 5, hit, 0.06, "power2.out", 2); // the paper jolts in her other claw
+    holdPaper(tl, p, 0, hit + 0.06, 0.4, "elastic.out(1, 0.4)");
+    stretchStalks(tl, p, 1.06, hit, 0.08, "power2.out");
+    stretchStalks(tl, p, 0.95, hit + 0.08, 0.6, "elastic.out(1, 0.4)");
+    clawTo(tl, p, hoverOver(spot, 1.5), hit + 0.45, 0.3, "power2.out");
+
+    // Approved. A proud grin, and the next CV.
+    t = admireSheet(tl, p, hit + 0.8);
+    swapSheet(tl, p, t, "cv");
+    t += 0.8;
+    tl.to({}, { duration: 0 }, t);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    tl.set([p.paperBack, p.stamp, p.glassesL, p.glassesR, p.glassesBridge], { opacity: 1 }, 0).set(
+      p.paperBack,
+      { rotation: -READ_HOLD },
+      0,
+    );
+    resetPaper(tl, p, "cv", 0);
+    tl.set(p.paperSeal, { opacity: 1 }, 0);
+    holdPaper(tl, p, 12, 0, 0.4);
+    // Looking at you over her glasses, smiling.
+    look(tl, p, 0, -10, 0, 0.3);
     return tl;
   },
 };
@@ -2427,6 +2523,7 @@ const presenting: MoxiePreset = {
     tl.set(p.hugFiles, { opacity: 1 }, 0)
       .set(p.smallClaw, { opacity: 0 }, 0)
       .set(p.hugStack, { y: 34, opacity: 0 }, 0)
+      .set(p.hugSheet, { opacity: 0 }, 0)
       .to(p.hugFiles, { rotation: -12, duration: 0.2, ease: "power2.out" }, 0.05)
       .to(p.hugStack, { opacity: 1, duration: 0.15 }, 0.1)
       .to(p.hugStack, { y: 0, duration: 0.45, ease: "back.out(1.6)" }, 0.1)
@@ -2537,11 +2634,183 @@ const presenting: MoxiePreset = {
   },
   reducedPose: (p) => {
     const tl = withBridge(timeline(), p);
-    tl.set([p.hugFiles, p.glassesL, p.glassesR, p.glassesBridge], { opacity: 1 }, 0)
+    tl.set([p.hugFiles, p.hugStack, p.glassesL, p.glassesR, p.glassesBridge], { opacity: 1 }, 0)
+      .set(p.hugSheet, { opacity: 0 }, 0)
       .set(p.smallClaw, { opacity: 0 }, 0)
       .to(p.bigClaw, { rotation: PRESENT_SWEEP, duration: 0.4 }, 0)
       .to([p.lidL, p.lidR], { y: READ_LID, duration: 0.4 }, 0);
     look(tl, p, CARD_GAZE.x, CARD_GAZE.y, 0, 0.4);
+    return tl;
+  },
+};
+
+// ─── Invite (the landing page's hero) ────────────────────────────────────────
+
+/** When, into each round of her invite, she turns from "upload yours" to "or start from scratch" — the hero's speech bubble changes on the same beat. */
+export const INVITE_SCRATCH_AT = 4;
+/** One round of her invite, in seconds. */
+export const INVITE_SECONDS = 7.6;
+/**
+ * Pointing at the upload box under her: the arm held out to her right (our
+ * left), only a little below level so it stays up off the floor, and the
+ * pincer bent down at the wrist to aim at the box…
+ */
+const INVITE_POINT = { claw: -48, pincer: -40 } as const;
+/** …and jabbed a little further at it: "right there". */
+const INVITE_JAB = { claw: -55, pincer: -50 } as const;
+
+/** Tucks the CV under her small claw: its copy takes over, lifts to let the sheet in, and presses it to her side. */
+function tuckSheet(tl: TL, p: MoxieParts, at: number) {
+  tl.set(p.hugFiles, { opacity: 1 }, at)
+    .set(p.smallClaw, { opacity: 0 }, at)
+    .set(p.hugStack, { opacity: 0 }, at)
+    .set(p.hugSheet, { y: 34, rotation: 0, opacity: 0 }, at)
+    .to(p.hugFiles, { rotation: -12, duration: 0.2, ease: "power2.out" }, at + 0.05)
+    .to(p.hugSheet, { opacity: 1, duration: 0.15 }, at + 0.1)
+    .to(p.hugSheet, { y: 0, duration: 0.45, ease: "back.out(1.6)" }, at + 0.1)
+    .to(p.hugFiles, { rotation: 0, duration: 0.35, ease: "back.out(2)" }, at + 0.35)
+    .to(p.root, { scaleY: 0.97, scaleX: 1.02, duration: 0.12, ease: "power2.out" }, at + 0.4)
+    .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.35, ease: "back.out(2.5)" }, at + 0.52);
+  tapFolders(tl, p, at + 0.55);
+}
+
+/**
+ * The hero's greeter. A CV tucked under her small claw, reading glasses on,
+ * she spots you, hops, and waves hello. Then, round after round: a pat of the
+ * CV under her arm and a look at you — got one? — and she points down at the
+ * upload box under her, jabbing at it, nodding you on. Then a curious head
+ * tilt — no CV? — that lights up into a ^‿^ squint and a happy hop, claw up
+ * and clacking: we'll build one from scratch! The words are the page's (a speech bubble beside her that
+ * follows her rounds — see HeroStart), so they stay crisp at any size.
+ */
+const invite: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    tuckSheet(tl, p, 0);
+    glassesOn(tl, p, 0.25);
+    // Spots you: a look, a little hop, stalks perking up…
+    const hi = 0.9;
+    look(tl, p, 0, 2, hi, 0.2);
+    tl.to(p.root, { scaleY: 0.94, scaleX: 1.04, duration: 0.16, ease: "power2.in" }, hi)
+      .to(p.root, { y: -14, scaleY: 1.05, scaleX: 0.97, duration: 0.24, ease: "power2.out" }, hi + 0.16)
+      .to(p.root, { y: 0, scaleY: 0.95, scaleX: 1.04, duration: 0.2, ease: "power2.in" }, hi + 0.4)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.5, ease: "back.out(2.5)" }, hi + 0.6)
+      .to(p.shadow, { scaleX: 0.86, opacity: SHADOW_OPACITY * 0.7, duration: 0.24, ease: "power2.out" }, hi + 0.16)
+      .to(p.shadow, { scaleX: 1, opacity: SHADOW_OPACITY, duration: 0.2, ease: "power2.in" }, hi + 0.4)
+      .to(p.stalkL, { rotation: -4, duration: 0.32, ease: "back.out(3)" }, hi + 0.14)
+      .to(p.stalkR, { rotation: 4, duration: 0.32, ease: "back.out(3)" }, hi + 0.14);
+    stretchStalks(tl, p, 1.1, hi + 0.14, 0.32, "back.out(3)");
+    // …and waves hello: "hi!"
+    mouth(tl, p, "talk", hi + 0.45);
+    mumble(tl, p, hi + 0.45, 0.4);
+    mouth(tl, p, "smile", hi + 0.9);
+    tl.to([p.eyeL, p.eyeR], { scale: 1.06, duration: 0.25, ease: "back.out(2.5)" }, hi + 0.2);
+    const end = waveClaw(tl, p, hi + 0.4, 2, 14, -8);
+    tl.to([p.eyeL, p.eyeR], { scale: 1, duration: 0.4 }, end - 0.6);
+    stretchStalks(tl, p, 1, end - 0.7, 0.5, "power2.inOut");
+    tl.to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.5 }, end - 0.7);
+    blink(tl, p, end - 0.3);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+
+    // Got a CV? She glances down at the one under her arm and pats it twice…
+    look(tl, p, 10, 8, 0, 0.3);
+    tl.to(p.stalkL, { rotation: 5, duration: 0.4 }, 0).to(p.stalkR, { rotation: 4, duration: 0.45 }, 0.05);
+    tapFolders(tl, p, 0.3);
+    tapFolders(tl, p, 0.62);
+    tl.to(p.hugSheet, { y: -2, duration: 0.1, ease: "power2.out" }, 0.3).to(p.hugSheet, { y: 0, duration: 0.25, ease: "back.out(3)" }, 0.4);
+    // …then back up at you, eyebrows raised — "one of these?"
+    look(tl, p, 0, -3, 1.0, 0.25);
+    tl.to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.35, ease: "back.out(2)" }, 1.0);
+    stretchStalks(tl, p, 1.08, 1.0, 0.3, "back.out(2)");
+    mouth(tl, p, "talk", 1.05);
+    mumble(tl, p, 1.05, 0.5);
+    mouth(tl, p, "smile", 1.55);
+
+    // Pop it in there: she points down at the upload box, leaning toward it, and jabs at it twice.
+    const point = 1.7;
+    tl.to(p.bigClaw, { rotation: INVITE_POINT.claw, duration: 0.45, ease: "back.out(1.4)" }, point)
+      .to(p.bigPincer, { rotation: INVITE_POINT.pincer, duration: 0.35, ease: "back.out(1.8)" }, point + 0.12)
+      .to(p.root, { rotation: -3, duration: 0.4 }, point);
+    parallax(tl, p, -5, point, 0.4);
+    look(tl, p, -11, 6, point + 0.05, 0.3);
+    stretchStalks(tl, p, 1.02, point, 0.3, "sine.inOut");
+    for (const jab of [point + 0.5, point + 0.85]) {
+      tl.to(p.bigClaw, { rotation: INVITE_JAB.claw, duration: 0.12, ease: "power2.out" }, jab)
+        .to(p.bigClaw, { rotation: INVITE_POINT.claw, duration: 0.2, ease: "back.out(2.5)" }, jab + 0.12)
+        .to(p.bigPincer, { rotation: INVITE_JAB.pincer, duration: 0.1, ease: "power2.out" }, jab + 0.02)
+        .to(p.bigPincer, { rotation: INVITE_POINT.pincer, duration: 0.18, ease: "power2.inOut" }, jab + 0.12);
+    }
+    // Still pointing, she looks back at you and nods you on — go on!
+    const nod = point + 1.3;
+    look(tl, p, 0, 1, nod, 0.25);
+    for (let k = 0; k < 2; k++) {
+      const at = nod + 0.15 + k * 0.32;
+      tl.to(p.root, { rotation: 0, y: 2, duration: 0.13, ease: "power2.out" }, at).to(p.root, { rotation: -3, y: 0, duration: 0.19 }, at + 0.13);
+    }
+    // Done pointing: the pincer straightens first, then the arm swings back up to rest and settles.
+    const lower = nod + 0.95;
+    tl.to(p.bigPincer, { rotation: 0, duration: 0.3, ease: "power2.out" }, lower)
+      .to(p.bigClaw, { rotation: 0, duration: 0.6, ease: "back.out(1.3)" }, lower + 0.08)
+      .to(p.root, { rotation: 0, duration: 0.5 }, lower);
+    parallax(tl, p, 0, lower, 0.5);
+    stretchStalks(tl, p, 1, lower, 0.45, "sine.inOut");
+
+    // No CV? A curious head tilt, claw open, "oh?" — no problem…
+    const ask = INVITE_SCRATCH_AT;
+    tl.to(p.stalkL, { rotation: 9, duration: 0.35, ease: "back.out(2)" }, ask)
+      .to(p.stalkR, { rotation: 7, duration: 0.38, ease: "back.out(2)" }, ask + 0.04)
+      .to(p.root, { rotation: 2.5, duration: 0.35 }, ask)
+      .to(p.bigClaw, { rotation: -14, y: -4, duration: 0.3, ease: "back.out(2)" }, ask)
+      .to(p.bigPincer, { rotation: -12, duration: 0.3, ease: "back.out(2)" }, ask + 0.04);
+    look(tl, p, 2, -4, ask, 0.25);
+    mouth(tl, p, "o", ask + 0.1);
+    // …and she lights up: a happy ^‿^ squint and a big smile, a bouncy hop, claw up and clacking — we'll build one from scratch!
+    const yes = ask + 0.85;
+    mouth(tl, p, "smile", yes);
+    tl.to([p.laughL, p.laughR], { opacity: 1, duration: 0.08, ease: "none" }, yes)
+      .to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.3, ease: "back.out(2)" }, yes)
+      .to(p.root, { rotation: 0, scaleY: 0.95, scaleX: 1.04, duration: 0.12, ease: "power2.in" }, yes)
+      .to(p.root, { y: -10, scaleY: 1.05, scaleX: 0.97, duration: 0.2, ease: "power2.out" }, yes + 0.12)
+      .to(p.root, { y: 0, scaleY: 0.97, scaleX: 1.02, duration: 0.18, ease: "power2.in" }, yes + 0.32)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.4, ease: "back.out(2.5)" }, yes + 0.5)
+      .to(p.bigClaw, { rotation: 20, y: -8, duration: 0.3, ease: "back.out(2)" }, yes + 0.1)
+      .to(p.bigPincer, { rotation: 0, duration: 0.2 }, yes + 0.1);
+    // A happy little wiggle of the stalks while she squints.
+    for (const [i, t] of [0.35, 0.6].entries()) {
+      tl.to(p.stalkL, { rotation: i ? -4 : 4, duration: 0.22 }, yes + t).to(p.stalkR, { rotation: i ? 4 : -4, duration: 0.22 }, yes + t + 0.03);
+    }
+    stretchStalks(tl, p, 1.1, yes + 0.1, 0.25, "back.out(2.5)");
+    for (const t of [0.4, 0.6, 0.8]) {
+      tl.to(p.bigPincer, { rotation: -14, duration: 0.07, ease: "power2.out" }, yes + t).to(p.bigPincer, { rotation: 0, duration: 0.1, ease: "power2.in" }, yes + t + 0.08);
+    }
+    sparkleAt(tl, p, 0, yes + 0.35, { x: 214, y: 132 }, 0.55);
+    sparkleAt(tl, p, 1, yes + 0.6, { x: 168, y: 176 }, 0.45);
+    // Eyes open again, bright, on you.
+    look(tl, p, 0, 1, yes + 0.85, 0.01);
+    tl.to([p.laughL, p.laughR], { opacity: 0, duration: 0.1, ease: "none" }, yes + 0.9)
+      .to([p.eyeL, p.eyeR], { scale: 1.08, duration: 0.2, ease: "back.out(3)" }, yes + 0.9)
+      .to([p.stalkL, p.stalkR], { rotation: 0, duration: 0.3, ease: "back.out(2)" }, yes + 0.9);
+    const settle = yes + 1.15;
+    tl.to(p.bigClaw, { rotation: 0, y: 0, duration: 0.5, ease: "power2.inOut" }, settle)
+      .to([p.eyeL, p.eyeR], { scale: 1, duration: 0.4, ease: "power2.inOut" }, settle + 0.2);
+    stretchStalks(tl, p, 1, settle, 0.5, "power2.inOut");
+    blink(tl, p, settle + 0.75);
+    // A breath, a re-grip of the CV, and round again.
+    tl.to(p.root, { y: -2, scaleY: 1.015, duration: 0.6 }, settle + 0.5).to(p.root, { y: 0, scaleY: 1, duration: 0.6 }, settle + 1.1);
+    tapFolders(tl, p, settle + 1.0);
+    tl.to({}, { duration: 0 }, INVITE_SECONDS);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    tl.set([p.hugFiles, p.hugSheet, p.glassesL, p.glassesR, p.glassesBridge], { opacity: 1 }, 0)
+      .set([p.smallClaw, p.hugStack], { opacity: 0 }, 0)
+      .to(p.bigClaw, { rotation: 14, duration: 0.4 }, 0);
+    look(tl, p, 0, 2, 0, 0.4);
     return tl;
   },
 };
@@ -2638,6 +2907,8 @@ export const MOXIE_PRESETS: Record<MoxieAnimation, MoxiePreset> = {
   read,
   polish,
   stamp,
+  review,
+  invite,
   tada,
   downloaded,
   verifying,

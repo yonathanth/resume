@@ -322,3 +322,56 @@ export function RealResultsSection() {
     </section>
   );
 }
+
+// --- In the hero ----------------------------------------------------------------
+
+/** The sheets in the hero show only their top part (the name, summary and first job make the point), fading out below. */
+const HERO_CROP = 0.58;
+
+/** One sheet as the hero shows it: labelled, tilted, cut off partway down and faded into the page. */
+function HeroSheet({ label, dark, tilt, children }: { label: string; dark?: boolean; tilt: string; children: React.ReactNode }) {
+  return (
+    <figure className={tilt}>
+      <figcaption className="mb-3 flex justify-center sm:mb-4">
+        <span
+          className={`rounded-full px-3 py-1 text-[12px] font-medium sm:px-4 sm:py-1.5 sm:text-[13.5px] ${
+            dark ? "bg-neutral-950 text-white" : "bg-neutral-100 text-neutral-500"
+          }`}
+        >
+          {label}
+        </span>
+      </figcaption>
+      <div className="relative overflow-hidden rounded-t-lg" style={{ aspectRatio: `${SHEET_W} / ${SHEET_H * HERO_CROP}` }}>
+        <Sheet className="rounded-lg border border-neutral-200/80 shadow-[0_1px_2px_rgba(15,17,21,0.05),0_10px_28px_-12px_rgba(15,17,21,0.18)]">{children}</Sheet>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[14%] bg-gradient-to-b sm:h-1/4 from-[#fdfdfd]/0 to-[#fdfdfd]" />
+      </div>
+    </figure>
+  );
+}
+
+/**
+ * The hero's "what changes in your CV": the same before & after as the six
+ * seconds section, as just the two sheets, side by side at every size —
+ * Before lower and leaning left, After rising, leaning right and overlapping
+ * it, the hand-drawn arrow sweeping between them.
+ */
+export function HeroBeforeAfter() {
+  return (
+    <div className="relative mx-auto grid w-full max-w-3xl grid-cols-2">
+      <svg viewBox="0 0 160 90" fill="none" className="pointer-events-none absolute left-[42%] top-1 z-20 hidden w-[16%] text-accent sm:block" aria-hidden>
+        <path d="M8 82 C 24 34, 70 10, 140 16" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
+        <path d="M126 6 L 142 16 L 128 28" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <div className="mt-8 sm:mt-14">
+        <HeroSheet label="Before" tilt="-rotate-[2.5deg]">
+          <BeforeResume />
+        </HeroSheet>
+      </div>
+      <div className="relative z-10 -ml-3 sm:-ml-6">
+        <HeroSheet label="After" dark tilt="rotate-[2deg]">
+          <AfterResume />
+        </HeroSheet>
+      </div>
+    </div>
+  );
+}

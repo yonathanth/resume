@@ -7,6 +7,7 @@ import {
   siShopify,
   siSpotify,
   siStripe,
+  siTrustpilot,
   type SimpleIcon,
 } from "simple-icons";
 
@@ -40,6 +41,14 @@ export const HIRED_AT = {
     { name: "Notion", icon: siNotion },
   ] as Brand[],
 };
+
+/**
+ * The rating above the hero headline, and where it's from. PLACEHOLDER for the
+ * design: before this goes live it must be our real Trustpilot rating, linked
+ * to our Trustpilot page (`href`) — or removed. A made-up rating attributed to
+ * Trustpilot misleads visitors and breaks Trustpilot's terms.
+ */
+export const HERO_RATING = { score: 4.8, platform: "Trustpilot", icon: siTrustpilot, href: undefined as string | undefined };
 
 /** A before/after story for the swipeable results. */
 export interface ResultStory {

@@ -86,6 +86,7 @@ export function queryParts(svg: SVGSVGElement): MoxieParts {
     folderFront: one("folderFront"),
     hugFiles: one("hugFiles"),
     hugStack: one("hugStack"),
+    hugSheet: one("hugSheet"),
     hugPincer: one("hugPincer"),
     glassesL: one("glassesL"),
     glassesR: one("glassesR"),

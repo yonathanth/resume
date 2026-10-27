@@ -1,129 +1,77 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useCvTemplates } from "@/hooks/use-cv-templates";
-import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
+import React from "react";
+import { Star } from "lucide-react";
+import { HeroStart } from "@/components/landing/HeroStart";
+import { HeroBeforeAfter } from "@/components/RealResultsSection";
+import { BrandIcon } from "@/components/landing/BrandIcon";
 import { CtaButton } from "@/components/CtaButton";
+import { HERO_RATING } from "@/lib/social-proof";
 
-
-// How many real templates rotate through the hero fan, and how often.
-const DECK_SIZE = 6;
-const CYCLE_MS = 3200;
-
-// Where a card sits relative to the active one: centre, either flank, or
-// tucked out of sight behind the centre waiting for its turn.
-function slotStyle(offset: number, size: number): { className: string; style: React.CSSProperties } {
-  if (offset === 0) {
-    return { className: "z-30 opacity-100", style: { transform: "translateX(0) rotate(0deg) scale(1)" } };
-  }
-  if (offset === 1) {
-    return { className: "z-20 opacity-100", style: { transform: "translateX(64%) translateY(0) rotate(0deg) scale(0.84)" } };
-  }
-  if (offset === size - 1) {
-    return { className: "z-20 opacity-100", style: { transform: "translateX(-64%) translateY(0) rotate(0deg) scale(0.84)" } };
-  }
-  return { className: "z-10 opacity-0", style: { transform: "translateX(0) translateY(24px) scale(0.7)" } };
-}
-
+/**
+ * The landing page's first screen, built to get a visitor started: the
+ * rating and the promise on the left, the first step (upload a CV, or build
+ * one from scratch) on the right. Under it, what they get: the same CV before
+ * and after, side by side. On phones it all stacks in that order.
+ */
 export function Hero() {
-  const { data: templates } = useCvTemplates();
-  const [active, setActive] = useState(0);
-  const [paused, setPaused] = useState(false);
-
-  const deck = (templates ?? []).slice(0, DECK_SIZE);
-  const size = deck.length;
-
-  useEffect(() => {
-    if (size < 2 || paused) return;
-    const interval = setInterval(() => setActive((prev) => (prev + 1) % size), CYCLE_MS);
-    return () => clearInterval(interval);
-  }, [size, paused]);
-
   return (
-    <section className="relative min-h-[100svh] flex flex-col items-center justify-center text-center px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto pt-24 sm:pt-28 pb-10 sm:pb-16 lg:pb-20">
-      {/* Template fan — its feet tuck under the headline from sm up; on phones it sits clear of it */}
-      <div
-        className="hero-rise relative -mb-3 sm:-mb-14 h-[162px] sm:h-[188px] w-[236px] sm:w-[304px] flex items-start justify-center"
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-      >
-        {/* Soft brand glow behind the stack */}
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[280px] h-[172px] sm:w-[370px] sm:h-[210px] rounded-full bg-[radial-gradient(closest-side,rgba(255,122,46,0.22),rgba(255,155,96,0.08)_55%,transparent)] blur-2xl pointer-events-none hero-glow" />
+    <>
+      <section className="relative mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-5 pb-16 pt-36 sm:gap-14 sm:px-8 sm:pt-40 lg:min-h-[86svh] lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:gap-20 lg:px-10 lg:pb-16">
+        {/* The rating and the promise */}
+        <div className="flex flex-col items-start text-left">
+          {/* The rating, and where it's from (Trustpilot's own green squares and mark) */}
+          <a
+            href={HERO_RATING.href}
+            target={HERO_RATING.href ? "_blank" : undefined}
+            rel="noreferrer"
+            className="hero-rise flex items-center gap-2.5 text-[14px] text-neutral-600"
+          >
+            <span className="flex items-center gap-[3px]" aria-hidden="true">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <span key={i} className="flex h-[18px] w-[18px] items-center justify-center bg-[#00b67a]">
+                  <Star className="h-3 w-3 text-white" fill="currentColor" strokeWidth={0} />
+                </span>
+              ))}
+            </span>
+            <span>
+              <strong className="font-semibold text-neutral-900">{HERO_RATING.score}</strong> on
+            </span>
+            <span className="inline-flex items-center gap-1 font-semibold text-neutral-900">
+              <BrandIcon icon={HERO_RATING.icon} className="h-4 w-4" />
+              {HERO_RATING.platform}
+            </span>
+          </a>
 
-        {/* The card stack */}
-        <div className="absolute inset-0 flex items-start justify-center">
-        {size === 0 &&
-          [-1, 0, 1].map((pos) => (
-            <div
-              key={pos}
-              className={`absolute top-0 w-[104px] sm:w-[124px] aspect-[210/297] rounded-lg bg-white border border-neutral-200 ${
-                pos === 0 ? "z-30" : "z-20 opacity-70"
-              }`}
-              style={{
-                transform: pos === 0 ? undefined : `translateX(${pos * 64}%) scale(0.84)`,
-              }}
-            >
-              <div className="absolute inset-0 rounded-lg animate-pulse bg-neutral-100/80" />
-            </div>
-          ))}
+          <h1 className="hero-rise [animation-delay:120ms] mt-6 text-4xl font-bold leading-[1.06] tracking-tight text-neutral-950 sm:text-6xl lg:text-[52px]">
+            Your CV, rewritten for{" "}
+            <span className="hero-shimmer bg-[linear-gradient(110deg,var(--accent-strong),var(--accent)_35%,var(--accent-light)_50%,var(--accent)_65%,var(--accent-strong))] bg-clip-text text-transparent">
+              the job you want.
+            </span>
+          </h1>
 
-        {deck.map((template, i) => {
-          const offset = (i - active + size) % size;
-          const { className, style } = slotStyle(offset, size);
-          const isActive = offset === 0;
-          return (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => setActive(i)}
-              tabIndex={offset === 0 || offset === 1 || offset === size - 1 ? 0 : -1}
-              aria-label={`Show ${template.name} template`}
-              className={`group/card absolute top-0 w-[104px] sm:w-[124px] cursor-pointer transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${className}`}
-              style={style}
-            >
-              <TemplateThumbnail
-                templateId={template.id}
-                title={`${template.name} template example`}
-                className={`aspect-[210/297] rounded-lg border transition-shadow duration-700 ${
-                  isActive
-                    ? "border-neutral-200 shadow-[0_24px_48px_-16px_rgba(15,17,21,0.28),0_0_0_1px_rgba(255,94,31,0.08)]"
-                    : "border-neutral-200/80 shadow-[0_12px_28px_-12px_rgba(15,17,21,0.18)]"
-                }`}
-              />
-              {/* Dim the flanks so the centre card reads first */}
-              <div
-                className={`absolute inset-0 rounded-lg bg-white transition-opacity duration-700 pointer-events-none ${
-                  isActive ? "opacity-0" : "opacity-25 group-hover/card:opacity-0"
-                }`}
-              />
-            </button>
-          );
-        })}
+          <p className="hero-rise [animation-delay:220ms] mt-5 max-w-md text-[15px] leading-snug text-neutral-500 sm:text-[17px] sm:leading-[1.45]">
+            Upload your CV and get it rewritten around real results, ready to send. Your first CV is free, no card needed.
+          </p>
+
+          <div className="hero-rise [animation-delay:280ms] mt-8">
+            <CtaButton href="/signup" size="hero" shine="subtle">
+              Try for free
+            </CtaButton>
+          </div>
         </div>
 
-        {/* The headline slides over the cards' feet: a soft frosted fade melts them into the page */}
-        <div className="absolute z-40 -inset-x-16 -bottom-2 h-14 sm:h-[72px] pointer-events-none bg-gradient-to-b from-transparent via-[#fdfdfd]/25 to-[#fdfdfd]/60 backdrop-blur-[1px] [mask-image:linear-gradient(to_bottom,transparent,black_70%)]" />
-      </div>
+        {/* The first step: upload a CV, or build one from scratch */}
+        <div className="hero-rise [animation-delay:320ms] flex w-full justify-start lg:justify-end">
+          <HeroStart />
+        </div>
+      </section>
 
-      {/* Headline */}
-      <h1 className="hero-rise [animation-delay:120ms] relative z-50 text-4xl sm:text-6xl md:text-7xl lg:text-[72px] font-bold tracking-tight text-neutral-950 max-w-4xl leading-[1.08] sm:leading-[1.04]">
-        Craft resumes that <br className="hidden sm:inline" />
-        land{" "}
-        <span className="hero-shimmer bg-[linear-gradient(110deg,var(--accent-strong),var(--accent)_35%,var(--accent-light)_50%,var(--accent)_65%,var(--accent-strong))] bg-clip-text text-transparent">
-          interviews.
-        </span>
-      </h1>
-
-      {/* Sub-headline */}
-      <p className="hero-rise [animation-delay:220ms] mt-5 text-lg sm:text-xl text-neutral-500 font-normal max-w-xl mx-auto leading-relaxed">
-        Build your resume with AI, tailor it to every job, and download it ready to send.
-      </p>
-
-      {/* CTA Buttons — side by side at every size */}
-      <div className="hero-rise [animation-delay:320ms] mt-8 flex flex-row items-center justify-center gap-2.5 sm:gap-3">
-        <CtaButton href="/signup" size="hero" shine="strong">Start free</CtaButton>
-        <CtaButton href="/how-it-works" variant="secondary" size="hero">How it works</CtaButton>
-      </div>
-    </section>
+      {/* What they get */}
+      <section aria-label="What GoMoxie does to a CV" className="hero-rise [animation-delay:420ms] mx-auto w-full max-w-5xl px-5 pb-20 pt-6 sm:px-8 sm:pb-28 lg:px-10">
+        <p className="mb-7 text-center text-[13px] font-semibold uppercase tracking-[0.14em] text-neutral-400">What changes in your CV</p>
+        <HeroBeforeAfter />
+      </section>
+    </>
   );
 }

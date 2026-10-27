@@ -18,6 +18,7 @@ import {
   groundPoint,
   HUG_FILES,
   HUG_PINCER_TURN,
+  HUG_SHEET,
   HUG_WRIST,
   INK_STYLE,
   lensCorner,
@@ -201,11 +202,44 @@ function HugFiles() {
           <rect x={cx - 12} y={y + 32} width="24" height="9" rx="2" fill="#FFFFFF" fillOpacity="0.65" stroke={C.ink} strokeWidth="1.2" strokeOpacity="0.5" />
         </g>
       </g>
+      <HugSheet />
       {/* The pincer, turned back in over the folders' front corner. */}
       <g data-part="hugPincer">
         <g transform={`translate(${HUG_WRIST.x - 404} ${HUG_WRIST.y - 322}) rotate(${HUG_PINCER_TURN} 404 322)`}>
           <path d={SMALL_PINCER} fill={C.coral} stroke={C.ink} strokeWidth="4" strokeLinejoin="round" />
         </g>
+      </g>
+    </g>
+  );
+}
+
+/**
+ * A single CV tucked under the hugging arm instead of the folders (the hero's
+ * invite): pressed to her side, its corner turned down, a name, a heading and
+ * a few lines on it — facing us, so you can tell it's a CV.
+ */
+function HugSheet() {
+  const { x, y, width: w, height: h, tilt } = HUG_SHEET;
+  const r = x + w;
+  const b = y + h;
+  const fold = 9;
+  return (
+    <g data-part="hugSheet" style={{ opacity: 0 }}>
+      <g transform={`rotate(${tilt} ${x + w / 2} ${b})`}>
+        {/* A second page peeking out behind it. */}
+        <rect x={x + 4} y={y - 3} width={w} height={h} rx="1.5" fill="#EADFD0" stroke={C.ink} strokeWidth="2.2" transform={`rotate(5 ${x + w / 2} ${b})`} />
+        <path d={`M${x} ${y + 1.5} Q${x} ${y} ${x + 1.5} ${y} H${r - fold} L${r} ${y + fold} V${b - 1.5} Q${r} ${b} ${r - 1.5} ${b} H${x + 1.5} Q${x} ${b} ${x} ${b - 1.5} Z`} fill={C.cream} stroke={C.ink} strokeWidth="2.6" strokeLinejoin="round" />
+        <path d={`M${r - fold} ${y} V${y + fold} H${r}`} fill="#EADFD0" stroke={C.ink} strokeWidth="2" strokeLinejoin="round" />
+        <path d={`M${x + 7} ${y + 10} H${x + 26}`} stroke={C.coral} strokeWidth="4" strokeLinecap="round" />
+        <path d={`M${x + 7} ${y + 17} H${x + 21}`} stroke={C.ink} strokeWidth="2.2" strokeLinecap="round" opacity="0.55" />
+        <path d={`M${x + 7} ${y + 28} H${x + 18}`} stroke={C.coral} strokeWidth="2.6" strokeLinecap="round" opacity="0.9" />
+        <path
+          d={`M${x + 7} ${y + 35} H${r - 7} M${x + 7} ${y + 41} H${r - 11} M${x + 7} ${y + 47} H${r - 6} M${x + 7} ${y + 53} H${r - 14}`}
+          stroke={C.ink}
+          strokeWidth="2"
+          strokeLinecap="round"
+          opacity="0.32"
+        />
       </g>
     </g>
   );

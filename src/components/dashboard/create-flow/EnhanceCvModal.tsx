@@ -31,6 +31,7 @@ import {
 } from "./ClarifyingQuestionsForm";
 import { ClarificationQuestion, CVContentDTO, WordingPreview, canUseCareerProfiles, previewCvWording, type GenerateCvMismatch } from "@/lib/api";
 import { useToast } from "@/components/Toaster";
+import { takeHeroHandoff } from "@/lib/hero-handoff";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useProGate } from "@/hooks/use-pro-gate";
 import { useAccountGate } from "@/components/account-gate/AccountGate";
@@ -486,6 +487,16 @@ export function EnhanceCvModal({
         </>
       }
     >
+        {/* A CV dropped on the landing page's hero: on to the template step with it. */}
+        {step === firstStep && (
+          <RunOnMount
+            run={() => {
+              const handoff = takeHeroHandoff();
+              if (handoff?.file) chooseTemplateThen({ kind: "upload", file: handoff.file }, "upload-file");
+            }}
+          />
+        )}
+
         {/* ================= TEMPLATE (right before the first AI call) ================= */}
         {step === "choose-template" && (
           <div>

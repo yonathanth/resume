@@ -191,6 +191,26 @@ body {
   animation: moxie-continue-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Moxie "typing" in her speech bubble: the dots show for a moment, then make way for the line. */
+@keyframes moxie-typing {
+  0% { opacity: 0; }
+  12%, 82% { opacity: 1; }
+  100% { opacity: 0; visibility: hidden; }
+}
+
+.moxie-typing {
+  animation: moxie-typing 0.7s ease both;
+}
+
+@keyframes moxie-typing-dot {
+  0%, 100% { transform: translateY(0); opacity: 0.45; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+
+.moxie-typing-dot {
+  animation: moxie-typing-dot 0.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moxie-overlay-in,
   .moxie-word-in,
@@ -199,7 +219,8 @@ body {
     animation: none;
   }
 
-  .moxie-line-out {
+  .moxie-line-out,
+  .moxie-typing {
     display: none;
   }
 }

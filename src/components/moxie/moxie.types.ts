@@ -18,6 +18,10 @@ export const MOXIE_ANIMATIONS = [
   "read",
   "polish",
   "stamp",
+  // The recruiter (the landing page's hero): reads your CV, looks at you over her glasses, nods, stamps it.
+  "review",
+  // The hero's greeter: a CV tucked under her arm, glasses on, she says hi, then points you to uploading yours — or starting from scratch.
+  "invite",
   // Celebrations and moments (tier 2) — previewed on /dev/moxie.
   "tada",
   "downloaded",
@@ -163,6 +167,8 @@ export interface MoxieParts {
   hugFiles: SVGGElement;
   /** Just the folders — they slip, and get hitched back up. */
   hugStack: SVGGElement;
+  /** A single CV tucked under that same arm instead of the folders (the hero's invite). */
+  hugSheet: SVGGElement;
   /** That copy's pincer — taps the folders while she waits. */
   hugPincer: SVGGElement;
   /** Half-moon reading glasses, one lens inside each eye so they follow the eyes. */
