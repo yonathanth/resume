@@ -50,13 +50,13 @@ export function HomePage() {
         <HiredAtStrip />
 
         {/* How It Works (Directly below Hero) */}
-        <div className={`${styles.sectionScene} ${styles.panel}`}>
+        <div className={`${styles.sectionScene} ${styles.glowLeft}`}>
           <LandingDetail kind="keywords" />
           <HowItWorks />
         </div>
 
         {/* Templates Showcase */}
-        <div className={styles.sectionScene}>
+        <div className={`${styles.sectionScene} ${styles.glowRight}`}>
           <LandingDetail kind="templates" />
           <TemplatesSection />
         </div>
@@ -65,12 +65,12 @@ export function HomePage() {
         {SHOW_SIX_SECONDS && <RealResultsSection />}
 
         {/* More before & afters to swipe through */}
-        <div className={styles.panel}>
+        <div className={`${styles.sectionScene} ${styles.glowLeft}`}>
           <ResultsCarousel />
         </div>
 
         {/* Pricing (Free, Pro) */}
-        <div className={styles.sectionScene}>
+        <div className={`${styles.sectionScene} ${styles.glowRight}`}>
           <LandingDetail kind="ready" />
           <PricingSection />
         </div>

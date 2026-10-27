@@ -2,13 +2,6 @@
   position: relative;
 }
 
-/* Every other section sits on a soft grey band, the full width of the screen —
-   the same grey as Moxie's bubble and tiles in the hero. */
-.panel {
-  position: relative;
-  background: #f4f4f3;
-}
-
 /* A faint warm wash over the top of the page, behind the hero, fading out before the Before/After. */
 .heroGlow {
   position: absolute;
@@ -19,6 +12,28 @@
     radial-gradient(60% 45% at 50% 0%, rgba(255, 94, 31, 0.09), transparent 75%),
     radial-gradient(35% 35% at 82% 38%, rgba(255, 155, 96, 0.1), transparent 70%),
     radial-gradient(30% 30% at 12% 30%, rgba(255, 199, 168, 0.12), transparent 70%);
+}
+
+/* The hero's warm wash, carried down the page: a soft glow behind a section, off to one side (alternating as you scroll). */
+.glowLeft::before,
+.glowRight::before {
+  content: "";
+  position: absolute;
+  inset: -12% 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.glowLeft::before {
+  background:
+    radial-gradient(40% 45% at 12% 40%, rgba(255, 155, 96, 0.11), transparent 70%),
+    radial-gradient(30% 35% at 85% 75%, rgba(255, 199, 168, 0.12), transparent 70%);
+}
+
+.glowRight::before {
+  background:
+    radial-gradient(40% 45% at 88% 40%, rgba(255, 155, 96, 0.11), transparent 70%),
+    radial-gradient(30% 35% at 15% 75%, rgba(255, 199, 168, 0.12), transparent 70%);
 }
 
 .detail {

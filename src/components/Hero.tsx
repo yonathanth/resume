@@ -26,12 +26,8 @@ export function Hero() {
             rel="noreferrer"
             className="hero-rise flex items-center gap-2.5 text-[14px] text-neutral-600"
           >
-            <span className="flex items-center gap-[3px]" aria-hidden="true">
-              {[0, 1, 2, 3, 4].map((i) => (
-                <span key={i} className="flex h-[18px] w-[18px] items-center justify-center bg-[#00b67a]">
-                  <Star className="h-3 w-3 text-white" fill="currentColor" strokeWidth={0} />
-                </span>
-              ))}
+            <span className="flex h-[18px] w-[18px] items-center justify-center bg-[#00b67a]" aria-hidden="true">
+              <Star className="h-3 w-3 text-white" fill="currentColor" strokeWidth={0} />
             </span>
             <span>
               <strong className="font-semibold text-neutral-900">{HERO_RATING.score}</strong> on
