@@ -2815,6 +2815,214 @@ const invite: MoxiePreset = {
   },
 };
 
+// ─── Peeking in from the screen's edge (the landing page's quick start) ───────
+
+/** When, into her peek, the page slides her the rest of the way out (MoxiePeek follows these beats)… */
+export const PEEK_OUT_AT = 1.9;
+/** …and when her speech bubble opens, as her wave ends. */
+export const PEEK_BUBBLE_AT = 3.4;
+
+/**
+ * Peeking in from the right edge of the screen (the page slides her in and
+ * out; this is what she does meanwhile), dressed as the recruiter: reading
+ * glasses on, a CV tucked under her small claw. Craning round the edge, leaning in,
+ * she looks left, up — then at you. Out she comes the rest of the way,
+ * straightens up with a little hop and waves hello. Then she waits with you:
+ * breathing, blinking, and now and then pointing up at her speech bubble —
+ * "go on, pick one".
+ */
+/** The recruiter's look, put on at once (she's still out of sight): glasses on, a CV tucked under her small claw. */
+function recruiterProps(tl: TL, p: MoxieParts, at: number) {
+  tl.set(p.hugFiles, { opacity: 1, rotation: 0 }, at)
+    .set(p.smallClaw, { opacity: 0 }, at)
+    .set(p.hugStack, { opacity: 0 }, at)
+    .set(p.hugSheet, { opacity: 1, y: 0, rotation: 0 }, at)
+    .set([p.glassesL, p.glassesR], { opacity: 1, y: 0 }, at)
+    .set(p.glassesBridge, { opacity: 1 }, at);
+}
+
+/**
+ * Peeking round the screen's edge. MoxiePeek slides her so the edge runs at
+ * `EDGE_X` in the drawing: just short of her legs, so they stay out of sight
+ * behind it, while her stalks crane round it far enough for an eye to show.
+ */
+export const EDGE_X = 238;
+/**
+ * Craning round the edge: stalks leaning and stretched toward it, her body shifted a little after them,
+ * and her big claw lowered from the shoulder so it isn't in front of the eye that's looking.
+ */
+const EDGE_PULL = { stalkL: -28, stalkR: -22, stretch: 1.14, shift: -12, claw: -30 } as const;
+
+/** Leans round the edge to look. Returns when she's there. */
+function craneRoundEdge(tl: TL, p: MoxieParts, at: number): number {
+  tl.to(p.stalkL, { rotation: EDGE_PULL.stalkL, duration: 0.55, ease: "back.out(1.4)" }, at)
+    .to(p.stalkR, { rotation: EDGE_PULL.stalkR, duration: 0.6, ease: "back.out(1.4)" }, at + 0.05)
+    .to(p.root, { rotation: -3, duration: 0.5, ease: "power2.out" }, at)
+    .to(p.bigClaw, { rotation: EDGE_PULL.claw, duration: 0.45, ease: "power2.out" }, at);
+  stretchStalks(tl, p, EDGE_PULL.stretch, at + 0.05, 0.55, "back.out(1.6)");
+  parallax(tl, p, EDGE_PULL.shift, at, 0.5, "power2.out");
+  return at + 0.6;
+}
+
+/** Straightens up from her peek: stalks and body back where they belong. */
+function straightenFromEdge(tl: TL, p: MoxieParts, at: number, duration = 0.4) {
+  tl.to([p.stalkL, p.stalkR, p.bigClaw], { rotation: 0, duration, ease: "power2.inOut" }, at)
+    .to(p.root, { rotation: 0, duration, ease: "power2.inOut" }, at);
+  stretchStalks(tl, p, 1, at, duration, "power2.inOut");
+  parallax(tl, p, 0, at, duration, "power2.inOut");
+}
+
+/** Her peek, set at once (reduced motion). */
+function edgePose(tl: TL, p: MoxieParts, at: number) {
+  tl.set(p.stalkL, { rotation: EDGE_PULL.stalkL }, at)
+    .set(p.stalkR, { rotation: EDGE_PULL.stalkR }, at)
+    .set(p.root, { rotation: -3 }, at)
+    .set(p.bigClaw, { rotation: EDGE_PULL.claw }, at);
+  stretchStalks(tl, p, EDGE_PULL.stretch, at, 0, "none");
+  parallax(tl, p, EDGE_PULL.shift, at, 0, "none");
+}
+
+const peekSide: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    recruiterProps(tl, p, 0);
+    // Craning round the edge to look.
+    const there = craneRoundEdge(tl, p, 0);
+    // Looking around: across the page, up at it — and then right at you.
+    look(tl, p, -11, 2, there - 0.2, 0.25);
+    look(tl, p, -6, -9, 1.05, 0.25);
+    look(tl, p, 0, 2, 1.5, 0.25);
+    blink(tl, p, 1.65);
+
+    // Out she comes the rest of the way: straightens up with a hop…
+    const out = PEEK_OUT_AT;
+    straightenFromEdge(tl, p, out, 0.4);
+    tl.to(p.root, { scaleY: 0.95, scaleX: 1.04, duration: 0.14, ease: "power2.in" }, out)
+      .to(p.root, { y: -10, scaleY: 1.05, scaleX: 0.97, duration: 0.2, ease: "power2.out" }, out + 0.14)
+      .to(p.root, { y: 0, scaleY: 0.97, scaleX: 1.02, duration: 0.18, ease: "power2.in" }, out + 0.34)
+      .to(p.root, { scaleY: 1, scaleX: 1, duration: 0.4, ease: "back.out(2.5)" }, out + 0.52);
+    // …and waves hello, eyes bright: "hi!"
+    tl.to([p.eyeL, p.eyeR], { scale: 1.06, duration: 0.25, ease: "back.out(2.5)" }, out + 0.3);
+    mouth(tl, p, "talk", out + 0.35);
+    mumble(tl, p, out + 0.35, 0.4);
+    mouth(tl, p, "smile", out + 0.8);
+    const end = waveClaw(tl, p, out + 0.3, 2, 14, -8);
+    tl.to([p.eyeL, p.eyeR], { scale: 1, duration: 0.4 }, end - 0.5);
+    blink(tl, p, end - 0.2);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+    const breath = random(2.6, 3.2);
+    for (let i = 0; i < 2; i++) {
+      const t = i * breath;
+      tl.to(p.root, { y: -2, scaleY: 1.015, duration: breath / 2 }, t).to(p.root, { y: 0, scaleY: 1, duration: breath / 2 }, t + breath / 2);
+    }
+    // A re-grip of the CV under her arm, now and then.
+    if (chance(0.5)) tapFolders(tl, p, random(2.8, breath * 2 - 0.6));
+    // Now and then: "go on, pick one" — the claw points up at her bubble, eyes on it, then back to you.
+    if (chance(0.6)) {
+      const at = random(0.8, 1.6);
+      tl.to(p.bigClaw, { rotation: -24, duration: 0.4, ease: "back.out(1.8)" }, at)
+        .to(p.bigPincer, { rotation: -12, duration: 0.3, ease: "back.out(2)" }, at + 0.05);
+      look(tl, p, -10, -9, at, 0.3);
+      for (const k of [0.5, 0.75]) {
+        tl.to(p.bigPincer, { rotation: -20, duration: 0.07, ease: "power2.out" }, at + k).to(p.bigPincer, { rotation: -12, duration: 0.1 }, at + k + 0.08);
+      }
+      look(tl, p, 0, 2, at + 1.3, 0.3);
+      tl.to(p.bigClaw, { rotation: 0, duration: 0.5, ease: "power2.inOut" }, at + 1.4).to(p.bigPincer, { rotation: 0, duration: 0.4 }, at + 1.45);
+    } else {
+      const at = random(0.8, 2.5);
+      const [x, y] = pick([[-10, -4], [-6, 6], [-11, 1]] as const);
+      look(tl, p, x, y, at);
+      lookHome(tl, p, at + random(1, 1.6), 0.4);
+    }
+    blink(tl, p, random(0.4, breath * 2 - 0.8));
+    tl.to({}, { duration: 0 }, breath * 2);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    recruiterProps(tl, p, 0);
+    tl.to(p.bigClaw, { rotation: 14, duration: 0.4 }, 0);
+    look(tl, p, 0, 2, 0, 0.4);
+    return tl;
+  },
+};
+
+/**
+ * Peeking back round the edge after her entrance (sent away, or scrolled past
+ * the first screen), glasses on. Meanwhile she looks about, blinks and cranes
+ * a little further now and then.
+ */
+const peekEdge: MoxiePreset = {
+  mode: "loop",
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    recruiterProps(tl, p, 0);
+    const there = craneRoundEdge(tl, p, 0.1);
+    look(tl, p, -10, 1, there - 0.25, 0.25);
+    look(tl, p, -2, 3, there + 0.45, 0.25);
+    blink(tl, p, there + 0.6);
+    return tl;
+  },
+  cycle: (p) => {
+    const tl = withBridge(timeline(), p);
+    const length = random(2.4, 3);
+    // Craning a little further round, and easing back.
+    const crane = random(0.2, 0.8);
+    tl.to(p.stalkL, { rotation: EDGE_PULL.stalkL - 5, duration: 0.5, ease: "sine.inOut" }, crane)
+      .to(p.stalkR, { rotation: EDGE_PULL.stalkR - 4, duration: 0.55, ease: "sine.inOut" }, crane + 0.05)
+      .to(p.stalkL, { rotation: EDGE_PULL.stalkL, duration: 0.6, ease: "sine.inOut" }, crane + 0.9)
+      .to(p.stalkR, { rotation: EDGE_PULL.stalkR, duration: 0.6, ease: "sine.inOut" }, crane + 0.95);
+    const [x, y] = pick([[-11, 1], [-8, -8], [-10, 5]] as const);
+    look(tl, p, x, y, crane, 0.25);
+    look(tl, p, -2, 3, crane + random(0.9, 1.3), 0.3);
+    blink(tl, p, random(0.3, length - 0.4));
+    tl.to({}, { duration: 0 }, length);
+    return tl;
+  },
+  reducedPose: (p) => {
+    const tl = withBridge(timeline(), p);
+    recruiterProps(tl, p, 0);
+    edgePose(tl, p, 0);
+    look(tl, p, -2, 3, 0, 0.01);
+    return tl;
+  },
+};
+
+/** Ducking back behind the edge: she straightens up as the page slides her away. */
+const peekEdgeAway: MoxiePreset = {
+  mode: "hold",
+  fromCurrentPose: true,
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    straightenFromEdge(tl, p, 0, 0.45);
+    lookHome(tl, p, 0, 0.3);
+    return tl;
+  },
+};
+
+/** Out from her peek (tapped, or scrolled back up): straightens up with a little hop, then waits with you as after her entrance. */
+const peekEdgeOut: MoxiePreset = {
+  mode: "loop",
+  fromCurrentPose: true,
+  intro: (p) => {
+    const tl = withBridge(timeline(), p);
+    recruiterProps(tl, p, 0);
+    straightenFromEdge(tl, p, 0, 0.4);
+    tl.to(p.root, { scaleY: 0.95, scaleX: 1.04, duration: 0.14, ease: "power2.in" }, 0.15)
+      .to(p.root, { y: -8, scaleY: 1.04, scaleX: 0.98, duration: 0.2, ease: "power2.out" }, 0.29)
+      .to(p.root, { y: 0, scaleY: 1, scaleX: 1, duration: 0.35, ease: "back.out(2)" }, 0.49);
+    look(tl, p, 0, 2, 0.2, 0.3);
+    mouth(tl, p, "smile", 0);
+    return tl;
+  },
+  cycle: (p) => peekSide.cycle!(p),
+  reducedPose: (p) => peekSide.reducedPose!(p),
+};
+
 // ─── Tickle ───────────────────────────────────────────────────────────────────
 
 /** How long the giggle lasts, start to "ahem". */
@@ -2909,6 +3117,10 @@ export const MOXIE_PRESETS: Record<MoxieAnimation, MoxiePreset> = {
   stamp,
   review,
   invite,
+  peekSide,
+  peekEdge,
+  peekEdgeAway,
+  peekEdgeOut,
   tada,
   downloaded,
   verifying,

@@ -65,6 +65,17 @@ export function Navbar({ theme = "light" }: NavbarProps) {
     };
   }, [mobileMenuOpen]);
 
+  // Phones: "Try for free" sits beside the menu toggle — unless the hero's own button (#hero-cta) is on screen.
+  const [heroCtaSeen, setHeroCtaSeen] = useState(true);
+  const heroCtaInView = pathname === "/" && heroCtaSeen;
+  useEffect(() => {
+    const cta = document.getElementById("hero-cta");
+    if (!cta) return;
+    const observer = new IntersectionObserver(([entry]) => setHeroCtaSeen(entry.isIntersecting));
+    observer.observe(cta);
+    return () => observer.disconnect();
+  }, [pathname]);
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll();
@@ -144,16 +155,28 @@ export function Navbar({ theme = "light" }: NavbarProps) {
           </CtaButton>
         </div>
 
-        {/* Mobile menu toggle */}
-        <button
-          type="button"
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className={`md:hidden p-1.5 rounded-lg focus:outline-none ${linkClass}`}
-          aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileMenuOpen}
-        >
-          <MenuToggleIcon open={mobileMenuOpen} className="h-6 w-6" />
-        </button>
+        {/* Phones: "Try for free" (when the hero's isn't in view), and the menu toggle */}
+        <div className="flex items-center gap-3 md:hidden">
+          {!heroCtaInView && !mobileMenuOpen && (
+            <Link
+              href="/signup"
+              className={`menu-in rounded-full px-4 py-2 text-[13.5px] font-semibold transition-colors ${
+                isDark ? "bg-white text-neutral-950 hover:bg-neutral-200" : "bg-neutral-950 text-white hover:bg-neutral-800"
+              }`}
+            >
+              Try for free
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className={`p-1.5 rounded-lg focus:outline-none ${linkClass}`}
+            aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileMenuOpen}
+          >
+            <MenuToggleIcon open={mobileMenuOpen} className="h-6 w-6" />
+          </button>
+        </div>
       </nav>
 
       {/* Phone menu: the whole screen under the bar */}

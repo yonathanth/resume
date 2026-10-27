@@ -14,6 +14,7 @@ import styles from "./HomePage.module.css";
 import { LandingDetail } from "./LandingDetail";
 import { HiredAtStrip } from "./landing/HiredAtStrip";
 import { ResultsCarousel } from "./landing/ResultsCarousel";
+import { MoxiePeek } from "./landing/MoxiePeek";
 
 // The single before & after ("Recruiters give you six seconds", Robel Kassa) —
 // hidden for now; the swipeable "Real results" stories below take its place.
@@ -32,7 +33,7 @@ export function HomePage() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
+    <div className="min-h-screen overflow-x-clip bg-[#fdfdfd] text-neutral-900 selection:bg-neutral-950 selection:text-white relative font-sans">
 
       {/* A warm wash behind the hero */}
       <div className={styles.heroGlow} aria-hidden="true" />
@@ -77,6 +78,9 @@ export function HomePage() {
 
       {/* Minimal Footer */}
       <Footer />
+
+      {/* Moxie, peeking in from the bottom-right edge with a quick start */}
+      <MoxiePeek />
     </div>
   );
 }

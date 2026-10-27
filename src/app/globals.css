@@ -117,6 +117,23 @@ body {
   will-change: transform;
 }
 
+/* Sideways marquee (the "hired at" logos on phones): the track holds the list twice, so -50% loops seamlessly. */
+@keyframes marquee-left {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-marquee-left {
+  animation: marquee-left 24s linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-left {
+    animation: none;
+  }
+}
+
 
 /* Toasts (components/Toaster.tsx) rise in from the bottom. */
 @keyframes toast-enter {
@@ -211,8 +228,20 @@ body {
   animation: moxie-typing-dot 0.6s ease-in-out infinite;
 }
 
+/* Moxie's quick-start bubble on the landing page (MoxiePeek): pops up out of her corner. */
+@keyframes moxie-bubble-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+  to { opacity: 1; transform: none; }
+}
+
+.moxie-bubble-in {
+  transform-origin: 85% 100%;
+  animation: moxie-bubble-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moxie-overlay-in,
+  .moxie-bubble-in,
   .moxie-word-in,
   .moxie-continue-in,
   .moxie-glow {

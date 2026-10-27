@@ -2,7 +2,6 @@
 
 import React from "react";
 import { Star } from "lucide-react";
-import { HeroStart } from "@/components/landing/HeroStart";
 import { HeroBeforeAfter } from "@/components/RealResultsSection";
 import { BrandIcon } from "@/components/landing/BrandIcon";
 import { CtaButton } from "@/components/CtaButton";
@@ -11,9 +10,8 @@ import { HERO_RATING } from "@/lib/social-proof";
 /**
  * The landing page's first screen, a full screen tall: the rating and the
  * promise on the left, and beside them the proof — the same CV before and
- * after, whole. Under it, the first step: Moxie's card (upload a CV, or build
- * one from scratch), centred; she starts greeting once it scrolls into view.
- * On phones it all stacks in that order.
+ * after, whole. Moxie's quick start (upload a CV, or build one from scratch)
+ * peeks in from the screen's edge — see MoxiePeek. On phones it stacks.
  */
 export function Hero() {
   return (
@@ -55,7 +53,7 @@ export function Hero() {
             Upload your CV and get it rewritten around real results, ready to send. Your first CV is free, no card needed.
           </p>
 
-          <div className="hero-rise [animation-delay:280ms] mt-8">
+          <div id="hero-cta" className="hero-rise [animation-delay:280ms] mt-8">
             <CtaButton href="/signup" size="hero" shine="subtle">
               Try for free
             </CtaButton>
@@ -66,11 +64,6 @@ export function Hero() {
         <div className="w-full">
           <HeroBeforeAfter full />
         </div>
-      </section>
-
-      {/* The first step, centred under the hero: upload a CV, or build one from scratch */}
-      <section aria-label="Get started" className="flex justify-center px-5 pb-20 sm:px-8 sm:pb-28">
-        <HeroStart />
       </section>
     </>
   );

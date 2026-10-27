@@ -22,6 +22,12 @@ export const MOXIE_ANIMATIONS = [
   "review",
   // The hero's greeter: a CV tucked under her arm, glasses on, she says hi, then points you to uploading yours — or starting from scratch.
   "invite",
+  // Peeking in from the screen's edge, then waving: the landing page's quick start (MoxiePeek).
+  "peekSide",
+  // Peeking back round that edge afterwards, ducking away, and coming back out.
+  "peekEdge",
+  "peekEdgeAway",
+  "peekEdgeOut",
   // Celebrations and moments (tier 2) — previewed on /dev/moxie.
   "tada",
   "downloaded",
