@@ -1,0 +1,56 @@
+name: Deploy Resume Frontend
+
+on:
+  push:
+    branches:
+      - master
+
+concurrency:
+  group: resume-frontend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy_production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            set -e
+
+            echo "Starting Resume frontend deployment..."
+
+            mkdir -p ~/apps/resume
+            cd ~/apps/resume
+
+            if [ -d ".git" ]; then
+              echo "Pulling latest changes..."
+              git fetch origin master
+              git reset --hard origin/master
+            else
+              echo "Cloning repository..."
+              git clone -b master https://github.com/yonathanth/resume.git .
+            fi
+
+            echo "Installing dependencies..."
+            npm install
+
+            echo "Building Next.js..."
+            npm run build
+
+            echo "Starting/restarting on port 3002..."
+            if pm2 describe resume-frontend > /dev/null 2>&1; then
+              PORT=3002 pm2 restart resume-frontend --update-env
+            else
+              PORT=3002 pm2 start npm --name "resume-frontend" -- start
+            fi
+
+            pm2 save
+
+            echo "Resume frontend deployed successfully!"
