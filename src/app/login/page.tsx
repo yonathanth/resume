@@ -5,7 +5,7 @@ import { AuthLayout } from "@/components/AuthLayout";
 export const metadata: Metadata = pageMetadata({
   title: "Log in",
   description:
-    "Log in to GoMoxie to keep building your resumes.",
+    "Log in to gomoxie to keep building your resumes.",
   path: "/login",
 });
 

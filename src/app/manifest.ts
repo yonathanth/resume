@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE } from "@/lib/site";
 
-// Lets phones add GoMoxie to the home screen with its own name, icon and colours.
+// Lets phones add gomoxie to the home screen with its own name, icon and colours.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: `${SITE.name} – ${SITE.tagline}`,

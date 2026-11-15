@@ -32,7 +32,7 @@ export function HelpView() {
     { title: "Plan & billing", description: "Upgrade, renew or cancel.", icon: CreditCard, tone: "blue", href: "/dashboard/settings#plan" },
   ];
 
-  const supportHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Help with GoMoxie")}${
+  const supportHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Help with gomoxie")}${
     me?.email ? `&body=${encodeURIComponent(`\n\n--\nAccount: ${me.email}`)}` : ""
   }`;
 

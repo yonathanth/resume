@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useRef, useState } from "react";
 import {
   FolderOpen,
@@ -202,6 +203,10 @@ export function TailorCvModal({
   const [mismatch, setMismatch] = useState<GenerateCvMismatch | null>(null);
   // The profile / past resume currently being loaded from a click.
   const [loadingSourceId, setLoadingSourceId] = useState<string | null>(null);
+  // Opened on a specific CV (editor / CV card): it's read straight away and
+  // the flow goes to the job step, so the source picker mustn't flash first.
+  // Cleared once that read ends either way — on failure the picker is the fallback.
+  const [preparingInitialSource, setPreparingInitialSource] = useState(Boolean(initialSourceCvId && !saved));
 
   // AI clarification questions surfaced by /cv/analyze (the whole
   // missing-details form) and job-compatibility gaps surfaced after
@@ -276,7 +281,10 @@ export function TailorCvModal({
 
   const handlePrepareExistingSource = async (sourceId: string, templateId: TemplateId = selectedTemplate) => {
     setFlowError(null);
-    if (!(await requireAccount())) return;
+    if (!(await requireAccount())) {
+      setPreparingInitialSource(false);
+      return;
+    }
     setLoadingSourceId(sourceId);
     try {
       const { cvDocumentId: docId, sourceText, document } =
@@ -305,6 +313,7 @@ export function TailorCvModal({
       setFlowError(flowErrorMessage(err, "Could not load that resume. Please try again."));
     } finally {
       setLoadingSourceId(null);
+      setPreparingInitialSource(false);
     }
   };
 
@@ -679,7 +688,12 @@ export function TailorCvModal({
         {step === "select-source" && initialSourceCvId && !saved && !cvDocumentId && (
           <RunOnMount run={() => void handlePrepareExistingSource(initialSourceCvId, selectedTemplate)} />
         )}
-        {step === "select-source" && (
+        {step === "select-source" && preparingInitialSource && !aiWait && (
+          <div className="flex min-h-[220px] items-center justify-center" role="status" aria-label="Opening your CV">
+            <span className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-900" />
+          </div>
+        )}
+        {step === "select-source" && !preparingInitialSource && (
           <div>
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold tracking-tight text-neutral-950">
@@ -1011,7 +1025,7 @@ export function TailorCvModal({
 
             <textarea
               rows={7}
-              autoFocus
+              autoFocus={canAutoFocus()}
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
               placeholder="Paste the job posting, or a job title like Senior Accountant"

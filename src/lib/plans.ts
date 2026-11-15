@@ -24,14 +24,14 @@ export const FALLBACK_PRICING: PricingCatalog = {
   free: { generations: 1, unpaidCvCap: 3 },
   plans: {
     plus: {
-      weekly: { price: 3.99, available: true },
-      monthly: { price: 7.99, available: true },
-      quarterly: { price: 19.99, available: true },
+      weekly: { price: 4, available: true },
+      monthly: { price: 8, available: true },
+      quarterly: { price: 12, available: true },
     },
     pro: {
-      weekly: { price: 6.99, available: true },
-      monthly: { price: 14.99, available: true },
-      quarterly: { price: 34.99, available: true },
+      weekly: { price: 7, available: true },
+      monthly: { price: 16, available: true },
+      quarterly: { price: 36, available: true },
     },
   },
   plusLimits: {
@@ -51,7 +51,27 @@ export function formatPrice(amount: number): string {
   return `$${amount.toFixed(2).replace(/\.00$/, "")}`;
 }
 
-/** The cheapest way in to a plan — "from $3.99 / week". */
+/**
+ * Weeks a billing period is counted as for the "/ week" price. A month is
+ * counted as 4 weeks and 3 months as 12 (not 4.33 / 13), so the per-week
+ * figure is never lower than what it really works out to — and prices are set
+ * so it comes out whole (services/polar/plans.ts in the backend).
+ */
+export const PERIOD_WEEKS: Record<BillingPeriod, number> = { weekly: 1, monthly: 4, quarterly: 12 };
+
+/** "$2" — the weekly price every plan is shown at (the weekly plan's own price included). */
+export function weeklyPrice(price: number, period: BillingPeriod): string {
+  return formatPrice(price / PERIOD_WEEKS[period]);
+}
+
+const BILLED_EVERY: Record<BillingPeriod, string> = { weekly: "weekly", monthly: "monthly", quarterly: "every 3 months" };
+
+/** "Billed $8 monthly" — what's actually charged, under a weekly price. */
+export function billedAs(price: number, period: BillingPeriod): string {
+  return `Billed ${formatPrice(price)} ${BILLED_EVERY[period]}`;
+}
+
+/** The cheapest way in to a plan — "from $4 / week". */
 export function fromPrice(pricing: PricingCatalog, tier: PaidTier): { price: string; suffix: string } {
   return { price: formatPrice(pricing.plans[tier].weekly.price), suffix: PERIOD_SUFFIX.weekly };
 }

@@ -5,7 +5,7 @@ import { Reveal } from "@/components/Reveal";
 import { CtaButton } from "@/components/CtaButton";
 
 // Before & after: the same (fictional) person's resume as a typical
-// home-made Word document, and as GoMoxie writes and lays it out.
+// home-made Word document, and as gomoxie writes and lays it out.
 // Both sheets are drawn at A4 proportions and scaled to fit their column.
 
 const SHEET_W = 595;

@@ -17,7 +17,7 @@ export function pageMetadata({
   description: string;
   /** The page's path, e.g. "/pricing" — its canonical URL. */
   path: string;
-  /** Use the title as is, without " – GoMoxie" after it. */
+  /** Use the title as is, without " – gomoxie" after it. */
   absoluteTitle?: boolean;
 }): Metadata {
   const shareTitle = absoluteTitle ? title : `${title} – ${SITE.name}`;

@@ -78,7 +78,9 @@ import { getCvFileName } from "@/lib/utils";
 import { useToast } from "@/components/Toaster";
 import { CvPreviewFrame } from "./CvPreviewFrame";
 import { useRouter } from "next/navigation";
-import { dashboardFlowHref } from "@/lib/flow-url";
+import { editorHref } from "@/lib/finished-cv";
+import { createPortal } from "react-dom";
+import { QuickTailorDialog } from "./QuickTailorDialog";
 import { TemplateThumbnail } from "./TemplateThumbnail";
 import { ICON_TONES, OptionTone } from "./OptionCard";
 import { QuickTour, type TourStep } from "../QuickTour";
@@ -102,6 +104,8 @@ interface CvEditorWorkspaceProps {
   onSave: (data: CvData) => void;
   /** After a PDF download succeeds, with the CV's document id. */
   onDownloaded?: (cvDocumentId: string) => void;
+  /** Load this CV again from the server (after it was tailored in place). Without it, the editor route is opened. */
+  onReload?: () => void;
 }
 
 // "personal" (the contact form) plus any section key from the backend's
@@ -540,7 +544,7 @@ function TemplateGalleryCard({
   );
 }
 
-export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }: CvEditorWorkspaceProps) {
+export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, onReload }: CvEditorWorkspaceProps) {
   const toast = useToast();
   const subscriptionStatus = useSubscriptionStatus().data;
   // AI polish comes with any paid plan (or a grant of just that feature).
@@ -1103,19 +1107,15 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
     }
   };
 
-  // "Tailor to a job": saves, then opens the Tailor flow on this CV (same template).
-  // Tailoring makes a new CV from it, so this one stays as it is.
+  // "Tailor to a job": its own short flow (QuickTailorDialog) — into a new
+  // copy, or this CV itself — then the tailored CV opens.
   const router = useRouter();
-  const [openingTailor, setOpeningTailor] = useState(false);
-  const handleTailorToJob = async () => {
-    setOpeningTailor(true);
-    try {
-      const id = await saveNow();
-      router.push(dashboardFlowHref("tailor", { cv: id, template: cv.templateStyle }));
-    } catch {
-      setOpeningTailor(false);
-      toast.error("Couldn't save your changes", { description: "Try again in a moment." });
-    }
+  const [tailorOpen, setTailorOpen] = useState(false);
+  const openTailored = (id: string) => {
+    setTailorOpen(false);
+    // This CV, tailored in place: the page reloads it when it can; otherwise open it fresh.
+    if (id === cv.id && onReload) onReload();
+    else router.push(editorHref(id, "tailor"));
   };
 
   // Leaving the editor (Back or Done) flushes pending edits first, so nothing
@@ -1317,14 +1317,26 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded }:
           {/* Tailor this CV to a job: the Tailor flow, starting from this CV. */}
           <button
             type="button"
-            onClick={() => void handleTailorToJob()}
-            disabled={openingTailor}
+            onClick={() => setTailorOpen(true)}
             className={secondaryButtonClass}
-            title="Make a copy of this CV tailored to a job description"
+            title="Tailor this CV, or a copy of it, to a job description"
           >
-            {openingTailor ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4 text-accent-strong" />}
+            <Target className="w-4 h-4 text-accent-strong" />
             <span className="hidden md:inline">Tailor to a job</span>
           </button>
+          {/* On document.body: the toolbar's blur would otherwise trap the fixed dialog inside it. */}
+          {tailorOpen &&
+            createPortal(
+              <QuickTailorDialog
+                saveCv={saveNow}
+                templateId={cv.templateStyle}
+                initialJobDescription={cv.jobDescription ?? ""}
+                onClose={() => setTailorOpen(false)}
+                onCopyReady={openTailored}
+                onTailoredInPlace={openTailored}
+              />,
+              document.body
+            )}
 
           {/* Below lg the preview column is hidden — this opens it full screen. */}
           <button

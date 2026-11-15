@@ -19,7 +19,7 @@ export const PAGE_CARDS = {
     title: "Start free. Go Pro when you're applying hard.",
     subtitle: "Every tool free to try. Pro from $4.99 a week.",
     pose: "crown",
-    alt: "gomoxie pricing: start free, Plus from $3.99 a week.",
+    alt: "gomoxie pricing: start free, Plus from $4 a week.",
   },
   templates: {
     eyebrow: "Free resume templates",

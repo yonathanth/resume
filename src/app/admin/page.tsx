@@ -348,7 +348,7 @@ function RecentActivity({ data }: { data: Overview }) {
               Recent payments <SourceTag source="database" />
             </span>
           }
-          description="Chapa payments recorded by GoMoxie"
+          description="Chapa payments recorded by gomoxie"
           actions={<CardLink href="/admin/billing">Billing</CardLink>}
           padded={false}
         >

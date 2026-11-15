@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -426,7 +427,7 @@ function ChangeEmailModal({ me, onClose }: { me: ApiUser; onClose: () => void })
                     id="newEmail"
                     type="email"
                     autoComplete="email"
-                    autoFocus
+                    autoFocus={canAutoFocus()}
                     required
                     value={newEmail}
                     onChange={(e) => setNewEmail(e.target.value)}
@@ -542,7 +543,7 @@ function PasswordForm({ me }: { me: ApiUser }) {
                 id="currentPassword"
                 type="password"
                 autoComplete="current-password"
-                autoFocus
+                autoFocus={canAutoFocus()}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 className={INPUT_CLASS}
@@ -558,7 +559,7 @@ function PasswordForm({ me }: { me: ApiUser }) {
                 id="newPassword"
                 type="password"
                 autoComplete="new-password"
-                autoFocus={!hasPassword}
+                autoFocus={!hasPassword && canAutoFocus()}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className={INPUT_CLASS}
@@ -744,7 +745,7 @@ function PlanSection() {
       ? "Your plan has ended. Your CVs and profiles are still here."
       : `Your first AI CV is free. After that, pay per CV when you download (${formatPrice(pricing.payPerCv.cv_new.price)} new, ${formatPrice(pricing.payPerCv.cv_edit.price)} tailored or improved), or pick a plan.`
     : source === "grant"
-      ? `${planName} from the GoMoxie team${subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""}. You aren't being charged for it.`
+      ? `${planName} from the gomoxie team${subscription.proGrantExpiresAt ? ` until ${formatDate(subscription.proGrantExpiresAt)}` : ""}. You aren't being charged for it.`
       : source === "lifetime"
         ? `Plus for life. Your limits reset every month${subscription.periodEndsAt ? `, next on ${formatDate(subscription.periodEndsAt)}` : ""}.`
         : !manageable
@@ -976,7 +977,7 @@ function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void 
                 />
               </>
             )}
-            <p className="mt-1.5 text-[11px] text-neutral-400">Kept without your name or email, only to improve GoMoxie.</p>
+            <p className="mt-1.5 text-[11px] text-neutral-400">Kept without your name or email, only to improve gomoxie.</p>
           </fieldset>
 
           <div className="mt-5">
@@ -989,7 +990,7 @@ function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void 
                   id="deletePassword"
                   type="password"
                   autoComplete="current-password"
-                  autoFocus
+                  autoFocus={canAutoFocus()}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className={INPUT_CLASS}
@@ -1003,7 +1004,7 @@ function DeleteAccountModal({ me, onClose }: { me: ApiUser; onClose: () => void 
                 <input
                   id="deleteEmail"
                   type="email"
-                  autoFocus
+                  autoFocus={canAutoFocus()}
                   value={confirmEmail}
                   onChange={(e) => setConfirmEmail(e.target.value)}
                   className={INPUT_CLASS}
@@ -1217,7 +1218,7 @@ function NotificationsSection() {
                 ? PUSH_BLOCKED_MESSAGES[support]
                 : permission === "denied"
                   ? "Notifications are blocked for this site. Allow them in your browser's site settings, then try again."
-                  : "Get important updates even when GoMoxie isn't open. You can turn this off any time."}
+                  : "Get important updates even when gomoxie isn't open. You can turn this off any time."}
           </p>
           {prefs.data.push.subscribedDevices > 0 && (
             <p className="mt-1 text-xs text-neutral-400">

@@ -65,7 +65,7 @@ function SidebarPreview({ crowned, spot, collapsed = false }: { crowned: boolean
         }`}
       >
         {spot === "top" && <SittingMoxie size={collapsed ? 52 : 58} crowned={crowned} style={{ top: "100%", left: collapsed ? 8 : 12 }} />}
-        {!collapsed && "GoMoxie"}
+        {!collapsed && "gomoxie"}
       </div>
       <nav className="flex-1 space-y-1 p-3">
         {!collapsed && <div className="px-2 pb-2 text-xs font-semibold text-neutral-400">Workspace</div>}
@@ -170,11 +170,11 @@ export default function MoxiePlayground() {
               <div className="flex items-center justify-between gap-3 border-t border-neutral-100 px-5 py-3">
                 <span className="flex items-center gap-2 text-neutral-950">
                   <Mark size={32} />
-                  <span className="text-[17px] font-bold tracking-tight">GoMoxie</span>
+                  <span className="text-[17px] font-bold tracking-tight">gomoxie</span>
                 </span>
                 <span className="flex items-center gap-2 rounded-lg bg-[#0a0a0a] px-2.5 py-1.5 text-white">
                   <Mark size={26} />
-                  <span className="text-[14px] font-bold tracking-tight">GoMoxie</span>
+                  <span className="text-[14px] font-bold tracking-tight">gomoxie</span>
                 </span>
               </div>
               <div className="border-t border-neutral-100 px-5 py-3">

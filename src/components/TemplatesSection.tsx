@@ -34,8 +34,8 @@ export function TemplatesSection() {
     ids.length ? Array.from({ length: PER_COLUMN }, (_, i) => ids[(col + i * COLUMNS.length) % ids.length]) : [];
 
   return (
-    <section id="templates" className="relative overflow-hidden px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
+    <section id="templates" className="relative overflow-hidden py-10 sm:py-16 lg:py-20">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 px-4 sm:px-6 lg:px-8 items-center gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
         {/* Copy */}
         <Reveal className="flex flex-col items-center text-center lg:items-start lg:text-left">
           <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.08]">

@@ -35,8 +35,8 @@ function CurrentPlan({ status }: { status: SubscriptionStatusResult }) {
           ? `Your monthly limits reset on ${resets}.`
           : "Yours for life."
         : status.proGrantExpiresAt
-          ? `A gift from the GoMoxie team, until ${formatDate(status.proGrantExpiresAt)}.`
-          : "A gift from the GoMoxie team.";
+          ? `A gift from the gomoxie team, until ${formatDate(status.proGrantExpiresAt)}.`
+          : "A gift from the gomoxie team.";
   return (
     <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-neutral-200 bg-white p-5">
       <span className={`flex h-10 w-10 items-center justify-center rounded-xl border ${SOFT_TONES.peach}`}>

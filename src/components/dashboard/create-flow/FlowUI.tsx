@@ -226,7 +226,7 @@ export function flowErrorMessage(err: unknown, fallback: string): string {
     return err.message || fallback;
   }
   // fetch() itself failing: offline, or the server unreachable.
-  if (err instanceof TypeError) return "We couldn't reach GoMoxie. Check your internet connection, then try again.";
+  if (err instanceof TypeError) return "We couldn't reach gomoxie. Check your internet connection, then try again.";
   return err instanceof Error && err.message ? err.message : fallback;
 }
 

@@ -15,8 +15,9 @@ import {
   FALLBACK_PRICING,
   PERIODS,
   PERIOD_LABEL,
-  PERIOD_SUFFIX,
   formatPrice,
+  billedAs,
+  weeklyPrice,
   planFeatures,
   timeLeft,
 } from "@/lib/plans";
@@ -280,9 +281,11 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
                 )}
               </div>
               <div className="mt-12 flex items-baseline gap-1.5">
-                <span className={`text-5xl font-bold tracking-tight ${t.title}`}>{price ? formatPrice(price.price) : "$0"}</span>
-                {price && <span className={`text-[14px] ${t.muted}`}>{PERIOD_SUFFIX[period]}</span>}
+                <span className={`text-5xl font-bold tracking-tight ${t.title}`}>{price ? weeklyPrice(price.price, period) : "$0"}</span>
+                {price && <span className={`text-[14px] ${t.muted}`}>/ week</span>}
               </div>
+              {/* What's actually charged. Same height on every card (blank on Free), so switching periods doesn't shift the cards. */}
+              <p className={`mt-1 min-h-5 text-[12.5px] ${t.muted}`}>{price ? billedAs(price.price, period) : ""}</p>
               <p className={`mt-1.5 text-[14px] ${t.body}`}>{card.blurb}</p>
 
               {card.tier === "free" ? (
@@ -359,7 +362,7 @@ export function LifetimeDeal({ theme, signedIn, status }: { theme: PlanTheme; si
     `${count(limits.improve, "enhancement", "enhancements")} a month`,
     `${count(limits.create, "new CV", "new CVs")} a month`,
     "Career profiles",
-    "Pay once, keep it for as long as GoMoxie runs",
+    "Pay once, keep it for as long as gomoxie runs",
   ];
 
   return (

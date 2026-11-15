@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useRef, useState } from "react";
 import { ClipboardPaste, Loader2 } from "lucide-react";
 import { useCooldown } from "@/hooks/use-cooldown";
@@ -93,7 +94,8 @@ export function EmailCodeEntry<T = AuthResponse>({
 
   useEffect(() => {
     startCooldown(RESEND_COOLDOWN_SECONDS);
-    boxes.current[0]?.focus();
+    // Not on phones: the keyboard would cover the "check your email" text (see canAutoFocus).
+    if (canAutoFocus()) boxes.current[0]?.focus();
   }, [startCooldown]);
 
   const clear = () => {

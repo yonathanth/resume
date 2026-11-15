@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useState } from "react";
 import {
   PenTool,
@@ -716,7 +717,7 @@ export function CreateCvModal({
 
             <textarea
               rows={5}
-              autoFocus
+              autoFocus={canAutoFocus()}
               value={flowExtraDetails}
               onChange={(e) => setFlowExtraDetails(e.target.value)}
               placeholder="A new job, project, certification or achievement"
@@ -954,7 +955,7 @@ export function CreateCvModal({
 
             <textarea
               rows={8}
-              autoFocus
+              autoFocus={canAutoFocus()}
               value={optionalJd}
               onChange={(e) => setOptionalJd(e.target.value)}
               placeholder="Paste the job posting, or a job title like Senior Accountant"

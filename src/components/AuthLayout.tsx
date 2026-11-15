@@ -48,7 +48,7 @@ const COLOURFUL_FIRST = [
 type WallItem = { kind: "cv"; slot: number } | { kind: "tile"; tile: number };
 
 const TILES = [
-  { className: "bg-accent text-white", eyebrow: "GoMoxie", text: "Land the interview." },
+  { className: "bg-accent text-white", eyebrow: "gomoxie", text: "Land the interview." },
   { className: "bg-accent-soft text-neutral-950", eyebrow: "AI tailoring", text: "Made for every job you apply to." },
   { className: "bg-neutral-800 text-white", eyebrow: "ATS-friendly", text: "Passes the scan.", accent: true },
   { className: "bg-[#ffe3d1] text-neutral-950", eyebrow: "Templates", text: "Simple to academic." },
@@ -349,7 +349,7 @@ export function AuthLayout({ mode }: AuthLayoutProps) {
           </form>
 
           <p className="mt-6 text-center text-[14px] text-neutral-500">
-            {isSignup ? "Already have an account? " : "New to GoMoxie? "}
+            {isSignup ? "Already have an account? " : "New to gomoxie? "}
             <Link href={isSignup ? "/login" : "/signup"} className="font-semibold text-accent-light transition-colors hover:text-accent-mid">
               {isSignup ? "Log in" : "Create an account"}
             </Link>

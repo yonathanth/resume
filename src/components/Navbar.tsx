@@ -103,7 +103,7 @@ export function Navbar({ theme = "light" }: NavbarProps) {
     <header className={`fixed top-0 inset-x-0 z-50 border-b transition-colors duration-200 ${surface}`}>
       <nav
         aria-label="Main Navigation"
-        className="mx-auto flex h-20 sm:h-24 max-w-7xl items-center justify-between px-5 sm:px-8 lg:px-10"
+        className="mx-auto flex h-20 sm:h-24 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8"
       >
         {/* Logo + primary links */}
         <div className="flex items-center gap-6 lg:gap-8">

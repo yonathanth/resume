@@ -59,7 +59,7 @@ export const FAQ_GROUPS: { topic: string; faqs: Faq[] }[] = [
     faqs: [
       {
         q: "What do Plus and Pro cost?",
-        a: "Plus is from $3.99 a week, with a set number of tailorings, enhancements and new CVs each period. Pro is from $6.99 a week, with no limits. Both include career profiles, come weekly, monthly or every 3 months, and renew automatically until you cancel. See the pricing page for every option, including Plus Lifetime.",
+        a: "Plus is from $4 a week, with a set number of tailorings, enhancements and new CVs each period. Pro is from $7 a week, with no limits. Both include career profiles, come weekly, monthly or every 3 months, and renew automatically until you cancel. See the pricing page for every option, including Plus Lifetime.",
       },
       {
         q: "What happens if I cancel?",

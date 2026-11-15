@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -299,7 +300,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
                     <label className={LABEL_CLASS}>
                       Role <span className="text-accent">*</span>
                     </label>
-                    <ProfessionInput value={newRole} onChange={setNewRole} autoFocus placeholder="e.g. Backend Developer" />
+                    <ProfessionInput value={newRole} onChange={setNewRole} autoFocus={canAutoFocus()} placeholder="e.g. Backend Developer" />
                     <p className="mt-1.5 text-xs text-neutral-500">The role itself, not a company. Seniority (Senior, Lead…) is fine.</p>
                   </div>
 

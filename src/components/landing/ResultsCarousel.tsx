@@ -93,7 +93,7 @@ export function ResultsCarousel() {
                   <TemplateThumbnail
                     templateId={story.after.template}
                     story={story.after.key}
-                    title={`${story.name}'s resume after GoMoxie`}
+                    title={`${story.name}'s resume after gomoxie`}
                     className={`aspect-[210/297] ${SHEET_FRAME}`}
                   />
                 </figure>

@@ -3,10 +3,11 @@
 import React, { useEffect, useState } from "react";
 import { Lightbulb } from "lucide-react";
 import { Moxie } from "./Moxie";
+import { MoxieTickleHint } from "./MoxieTickleHint";
 import { WordByWord } from "./WordByWord";
 import { PRESENT_SECONDS } from "./moxie.animations";
 
-/** Short, true, and about resumes, job hunting or GoMoxie. Shown in a random order, one per round of her presenting. */
+/** Short, true, and about resumes, job hunting or gomoxie. Shown in a random order, one per round of her presenting. */
 const FACTS = [
   // Six seconds, as on the home page ("Recruiters give you six seconds"): the well-known Ladders eye-tracking study.
   "In a well-known eye-tracking study, recruiters spent about six seconds on their first look at a resume. Put your best right at the top.",
@@ -59,6 +60,7 @@ export function MoxieDidYouKnow({ size = MOXIE_SIZE, crowned = false }: { size?:
   // She only shows up in the browser, after a wait has gone on a moment (see MoxieWait), so a random order can't mismatch a server render.
   const [facts] = useState(() => shuffled(FACTS));
   const [index, setIndex] = useState(0);
+  const [tickled, setTickled] = useState(false);
 
   useEffect(() => {
     let every: ReturnType<typeof setInterval> | undefined;
@@ -76,6 +78,7 @@ export function MoxieDidYouKnow({ size = MOXIE_SIZE, crowned = false }: { size?:
   const leaving = index > 0 ? facts[(index - 1) % facts.length] : null;
 
   return (
+    <div className="flex flex-col items-center">
     <div className="flex items-end sm:items-center">
       <div className="relative mb-24 w-[min(68vw,18rem)] shrink-0 rounded-2xl border border-neutral-200 bg-white px-4 pb-3.5 pt-3.5 text-left shadow-[0_12px_32px_-16px_rgba(0,0,0,0.25)] sm:mb-20 sm:px-5 sm:pb-4 sm:pt-4">
         {/* The tail, toward her claw: on phones on its bottom edge (she's below its right end); beside her, low on its right edge. */}
@@ -100,8 +103,10 @@ export function MoxieDidYouKnow({ size = MOXIE_SIZE, crowned = false }: { size?:
       </div>
       {/* Phones: tucked in under the card's bottom-right corner, so the card can be wider — drawn over it, so her eyes stay in view when she stretches up. */}
       <div className="relative z-10 -ml-16 shrink-0 sm:ml-0">
-        <Moxie animation="presenting" size={size} ticklish crowned={crowned} decorative />
+        <Moxie animation="presenting" size={size} ticklish crowned={crowned} decorative onTickle={() => setTickled(true)} />
       </div>
+    </div>
+    <MoxieTickleHint tickled={tickled} className="mt-2 text-center" />
     </div>
   );
 }

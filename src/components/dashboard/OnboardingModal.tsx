@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, FilePlus, Loader2, PenLine, Target, Upload, X } from "lucide-react";
 import { ApiError, type AcquisitionSource, type ApiUser, type CareerStage, type SignupIntent, type UpdateMeInput } from "@/lib/api";
@@ -25,7 +26,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const INTENTS: { value: SignupIntent; title: string; description: string; icon: React.ComponentType<{ className?: string }>; tone: OptionTone }[] = [
   { value: "improve", title: "I have a CV to improve", description: "Upload it and we'll make it stronger.", icon: PenLine, tone: "violet" },
   { value: "tailor", title: "I'm applying to a specific job", description: "Match your CV to the job posting.", icon: Target, tone: "sky" },
-  { value: "create", title: "Start from scratch", description: "Answer a few questions, get a finished CV.", icon: FilePlus, tone: "accent" },
+  { value: "create", title: "I want a new CV", description: "Answer a few questions, get a finished CV.", icon: FilePlus, tone: "accent" },
 ];
 
 export const CAREER_STAGES: { value: CareerStage; label: string }[] = [
@@ -185,7 +186,7 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
     else setStep(steps[stepIndex + 1]);
   };
 
-  const eyebrow = stepIndex === 0 ? "Welcome to GoMoxie" : isLast ? "Last step" : `Step ${stepIndex + 1} of ${steps.length}`;
+  const eyebrow = stepIndex === 0 ? "Welcome to gomoxie" : isLast ? "Last step" : `Step ${stepIndex + 1} of ${steps.length}`;
 
   return (
     <FlowModal stepKey={step}>
@@ -312,7 +313,7 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
                   </label>
                   <input
                     id="onb-first"
-                    autoFocus={!usingCv}
+                    autoFocus={!usingCv && canAutoFocus()}
                     autoComplete="given-name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
@@ -356,7 +357,7 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
                 </label>
                 <ProfessionsInput
                   id="onb-profession"
-                  autoFocus={!usingCv}
+                  autoFocus={!usingCv && canAutoFocus()}
                   value={professions}
                   onChange={setProfessions}
                   draft={professionDraft}
@@ -401,7 +402,7 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
                 </label>
                 <input
                   id="onb-source-detail"
-                  autoFocus
+                  autoFocus={canAutoFocus()}
                   maxLength={120}
                   value={sourceDetail}
                   onChange={(e) => setSourceDetail(e.target.value)}

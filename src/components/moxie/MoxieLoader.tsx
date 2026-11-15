@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Moxie } from "./Moxie";
 import { WordByWord } from "./WordByWord";
+import { MoxieTickleHint } from "./MoxieTickleHint";
 import { TICKLE_SECONDS } from "./moxie.animations";
 import type { MoxieAnimation } from "./moxie.types";
 
@@ -20,7 +21,14 @@ const LINE_HANDOVER_MS = 380;
 const SLOW_MESSAGES = ["Almost there…", "Still on it, good things take a moment…", "Just tidying up the last bits…"];
 
 /** What she says when she's tickled mid-work — a different one each time. */
-const TICKLE_MESSAGES = ["Hehe, that tickles!", "Hey! I'm working here!", "Eek, stop it, hehe!"];
+const TICKLE_MESSAGES = [
+  "Hehe, that tickles!",
+  "Hey! I'm working here!",
+  "Eek, stop it, hehe!",
+  "Okay okay, I'm going faster!",
+  "My claws are busy, hehe!",
+  "You found my ticklish spot!",
+];
 
 /** Scenes tell their own story, so the generic foot-tapping would only interrupt it. */
 const SCENES: ReadonlySet<MoxieAnimation> = new Set(["tailor", "write", "read", "polish", "stamp"]);
@@ -149,6 +157,7 @@ export function MoxieLoader({
             <WordByWord text={line} delayMs={leaving ? LINE_HANDOVER_MS : 0} />
           </p>
         </div>
+        {!done && <MoxieTickleHint tickled={tickles > 0} className="mt-4" />}
       </div>
     </div>,
     document.body,

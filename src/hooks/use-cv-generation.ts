@@ -100,12 +100,29 @@ export interface AnalyzeFreestyleResult {
   document: ApiCvDocument | GenerateCvMismatch;
 }
 
+/**
+ * Moxie's AI wait (AiWaitLoader) is shown while one of these runs. With a
+ * fast model it would only flash on screen, so each takes at least this long.
+ */
+export const MIN_AI_WAIT_MS = 3000;
+
+/** Resolves no sooner than MIN_AI_WAIT_MS. Errors still come back right away — nobody waits to be told it failed. */
+export async function atLeastAiWait<T>(work: Promise<T>): Promise<T> {
+  const [result] = await Promise.all([work, new Promise((resolve) => setTimeout(resolve, MIN_AI_WAIT_MS))]);
+  return result;
+}
+
+/** A mutationFn that takes at least MIN_AI_WAIT_MS (see atLeastAiWait). */
+function withMinAiWait<A, T>(fn: (args: A) => Promise<T>): (args: A) => Promise<T> {
+  return (args) => atLeastAiWait(fn(args));
+}
+
 // Step 1: "Analyze & Continue" — creates a standalone CV document (not
 // attached to any career profile; that's only decided later, if the user
 // chooses to save one) and runs the AI parse on the raw freestyle text.
 export function useAnalyzeFreestyle() {
   return useMutation({
-    mutationFn: ({
+    mutationFn: withMinAiWait(({
       sourceText,
       templateId,
       flowType,
@@ -115,7 +132,7 @@ export function useAnalyzeFreestyle() {
       templateId: string;
       flowType: CvFlowType;
       payLater?: boolean;
-    }): Promise<AnalyzeFreestyleResult> => analyzeAndPersist(sourceText, undefined, { templateId, flowType, payLater }),
+    }): Promise<AnalyzeFreestyleResult> => analyzeAndPersist(sourceText, undefined, { templateId, flowType, payLater })),
   });
 }
 
@@ -131,7 +148,7 @@ export interface AnalyzeUploadResult {
 // through the same AI parse used by the freestyle flow.
 export function useAnalyzeUpload() {
   return useMutation({
-    mutationFn: async ({
+    mutationFn: withMinAiWait(async ({
       file,
       templateId,
       flowType,
@@ -156,7 +173,7 @@ export function useAnalyzeUpload() {
         payLater,
       });
       return { profileId, cvDocumentId, sourceText: cvImport.rawText, document };
-    },
+    }),
   });
 }
 
@@ -199,7 +216,7 @@ export interface AnalyzeExistingResult {
 // doesn't block the rewrite.
 export function useAnalyzeExisting() {
   return useMutation({
-    mutationFn: async (input: AnalyzeExistingInput): Promise<AnalyzeExistingResult> => {
+    mutationFn: withMinAiWait(async (input: AnalyzeExistingInput): Promise<AnalyzeExistingResult> => {
       let sourceDoc: { content: CVContentDTO } | undefined;
       if (input.sourceCvId) {
         sourceDoc = await getCvDocument(input.sourceCvId);
@@ -249,7 +266,7 @@ export function useAnalyzeExisting() {
         sourceProfileId: input.sourceProfileId,
       });
       return { profileId, cvDocumentId, sourceText, document };
-    },
+    }),
   });
 }
 
@@ -338,7 +355,7 @@ async function applyPersonalFields(
 // gaps they already showed.
 export function useRefineCv() {
   return useMutation({
-    mutationFn: async (input: RefineCvInput): Promise<ApiCvDocument | GenerateCvMismatch> => {
+    mutationFn: withMinAiWait(async (input: RefineCvInput): Promise<ApiCvDocument | GenerateCvMismatch> => {
       const personal = {
         ...input.personal,
         ...(input.name?.trim() ? { full_name: input.name } : {}),
@@ -382,7 +399,7 @@ export function useRefineCv() {
         : document;
 
       return { ...final, questions: analyzed.questions, jobAnalysis: analyzed.jobAnalysis };
-    },
+    }),
   });
 }
 

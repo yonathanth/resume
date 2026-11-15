@@ -16,7 +16,7 @@ import { HERO_RATING } from "@/lib/social-proof";
 export function Hero() {
   return (
     <>
-      <section className="relative mx-auto grid min-h-svh w-full max-w-6xl grid-cols-1 content-center items-center gap-12 px-5 pb-12 pt-32 sm:gap-14 sm:px-8 sm:pt-36 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:px-10 lg:pb-12">
+      <section className="relative mx-auto grid min-h-svh w-full max-w-6xl grid-cols-1 content-center items-center gap-12 px-4 pb-12 pt-32 sm:gap-14 sm:px-6 sm:pt-36 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:px-8 lg:pb-12">
         {/* The rating and the promise */}
         <div className="flex flex-col items-start text-left">
           {/* The rating, and where it's from (Trustpilot's own green squares and mark) */}

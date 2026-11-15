@@ -177,7 +177,7 @@ function Check({ size, className }: MarkProps) {
   );
 }
 
-/** 8 · R — a lowercase r for GoMoxie, its shoulder reaching out into her eye. */
+/** 8 · R — a lowercase r for gomoxie, its shoulder reaching out into her eye. */
 function LetterR({ size, className }: MarkProps) {
   return (
     <Svg size={size} className={className}>
@@ -316,7 +316,7 @@ export const MOXIE_LOGOS: { name: string; note: string; Mark: React.ComponentTyp
   { name: "Mono", note: "Peepers in one colour, for print and dark or busy backgrounds.", Mark: Mono, mono: true, round: 1 },
   { name: "Stalks", note: "Only her eyes on stalks, the barest, most graphic mark.", Mark: Stalks, round: 1 },
   { name: "Check", note: "Her stalks bend into a tick: job-ready, passes the scan.", Mark: Check, round: 2 },
-  { name: "R", note: "A lowercase r for GoMoxie, its shoulder reaching into her eye.", Mark: LetterR, round: 2 },
+  { name: "R", note: "A lowercase r for gomoxie, its shoulder reaching into her eye.", Mark: LetterR, round: 2 },
   { name: "Peek page", note: "A resume tile with her eyes resting on top. Tile-simple, says resume.", Mark: PeekPage, round: 2 },
   { name: "Shell", note: "A hermit crab whose shell is a resume. The page is her home.", Mark: Shell, round: 2 },
   { name: "Nib", note: "A pen nib with her eyes on top. She writes it for you.", Mark: Nib, round: 2 },

@@ -10,7 +10,7 @@ import {
   type CvUnlockProduct,
   type PaidTier,
 } from "@/lib/api";
-import { FALLBACK_PRICING, PERIODS, PERIOD_LABEL, PERIOD_SUFFIX, describeLimits, formatPrice, planFeatures } from "@/lib/plans";
+import { FALLBACK_PRICING, PERIODS, PERIOD_LABEL, PERIOD_SUFFIX, PERIOD_WEEKS, describeLimits, formatPrice, planFeatures, weeklyPrice } from "@/lib/plans";
 import { useChangePlan, usePricing, useStartProCheckout, useStartPurchase, useSubscriptionStatus } from "@/hooks/use-subscription";
 import { LifetimeScarcity } from "@/components/pricing/PlanCards";
 import type { PaywallDetails } from "@/hooks/use-pro-gate";
@@ -215,7 +215,10 @@ export function ProUpgradeModal({
                       </span>
                       <span className="text-right">
                         <span className="block text-[11px] text-neutral-400">from</span>
-                        <span className="text-[15px] font-bold text-neutral-950">{formatPrice(plan[periods[0]].price)}</span>
+                        <span className="text-[15px] font-bold text-neutral-950">
+                          {formatPrice(Math.min(...periods.map((p) => plan[p].price / PERIOD_WEEKS[p])))}
+                          <span className="text-[11px] font-medium text-neutral-500"> / week</span>
+                        </span>
                       </span>
                     </span>
                     {selected && (
@@ -239,7 +242,11 @@ export function ProUpgradeModal({
                             }`}
                           >
                             <span className="block text-[11px] font-semibold text-neutral-600">{PERIOD_LABEL[p]}</span>
-                            <span className="block text-[13px] font-bold text-neutral-950">{formatPrice(plan[p].price)}</span>
+                            <span className="block text-[13px] font-bold text-neutral-950">{weeklyPrice(plan[p].price, p)} / week</span>
+                            {/* What's actually charged for this period. */}
+                            <span className="block text-[10.5px] text-neutral-500">
+                              {formatPrice(plan[p].price)} {PERIOD_SUFFIX[p]}
+                            </span>
                           </button>
                         ))}
                       </span>

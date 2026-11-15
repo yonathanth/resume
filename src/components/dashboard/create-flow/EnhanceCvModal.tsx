@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Upload,
@@ -692,7 +693,7 @@ export function EnhanceCvModal({
 
             <textarea
               rows={5}
-              autoFocus
+              autoFocus={canAutoFocus()}
               value={improvementGoal}
               onChange={(e) => setImprovementGoal(e.target.value)}
               placeholder="e.g. Stronger bullet points, add numbers to my achievements, make it fit one page"
@@ -787,7 +788,7 @@ export function EnhanceCvModal({
 
             <textarea
               rows={8}
-              autoFocus
+              autoFocus={canAutoFocus()}
               value={optionalJd}
               onChange={(e) => setOptionalJd(e.target.value)}
               placeholder="Paste the job posting, or a job title like Senior Accountant"

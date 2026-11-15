@@ -160,7 +160,7 @@ export function HeroDemo({ compact = false }: { compact?: boolean }) {
   );
 
   return (
-    <div className="relative w-full" aria-label="Example: a CV before and after GoMoxie" role="img">
+    <div className="relative w-full" aria-label="Example: a CV before and after gomoxie" role="img">
       {compact ? (
         <div className="rounded-3xl border border-neutral-200 bg-white p-5 text-left shadow-[0_30px_80px_-40px_rgba(15,17,21,0.35)]">
           <div className="flex items-center gap-4 border-b border-neutral-100 pb-4">

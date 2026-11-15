@@ -38,7 +38,9 @@ export default function CvEditorPage({
   const refreshSubscriptionStatus = useRefreshSubscriptionStatus();
   // Keyed by document id, so navigating to another resume shows the loading
   // state again instead of the previous one's content.
-  const [loaded, setLoaded] = useState<{ id: string; cv: CvData | null; notFound: boolean } | null>(null);
+  const [loaded, setLoaded] = useState<{ id: string; cv: CvData | null; notFound: boolean; version: number } | null>(null);
+  // Bumped to load the CV again (it was tailored in place); the editor remounts once it has.
+  const [version, setVersion] = useState(0);
   const cvData = loaded?.id === id ? loaded.cv : null;
   const notFound = loaded?.id === id && loaded.notFound;
   // Read once: the feedback card drops the param from the address when it opens.
@@ -68,16 +70,16 @@ export default function CvEditorPage({
           jobRequirements:
             doc.jobRequirements && doc.jobDescription ? { forJobDescription: doc.jobDescription, data: doc.jobRequirements.data } : null,
         });
-        setLoaded({ id, cv: applyCvContent(blank, doc.content), notFound: false });
+        setLoaded({ id, cv: applyCvContent(blank, doc.content), notFound: false, version });
       })
       .catch(() => {
-        if (!cancelled) setLoaded({ id, cv: null, notFound: true });
+        if (!cancelled) setLoaded({ id, cv: null, notFound: true, version });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, version]);
 
   if (notFound) {
     return (
@@ -116,7 +118,9 @@ export default function CvEditorPage({
   return (
     <>
       <CvEditorWorkspace
+        key={`${id}:${loaded?.version ?? 0}`}
         initialData={cvData}
+        onReload={() => setVersion((v) => v + 1)}
         onBack={() => {
           notifyLeftEditor(id);
           router.push("/dashboard");

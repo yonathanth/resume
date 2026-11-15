@@ -38,7 +38,7 @@ const LINK_COLUMNS = [
 
 export function Footer() {
   return (
-    <footer className="relative bg-[#0a0a0a] text-white pt-20 pb-14 px-4 sm:px-6 lg:px-8">
+    <footer className="relative bg-[#0a0a0a] text-white pt-20 pb-14">
       {/* Inverted / Concave Top-Left Corner matching Mobbin reference */}
       <svg
         className="absolute -top-10 sm:-top-12 lg:-top-14 left-0 w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 text-[#0a0a0a] pointer-events-none select-none"
@@ -59,7 +59,7 @@ export function Footer() {
         <path d="M48,0 C48,26.51 26.51,48 0,48 L48,48 Z" />
       </svg>
 
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top: brand on the left, link columns on the right */}
         <div className="flex flex-col md:flex-row justify-between gap-12 lg:gap-16">
           <div className="max-w-sm">

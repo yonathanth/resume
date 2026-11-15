@@ -26,7 +26,7 @@ export default function PublicHelpPage() {
 
   const searching = query.trim().length > 0;
   const groups = filterFaqGroups(query);
-  const supportHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Help with GoMoxie")}`;
+  const supportHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Help with gomoxie")}`;
 
   return (
     <div className="relative min-h-screen bg-[#fdfdfd] font-sans text-neutral-900">

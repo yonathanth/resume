@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, Loader2, Repeat, X } from "lucide-react";
 import type { BillingPeriod, PaidTier } from "@/lib/api";
 import { usePricing } from "@/hooks/use-subscription";
-import { FALLBACK_PRICING, PERIODS, PERIOD_LABEL, PERIOD_SUFFIX, TIER_LABEL, formatPrice } from "@/lib/plans";
+import { FALLBACK_PRICING, PERIODS, PERIOD_LABEL, TIER_LABEL, billedAs, weeklyPrice } from "@/lib/plans";
 
 export interface PlanChoice {
   tier: PaidTier;
@@ -101,7 +101,9 @@ export function ChangePlanModal({ isOpen, onClose, current, isCancelScheduled, i
                     {isCurrent && <span className="ml-2 text-[10px] font-semibold text-neutral-500">Current</span>}
                   </span>
                   <span className="block text-xs text-neutral-500">
-                    {formatPrice(pricing.plans[tier][p].price)} {PERIOD_SUFFIX[p]}
+                    <span className="font-semibold text-neutral-800">{weeklyPrice(pricing.plans[tier][p].price, p)} / week</span>
+                    {" · "}
+                    {billedAs(pricing.plans[tier][p].price, p)}
                   </span>
                 </span>
                 {selected && <Check className="w-4 h-4 text-neutral-950 shrink-0" />}

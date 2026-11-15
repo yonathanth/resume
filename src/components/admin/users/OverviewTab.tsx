@@ -155,11 +155,11 @@ export function OverviewTab({ detail }: { detail: UserDetail }) {
             hint={sources.length ? sources.map(([s, n]) => `${s.replace(/[_-]/g, " ")}: ${n}`).join(" · ") : "None yet"}
           />
           <StatCard label="Career profiles" value={formatNumber(content.profileCount)} source="database" />
-          <StatCard label="CV imports" value={formatNumber(content.importCount)} source="database" hint="Uploaded CVs parsed into GoMoxie" />
+          <StatCard label="CV imports" value={formatNumber(content.importCount)} source="database" hint="Uploaded CVs parsed into gomoxie" />
         </div>
       </div>
 
-      <Card title="Recent emails" description="The last 15 emails GoMoxie tried to send to this user." padded={false} actions={<SourceTag source="database" />}>
+      <Card title="Recent emails" description="The last 15 emails gomoxie tried to send to this user." padded={false} actions={<SourceTag source="database" />}>
         <DataTable
           columns={emailColumns}
           rows={detail.emails}

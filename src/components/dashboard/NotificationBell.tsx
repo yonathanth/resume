@@ -63,7 +63,7 @@ function NotificationItem({ item, onOpen, onDismiss }: { item: ApiNotification; 
   );
 }
 
-/** The dashboard's in-app notification inbox (messages from the GoMoxie team). */
+/** The dashboard's in-app notification inbox (messages from the gomoxie team). */
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);

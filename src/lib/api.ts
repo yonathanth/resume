@@ -1218,7 +1218,7 @@ export function finalizeCvDocument(cvId: string) {
 
 export type PaymentStatus = "PENDING" | "SUCCESS" | "FAILED" | "CANCELLED" | "EXPIRED";
 
-// A Chapa payment record — today only "PRO_SUBSCRIPTION" (a 1-month GoMoxie
+// A Chapa payment record — today only "PRO_SUBSCRIPTION" (a 1-month gomoxie
 // Pro period; Chapa can't auto-renew, see the backend's grantChapaProPeriod).
 export interface ApiPayment {
   id: string;

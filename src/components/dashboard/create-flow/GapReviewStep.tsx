@@ -1,5 +1,6 @@
 "use client";
 
+import { canAutoFocus } from "@/lib/autofocus";
 import React, { useState } from "react";
 import { ArrowRight, Check, Loader2, Minus, Plus } from "lucide-react";
 import { CVContentDTO } from "@/lib/api";
@@ -161,7 +162,7 @@ export function GapReviewStep({
                   {showDetail ? (
                     <input
                       type="text"
-                      autoFocus={!details[gap]}
+                      autoFocus={!details[gap] && canAutoFocus()}
                       value={details[gap] ?? ""}
                       maxLength={200}
                       disabled={busy}

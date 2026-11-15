@@ -96,7 +96,7 @@ export function CvRatingModal({
             <h2 id="cv-rating-title" className="text-lg font-bold tracking-tight text-neutral-950">
               How did your CV turn out?
             </h2>
-            <p className="mt-1 text-sm text-neutral-500">Your rating helps us make GoMoxie better.</p>
+            <p className="mt-1 text-sm text-neutral-500">Your rating helps us make gomoxie better.</p>
 
             <div role="radiogroup" aria-label="Rating" className="mt-5 flex items-center justify-center gap-1" onMouseLeave={() => setHover(null)}>
               {([1, 2, 3, 4, 5] as const).map((value) => (
