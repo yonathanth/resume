@@ -1,0 +1,120 @@
+// The editor's layout in outline, shown while a CV loads: on its own page,
+// and over the dashboard while a finished flow opens its CV (DashboardContext).
+
+const shimmer = "animate-pulse rounded-md bg-neutral-200/70";
+
+/** The sheet as the preview frame draws it (inside a 24px gutter: 24/842 of its width), in outline. */
+function SheetSkeleton() {
+  return (
+    <div className="w-full max-w-[720px] px-[2.85%] pt-[2.85%]">
+      <div className="aspect-[210/297] bg-white shadow-[0_1px_4px_rgba(0,0,0,0.15)] p-[8%] space-y-3">
+        <div className={`h-6 w-1/2 ${shimmer}`} />
+        <div className={`h-3 w-2/3 ${shimmer}`} />
+        <div className="pt-4 space-y-2">
+          <div className={`h-3.5 w-1/4 ${shimmer}`} />
+          <div className={`h-2.5 w-full ${shimmer}`} />
+          <div className={`h-2.5 w-11/12 ${shimmer}`} />
+          <div className={`h-2.5 w-4/5 ${shimmer}`} />
+        </div>
+        <div className="pt-4 space-y-2">
+          <div className={`h-3.5 w-1/3 ${shimmer}`} />
+          <div className={`h-2.5 w-full ${shimmer}`} />
+          <div className={`h-2.5 w-5/6 ${shimmer}`} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The editor's layout in outline — same bars, columns, and sheet position — so nothing jumps when it loads.
+ * Phones open a CV on its preview, so there it's the preview screen: score and Download, the page, Edit.
+ */
+export function EditorSkeleton() {
+  return (
+    <>
+      <div className="lg:hidden h-screen w-full flex flex-col bg-[#ebebed] overflow-hidden" aria-busy="true" aria-label="Loading resume">
+        <div className="shrink-0 p-3 bg-white border-b border-neutral-200 grid grid-cols-2 gap-2">
+          <div className="h-[46px] rounded-lg border border-neutral-300 bg-white flex items-center gap-2 px-1">
+            <div className="w-9 h-9 rounded-full bg-neutral-200/70 animate-pulse" />
+            <div className="space-y-1.5">
+              <div className={`h-2.5 w-14 ${shimmer}`} />
+              <div className={`h-2.5 w-20 ${shimmer}`} />
+            </div>
+          </div>
+          <div className="h-[46px] rounded-lg bg-accent/25 animate-pulse" />
+        </div>
+        <div className="flex-1 overflow-hidden flex justify-center">
+          <SheetSkeleton />
+        </div>
+        <div className="shrink-0 p-3 bg-white border-t border-neutral-200">
+          <div className="h-11 rounded-lg bg-neutral-300/70 animate-pulse" />
+        </div>
+      </div>
+      <EditorSkeletonDesktop />
+    </>
+  );
+}
+
+function EditorSkeletonDesktop() {
+  return (
+    <div className="hidden lg:flex h-screen w-full flex-col bg-[#fdfdfd] overflow-hidden" aria-busy="true" aria-label="Loading resume">
+      {/* Top bar: back, name, save state | score, template, download */}
+      <div className="h-16 shrink-0 bg-white border-b border-neutral-200 px-4 sm:px-6 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 ${shimmer} rounded-lg`} />
+          <div className={`h-5 w-40 sm:w-56 ${shimmer}`} />
+          <div className={`w-5 h-5 ${shimmer} rounded-full`} />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className={`h-9 w-10 sm:w-28 ${shimmer} rounded-lg`} />
+          <div className={`h-9 w-10 md:w-32 ${shimmer} rounded-lg`} />
+          <div className="h-9 w-10 sm:w-36 rounded-lg bg-accent/25 animate-pulse" />
+        </div>
+      </div>
+
+      {/* Section tabs across both columns */}
+      <div className="shrink-0 bg-white border-b border-neutral-200 px-4 sm:px-6 py-2.5 flex items-center gap-2 overflow-hidden">
+        {[72, 88, 96, 84, 76, 64, 92].map((w, i) => (
+          <div key={i} className={`h-9 shrink-0 rounded-lg ${i === 0 ? "border border-neutral-300 bg-neutral-50" : shimmer}`} style={{ width: w }} />
+        ))}
+      </div>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Form column: section header, then fields in a card */}
+        <div className="w-full lg:w-[48%] bg-[#fafafa] border-r border-neutral-200 p-6 sm:p-8 space-y-6">
+          <div className="flex items-center gap-3 pb-5 border-b border-neutral-200">
+            <div className="w-9 h-9 rounded-lg bg-accent/25 animate-pulse" />
+            <div className="space-y-2">
+              <div className={`h-4 w-36 ${shimmer}`} />
+              <div className={`h-3 w-52 ${shimmer}`} />
+            </div>
+          </div>
+          <div className="rounded-lg border border-neutral-300 bg-white p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {Array.from({ length: 6 }, (_, i) => (
+              <div key={i} className="space-y-2">
+                <div className={`h-3 w-20 ${shimmer}`} />
+                <div className={`h-10 ${shimmer} rounded-lg`} />
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg border border-neutral-300 bg-white p-5 space-y-3">
+            <div className={`h-3 w-16 ${shimmer}`} />
+            <div className={`h-10 ${shimmer} rounded-lg`} />
+            <div className="h-11 rounded-lg border border-dashed border-neutral-300" />
+          </div>
+        </div>
+
+        {/* Preview column: toolbar, then the A4 sheet where the preview draws it */}
+        <div className="hidden lg:flex flex-1 flex-col bg-[#ebebed]">
+          <div className="px-6 lg:px-8 py-3 flex items-center justify-between gap-3">
+            <div className="h-9 w-44 rounded-lg bg-white border border-neutral-300" />
+          </div>
+          <div className="px-6 lg:px-8 flex justify-center">
+            <SheetSkeleton />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

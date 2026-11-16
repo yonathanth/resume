@@ -13,7 +13,7 @@ async function shareTarget(intent: QuickIntent): Promise<{ path: string; title: 
     case "tailor":
     case "improve": {
       const card = PAGE_CARDS[intent.kind];
-      return { path: `/try/${intent.kind}`, title: card.title, description: card.subtitle };
+      return { path: `/try/${intent.kind}`, title: card.title, description: card.description };
     }
     case "template": {
       const template = await fetchPublicTemplate(intent.templateId);
@@ -23,10 +23,10 @@ async function shareTarget(intent: QuickIntent): Promise<{ path: string; title: 
             title: `Free ${template.name} resume template`,
             description: `${template.description} Free to use, ATS-friendly, download as PDF.`,
           }
-        : { path: "/templates", title: PAGE_CARDS.templates.title, description: PAGE_CARDS.templates.subtitle };
+        : { path: "/templates", title: PAGE_CARDS.templates.title, description: PAGE_CARDS.templates.description };
     }
     case "pro":
-      return { path: "/pricing", title: PAGE_CARDS.pricing.title, description: PAGE_CARDS.pricing.subtitle };
+      return { path: "/pricing", title: PAGE_CARDS.pricing.title, description: PAGE_CARDS.pricing.description };
   }
 }
 

@@ -658,3 +658,32 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .nav-underline-in { animation: none; }
 }
+
+/*
+ * The content width of the landing page and the other public pages (navbar,
+ * footer, sections). It widens a little on large screens so the page doesn't
+ * float in a narrow column: 72rem, 78rem from xl (1280px), 84rem from 2xl
+ * (1536px).
+ */
+@utility max-w-page {
+  max-width: 72rem;
+  @media (width >= 80rem) {
+    max-width: 78rem;
+  }
+  @media (width >= 96rem) {
+    max-width: 84rem;
+  }
+}
+
+/* The hand-drawn underline under the hero headline's accent word: draws in once, after the headline rises. */
+@keyframes hero-underline-draw {
+  to { stroke-dashoffset: 0; }
+}
+.hero-underline {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: hero-underline-draw 0.8s cubic-bezier(0.65, 0, 0.35, 1) 0.7s forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-underline { animation: none; stroke-dashoffset: 0; }
+}

@@ -59,7 +59,7 @@ export function Footer() {
         <path d="M48,0 C48,26.51 26.51,48 0,48 L48,48 Z" />
       </svg>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8">
         {/* Top: brand on the left, link columns on the right */}
         <div className="flex flex-col md:flex-row justify-between gap-12 lg:gap-16">
           <div className="max-w-sm">
@@ -69,7 +69,7 @@ export function Footer() {
             </Link>
             <p className="mt-5 flex items-start gap-2.5 text-sm sm:text-base text-neutral-400 leading-relaxed">
               <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
-              Craft resumes that land interviews, tailored to every job, ready in minutes.
+              Build a new CV, improve the one you have, or tailor it to any job. Ready in minutes.
             </p>
           </div>
 

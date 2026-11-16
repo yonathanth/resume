@@ -366,7 +366,7 @@ export function RealResultsSection() {
   return (
     <section
       id="results"
-      className="mx-auto grid w-full max-w-6xl grid-cols-1 items-center gap-12 px-4 py-10 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-14 lg:px-8 lg:py-20"
+      className="mx-auto grid w-full max-w-page grid-cols-1 items-center gap-12 px-4 py-10 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:gap-14 lg:px-8 lg:py-20"
     >
       {/* Side by side on large screens: the sheets on the left, the copy and the button on the
           right. Stacked on smaller ones: the copy and button first, then the sheets. */}

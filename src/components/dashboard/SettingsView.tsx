@@ -843,9 +843,6 @@ function PlanSection() {
               </Link>
             )
           )}
-          <Link href="/pricing" className="text-center text-xs font-semibold text-neutral-500 hover:text-neutral-900 py-1">
-            Compare plans
-          </Link>
         </div>
       </div>
 

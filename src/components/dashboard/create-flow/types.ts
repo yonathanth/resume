@@ -42,6 +42,8 @@ export interface CvLink {
   id: string;
   label: string;
   url: string;
+  /** How the CV shows it: the address itself, or the label as clickable text. Unset: the template's default. */
+  display?: "url" | "label";
 }
 
 export interface CvProject {

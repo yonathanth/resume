@@ -323,7 +323,7 @@ export function toCVContentPatch(cv: CvData): CVContentDTO {
       location: cv.personalInfo.location,
       links: cv.personalInfo.links
         .filter(KEEP.link)
-        .map((l) => ({ label: l.label.trim(), url: l.url.trim() })),
+        .map((l) => ({ label: l.label.trim(), url: l.url.trim(), ...(l.display ? { display: l.display } : {}) })),
       photo: nonEmpty(cv.personalInfo.photo),
     },
     summary: cv.summary,
@@ -586,7 +586,7 @@ export function applyCvContent(base: CvData, content: CVContentDTO): CvData {
       location: personal.location || base.personalInfo.location,
       headline: personal.title || base.personalInfo.headline,
       links: personal.links?.length
-        ? personal.links.map((l) => ({ id: newLocalId("link"), label: l.label ?? "", url: l.url ?? "" }))
+        ? personal.links.map((l) => ({ id: newLocalId("link"), label: l.label ?? "", url: l.url ?? "", display: l.display }))
         : base.personalInfo.links,
       photo: personal.photo || base.personalInfo.photo,
     },

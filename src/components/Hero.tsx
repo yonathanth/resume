@@ -1,52 +1,44 @@
 "use client";
 
 import React from "react";
-import { Star } from "lucide-react";
 import { HeroBeforeAfter } from "@/components/RealResultsSection";
-import { BrandIcon } from "@/components/landing/BrandIcon";
 import { CtaButton } from "@/components/CtaButton";
-import { HERO_RATING } from "@/lib/social-proof";
 
 /**
- * The landing page's first screen, a full screen tall: the rating and the
- * promise on the left, and beside them the proof — the same CV before and
- * after, whole. Moxie's quick start (upload a CV, or build one from scratch)
- * peeks in from the screen's edge — see MoxiePeek. On phones it stacks.
+ * The landing page's first screen, a full screen tall: the promise on the
+ * left, and beside it the proof — the same CV
+ * before and after, whole. Moxie's quick start (upload a CV, or build one
+ * from scratch) peeks in from the screen's edge — see MoxiePeek. On phones it
+ * stacks.
  */
 export function Hero() {
   return (
     <>
-      <section className="relative mx-auto grid min-h-svh w-full max-w-6xl grid-cols-1 content-center items-center gap-12 px-4 pb-12 pt-32 sm:gap-14 sm:px-6 sm:pt-36 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-16 lg:px-8 lg:pb-12">
-        {/* The rating and the promise */}
-        <div className="flex flex-col items-start text-left">
-          {/* The rating, and where it's from (Trustpilot's own green squares and mark) */}
-          <a
-            href={HERO_RATING.href}
-            target={HERO_RATING.href ? "_blank" : undefined}
-            rel="noreferrer"
-            className="hero-rise flex items-center gap-2.5 text-[14px] text-neutral-600"
-          >
-            <span className="flex h-[18px] w-[18px] items-center justify-center bg-[#00b67a]" aria-hidden="true">
-              <Star className="h-3 w-3 text-white" fill="currentColor" strokeWidth={0} />
-            </span>
-            <span>
-              <strong className="font-semibold text-neutral-900">{HERO_RATING.score}</strong> on
-            </span>
-            <span className="inline-flex items-center gap-1 font-semibold text-neutral-900">
-              <BrandIcon icon={HERO_RATING.icon} className="h-4 w-4" />
-              {HERO_RATING.platform}
-            </span>
-          </a>
-
-          <h1 className="hero-rise [animation-delay:120ms] mt-6 text-4xl font-bold leading-[1.06] tracking-tight text-neutral-950 sm:text-6xl lg:text-[52px]">
-            Your CV, rewritten for{" "}
-            <span className="hero-shimmer bg-[linear-gradient(110deg,var(--accent-strong),var(--accent)_35%,var(--accent-light)_50%,var(--accent)_65%,var(--accent-strong))] bg-clip-text text-transparent">
-              the job you want.
+      <section className="relative mx-auto grid min-h-svh w-full max-w-page grid-cols-1 content-center items-center gap-12 px-4 pb-12 pt-32 sm:gap-14 sm:px-6 sm:pt-36 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-14 lg:px-8 lg:pb-12">
+        {/* The promise. A container, so the headline sizes to the column. */}
+        <div className="@container flex flex-col items-start text-left">
+          {/* Always two lines: each line never wraps, and the size follows the column's width (capped). */}
+          <h1 className="hero-rise [animation-delay:120ms] w-full text-[length:min(9.6cqi,84px)] font-semibold leading-[1.05] tracking-[-0.035em] text-neutral-950">
+            <span className="block whitespace-nowrap">Build a CV that&apos;s</span>
+            <span className="block whitespace-nowrap">
+              {/* The accent word: slanted, in the brand orange, with a hand-drawn underline that draws in. */}
+              <span className="relative inline-block pr-[0.06em] italic text-accent">
+                impossible
+                <svg
+                  className="pointer-events-none absolute -bottom-[0.08em] left-0 h-[0.2em] w-full overflow-visible text-accent-light"
+                  viewBox="0 0 200 14"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
+                >
+                  <path className="hero-underline" pathLength={1} d="M3 10 C 45 4, 110 2, 197 7" fill="none" stroke="currentColor" strokeWidth="5" strokeLinecap="round" />
+                </svg>
+              </span>{" "}
+              to ignore.
             </span>
           </h1>
 
           <p className="hero-rise [animation-delay:220ms] mt-5 max-w-md text-[15px] leading-snug text-neutral-500 sm:text-[17px] sm:leading-[1.45]">
-            Upload your CV and get it rewritten around real results, ready to send. Your first CV is free, no card needed.
+            Start from scratch, improve the one you have, or tailor it to a job post. We write it around real results and show you what to fix.
           </p>
 
           <div id="hero-cta" className="hero-rise [animation-delay:280ms] mt-8">

@@ -75,7 +75,7 @@ export default async function TemplatePage({ params }: { params: Promise<{ id: s
       <div className="pointer-events-none absolute inset-0 bg-grid-pattern opacity-40" />
       <Navbar />
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-32 sm:px-6 sm:pt-36 lg:px-8">
+      <main className="relative z-10 mx-auto w-full max-w-page px-4 pb-24 pt-32 sm:px-6 sm:pt-36 lg:px-8">
         <nav aria-label="Breadcrumb" className="mb-8">
           <Link href="/templates" className="inline-flex items-center gap-1.5 text-sm font-medium text-neutral-500 hover:text-neutral-900">
             <ArrowLeft className="h-4 w-4" />

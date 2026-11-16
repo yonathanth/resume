@@ -50,7 +50,7 @@ export function ResultsCarousel() {
     "absolute top-1/2 z-10 -translate-y-1/2 flex h-10 w-10 sm:h-12 sm:w-12 items-center justify-center rounded-full border border-neutral-200 bg-white/90 text-neutral-700 shadow-sm backdrop-blur transition-colors hover:border-neutral-300 hover:text-neutral-950 disabled:opacity-0 disabled:pointer-events-none cursor-pointer";
 
   return (
-    <section id="stories" aria-roledescription="carousel" aria-label="Before and after resumes" className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
+    <section id="stories" aria-roledescription="carousel" aria-label="Before and after resumes" className="mx-auto w-full max-w-page px-4 py-12 sm:px-6 sm:py-20 lg:px-8">
       <Reveal className="text-center">
         <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.08]">
           Interviews in weeks,

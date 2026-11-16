@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowRight, Briefcase, Check, Crown, Lightbulb, Loader2, Lock, Plus, RefreshCw, Wand, WandSparkles, X } from "lucide-react";
 import type { CvReviewTip } from "@/lib/api";
 import {
@@ -100,7 +100,32 @@ export interface CvScorePanelProps {
   tour?: boolean;
   /** Where the dropdown opens on phones, below whatever bar holds the badge. */
   phoneDropdownTop?: string;
+  /**
+   * Open the panel by itself for a few seconds (a CV just came out of a flow),
+   * so people find out the score explains itself. Only the copy the tour
+   * points at opens; it stays open once they interact with it.
+   */
+  introduce?: boolean;
 }
+
+/** How many times the panel opens by itself, ever, on this browser. */
+const INTRO_LIMIT = 3;
+const INTRO_KEY = "gomoxie_score_intro_count";
+const INTRO_MS = 6000;
+
+function takeIntro(): boolean {
+  try {
+    const count = Number(localStorage.getItem(INTRO_KEY) ?? "0") || 0;
+    if (count >= INTRO_LIMIT) return false;
+    localStorage.setItem(INTRO_KEY, String(count + 1));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** How many locked checks a free plan sees by name. */
+const LOCKED_PREVIEW = 3;
 
 /**
  * The editor's CV score: a ring that opens what's missing (for everyone),
@@ -124,6 +149,32 @@ export function CvScorePanel(props: CvScorePanelProps) {
   const hasJob = score.job !== undefined;
 
   const close = () => setOpen(false);
+
+  // The one-time introduction: open shortly after the editor settles, close
+  // again unless they've started using it (hovered, focused or clicked inside).
+  const introduce = props.introduce && props.tour !== false;
+  const [introducing, setIntroducing] = useState(false);
+  // Counted once per editor visit, even when an effect runs twice (React's dev StrictMode).
+  const introTaken = useRef<boolean | null>(null);
+  useEffect(() => {
+    if (!introduce) return;
+    introTaken.current ??= takeIntro();
+    if (!introTaken.current) return;
+    const openTimer = setTimeout(() => {
+      setOpen(true);
+      setIntroducing(true);
+    }, 900);
+    return () => clearTimeout(openTimer);
+  }, [introduce]);
+  useEffect(() => {
+    if (!introducing) return;
+    const closeTimer = setTimeout(() => {
+      setOpen(false);
+      setIntroducing(false);
+    }, INTRO_MS);
+    return () => clearTimeout(closeTimer);
+  }, [introducing]);
+  const keepOpen = () => setIntroducing(false);
 
   const polishButton = (targets: PolishTarget[] | "all", key: string, label: string) => {
     const spinning = polishingKey === key;
@@ -164,11 +215,38 @@ export function CvScorePanel(props: CvScorePanelProps) {
     </li>
   );
 
-  const badgeHint = missing.length
-    ? `Add ${missing.length} for ${fmtGain(missingGain)}`
-    : improve.length
-      ? `${improve.length} to improve`
-      : "All checks pass";
+  // Free plans: the paid checks with the most to gain sit among the free ones
+  // (by name and gain, advice locked), so it's plain what a plan adds.
+  const lockedIds = new Set(isSubscribed ? [] : improve.slice(0, LOCKED_PREVIEW).map((c) => c.id));
+  const shownChecks = isSubscribed ? missing : [...missing, ...improve.filter((c) => lockedIds.has(c.id))].sort(byGain);
+
+  const lockedItem = (check: ScoreCheck) => (
+    <li key={check.id}>
+      <button
+        type="button"
+        onClick={props.onUpgrade}
+        title="Comes with Plus and Pro"
+        className="w-full rounded-lg border border-accent-border bg-accent-soft/60 p-2.5 text-left hover:bg-accent-soft transition-colors cursor-pointer"
+      >
+        <span className="flex items-baseline justify-between gap-2">
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-neutral-900">
+            <Lock className="w-3.5 h-3.5 text-accent-strong shrink-0" aria-hidden="true" />
+            {/* Only the area it's about: a check's own name ("Overall length") would give the advice away. */}
+            {score.categories.find((c) => c.key === check.category)?.label ?? "Your CV"} tip
+          </span>
+          <span className="shrink-0 text-xs font-bold tabular-nums text-emerald-700">{fmtGain(overallGain(score, check))}</span>
+        </span>
+        {/* The advice itself is the paid part: placeholder lines, not the real message. */}
+        <span aria-hidden="true" className="mt-1.5 block space-y-1">
+          <span className="block h-2 w-11/12 rounded-full bg-accent-border/60" />
+          <span className="block h-2 w-2/3 rounded-full bg-accent-border/60" />
+        </span>
+        <span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-accent-strong">
+          <Crown className="w-3 h-3" /> Unlock with Plus or Pro
+        </span>
+      </button>
+    </li>
+  );
 
   return (
     <div className={props.fill ? "relative min-w-0" : "relative"}>
@@ -179,13 +257,15 @@ export function CvScorePanel(props: CvScorePanelProps) {
         className={`${props.fill ? "w-full" : ""} inline-flex items-center gap-2 pl-1 pr-1 ${props.labelOnPhones ? "pr-3" : "sm:pr-3"} py-1 rounded-lg border bg-white transition-colors cursor-pointer ${
           open ? "border-neutral-400" : "border-neutral-300 hover:border-neutral-400 hover:bg-neutral-50"
         }`}
-        title="Your CV score. Click to see what to add for a better score"
+        title="Your CV score. Click to see why, and what lifts it"
         aria-expanded={open}
       >
         <ScoreRing score={score.total} size={36} />
         <span className={`${props.labelOnPhones ? "flex" : "hidden sm:flex"} flex-col items-start leading-tight`}>
           <span className="text-xs font-medium text-neutral-500">CV score</span>
-          <span className={`text-sm font-semibold whitespace-nowrap ${missing.length ? "text-emerald-700" : tone.text}`}>{badgeHint}</span>
+          <span className="inline-flex items-center gap-1 text-sm font-semibold whitespace-nowrap text-accent-strong underline decoration-accent-border decoration-2 underline-offset-4">
+            See why <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+          </span>
         </span>
       </button>
 
@@ -195,8 +275,23 @@ export function CvScorePanel(props: CvScorePanelProps) {
           <div
             role="dialog"
             aria-label="CV score"
+            onPointerEnter={keepOpen}
+            onPointerDown={keepOpen}
+            onFocus={keepOpen}
             className={`fixed sm:absolute inset-x-3 sm:inset-x-auto ${props.phoneDropdownTop ?? "top-[4.5rem]"} sm:top-auto sm:right-0 sm:mt-2 z-50 sm:w-[26rem] max-h-[calc(100dvh-9rem)] sm:max-h-[calc(100dvh-14rem)] overflow-y-auto rounded-lg border border-neutral-300 bg-white shadow-xl`}
           >
+            {/* Close: a zero-height sticky row, so the button stays in the corner while the panel scrolls under it. */}
+            <div className="pointer-events-none sticky top-0 z-10 -mb-12 flex h-12 items-start justify-end pt-3 pr-3">
+              <button
+                type="button"
+                onClick={close}
+                className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-md border border-neutral-200 bg-white text-neutral-500 shadow-sm hover:text-neutral-900 hover:bg-neutral-100 cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
             {/* Overall */}
             <div className="p-4 border-b border-neutral-200 space-y-3">
               <div className="flex items-center gap-4">
@@ -204,7 +299,13 @@ export function CvScorePanel(props: CvScorePanelProps) {
                 <div className="min-w-0 flex-1">
                   <div className={`text-base font-bold ${tone.text}`}>{tone.label}</div>
                   <p className="text-[13px] text-neutral-500 leading-relaxed mt-0.5">
-                    {score.total >= TARGET_SCORE ? (
+                    {score.depthCap ? (
+                      // The checks would give more, but there's too little in the CV to back it up.
+                      <>
+                        Held at <strong className="text-neutral-700">{score.depthCap.max}</strong> because your CV is short (about{" "}
+                        {score.depthCap.words} words). More detail in your roles lifts it; aim for {score.depthCap.target}+.
+                      </>
+                    ) : score.total >= TARGET_SCORE ? (
                       <>Above the {TARGET_SCORE} we recommend.</>
                     ) : (
                       <>
@@ -214,9 +315,8 @@ export function CvScorePanel(props: CvScorePanelProps) {
                     )}
                   </p>
                 </div>
-                <button type="button" onClick={close} className="self-start p-1.5 rounded-md text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100 cursor-pointer" aria-label="Close">
-                  <X className="w-4 h-4" />
-                </button>
+                {/* Room for the close button, which floats above (sticky, so it's there however far you scroll). */}
+                <span className="w-8 shrink-0 self-start" aria-hidden="true" />
               </div>
               {hasJob && (
                 <div className="space-y-1.5">
@@ -262,9 +362,11 @@ export function CvScorePanel(props: CvScorePanelProps) {
 
             {/* What's missing — for everyone */}
             <div className="px-4 py-3 border-b border-neutral-200 space-y-2">
-              <div className="text-sm font-semibold text-neutral-900">{missing.length ? "Add these for a better score" : "Nothing missing"}</div>
-              {missing.length === 0 && <p className="text-xs text-neutral-500">Every detail is there.</p>}
-              <ul className="space-y-1.5">{missing.map((check) => checkItem(check, isSubscribed))}</ul>
+              <div className="text-sm font-semibold text-neutral-900">{shownChecks.length ? "Add these for a better score" : "Nothing missing"}</div>
+              {shownChecks.length === 0 && <p className="text-xs text-neutral-500">Every detail is there.</p>}
+              <ul className="space-y-1.5">
+                {shownChecks.map((check) => (lockedIds.has(check.id) ? lockedItem(check) : checkItem(check, isSubscribed)))}
+              </ul>
             </div>
 
             {/* Job match */}
@@ -384,25 +486,39 @@ export function CvScorePanel(props: CvScorePanelProps) {
                 </div>
               </>
             ) : (
+              // What a paid plan unlocks — for free plans with something left to gain
+              // (its top checks also sit, locked, among the free ones above).
               improve.length > 0 && (
                 <div className="px-4 py-3">
                   <button
                     type="button"
                     onClick={props.onUpgrade}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg border border-neutral-200 bg-neutral-50 hover:bg-neutral-100 text-left transition-colors cursor-pointer"
+                    className="group w-full rounded-xl border border-accent-border bg-gradient-to-br from-accent-soft to-white p-3.5 text-left shadow-sm transition-shadow hover:shadow-md cursor-pointer focus:outline-none focus-visible:ring-4 focus-visible:ring-accent/20"
                   >
-                    <span className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center bg-white border border-neutral-200">
-                      <Lock className="w-4 h-4 text-neutral-500" />
-                    </span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-xs font-semibold text-neutral-900">
-                        {improve.length} more way{improve.length === 1 ? "" : "s"} to improve · {fmtGain(improveGain)}
+                    <span className="flex items-start gap-3">
+                      <span className="w-9 h-9 rounded-lg shrink-0 flex items-center justify-center bg-accent text-white shadow-sm">
+                        <Crown className="w-[18px] h-[18px]" />
                       </span>
-                      <span className="block text-[11px] text-neutral-500 leading-relaxed">
-                        The full breakdown, wording checks and AI polish come with Plus and Pro.
+                      <span className="flex-1 min-w-0">
+                        <span className="flex items-baseline justify-between gap-2">
+                          <span className="text-sm font-bold text-neutral-950">
+                            {improve.length > LOCKED_PREVIEW
+                              ? `Unlock all ${improve.length} ways to improve`
+                              : `Unlock ${improve.length === 1 ? "this fix" : "these fixes"}`}
+                          </span>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-emerald-700">{fmtGain(improveGain)} pts</span>
+                        </span>
+                        <span className="mt-0.5 block text-[13px] text-neutral-600 leading-relaxed">
+                          See the full breakdown, get wording checks, and let AI polish your CV in one click.
+                        </span>
                       </span>
                     </span>
-                    <Crown className="w-4 h-4 text-accent-strong shrink-0" />
+                    <span className="mt-3 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-medium text-neutral-500">With Plus and Pro</span>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-950 text-white text-xs font-semibold group-hover:bg-neutral-800 transition-colors">
+                        Unlock {fmtGain(improveGain)} <ArrowRight className="w-3.5 h-3.5" />
+                      </span>
+                    </span>
                   </button>
                 </div>
               )

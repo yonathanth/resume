@@ -12,6 +12,13 @@ const NO_INDEX_PATHS = ["/dashboard/:path*", "/admin/:path*", "/auth/:path*", "/
 const BACKEND_URL = process.env.BACKEND_URL?.replace(/\/$/, "");
 
 const nextConfig: NextConfig = {
+  // Share images read their fonts and template pictures from assets/og/ at
+  // runtime (a template's picture by its id), which tracing can't see: ship
+  // them with every share-image route, and only those.
+  outputFileTracingIncludes: {
+    "/**/opengraph-image*": ["./assets/og/**/*"],
+    "/**/opengraph-image*/**": ["./assets/og/**/*"],
+  },
   async rewrites() {
     return BACKEND_URL ? [{ source: "/api/v1/:path*", destination: `${BACKEND_URL}/api/v1/:path*` }] : [];
   },

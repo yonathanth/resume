@@ -221,6 +221,11 @@ export function flowErrorMessage(err: unknown, fallback: string): string {
         return "Moxie needs a short breather between CVs. Wait a few seconds, then try again.";
       case "AI_PAUSED":
         return "Moxie is taking a short maintenance break. Your details are kept, so come back in a little while and carry on.";
+      case "SERVICE_UNAVAILABLE":
+        // Already retried quietly (see apiFetch); "retryable" means it failed before anything happened.
+        return err.details.retryable === true
+          ? "We couldn't reach our servers just now. Your choices are kept and nothing was used up. Please try again in a moment."
+          : "We couldn't reach our servers just now. Your choices are kept. Please try again in a moment.";
     }
     if (err.status >= 500) return "Something went wrong on our side. Nothing was used up. Please try again in a moment.";
     return err.message || fallback;

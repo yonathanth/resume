@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Check, Loader2, Repeat, X } from "lucide-react";
 import type { BillingPeriod, PaidTier } from "@/lib/api";
 import { usePricing } from "@/hooks/use-subscription";
@@ -111,6 +112,14 @@ export function ChangePlanModal({ isOpen, onClose, current, isCancelScheduled, i
             );
           })}
         </div>
+
+        {/* What each plan includes, without leaving the dashboard. */}
+        <Link
+          href="/dashboard/upgrade"
+          className="mt-3 inline-block text-xs font-semibold text-neutral-500 underline decoration-neutral-300 underline-offset-2 hover:text-neutral-900"
+        >
+          What&apos;s in each plan?
+        </Link>
 
         {error && <p className="text-xs text-rose-600 font-medium leading-relaxed mt-3">{error}</p>}
 

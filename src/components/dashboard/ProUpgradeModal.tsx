@@ -53,7 +53,7 @@ const REASON_COPY: Record<PaywallDetails["reason"], { title: string; body: strin
   },
   unpaid_cap: {
     title: "You have CVs waiting to be paid for",
-    body: "Download or delete one of them before making another, or get a plan and download them all.",
+    body: "Pay for one of them to make another, or get a plan and download them all.",
   },
   fair_use: { title: "You've reached the fair-use limit", body: "It resets with your next billing period." },
   feature: { title: "This comes with Plus and Pro", body: "Upgrade to use it." },

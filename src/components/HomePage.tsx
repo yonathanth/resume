@@ -13,8 +13,9 @@ import { Footer } from "@/components/Footer";
 import styles from "./HomePage.module.css";
 import { LandingDetail } from "./LandingDetail";
 import { HiredAtStrip } from "./landing/HiredAtStrip";
-import { ResultsCarousel } from "./landing/ResultsCarousel";
+import { FeaturesSection } from "./landing/FeaturesSection";
 import { MoxiePeek } from "./landing/MoxiePeek";
+import { ReviewsSection } from "./landing/ReviewsSection";
 
 // The single before & after ("Recruiters give you six seconds", Robel Kassa) —
 // hidden for now; the swipeable "Real results" stories below take its place.
@@ -49,6 +50,12 @@ export function HomePage() {
         {/* Where users got hired */}
         <HiredAtStrip />
 
+        {/* Everything it does: create, improve, tailor, and the tools around them */}
+        <div className={`${styles.sectionScene} ${styles.glowRight}`}>
+          <LandingDetail kind="resume" />
+          <FeaturesSection />
+        </div>
+
         {/* How It Works (Directly below Hero) */}
         <div className={`${styles.sectionScene} ${styles.glowLeft}`}>
           <LandingDetail kind="keywords" />
@@ -64,9 +71,9 @@ export function HomePage() {
         {/* Real Results: Before & After CV Comparison */}
         {SHOW_SIX_SECONDS && <RealResultsSection />}
 
-        {/* More before & afters to swipe through */}
+        {/* What users say */}
         <div className={`${styles.sectionScene} ${styles.glowLeft}`}>
-          <ResultsCarousel />
+          <ReviewsSection />
         </div>
 
         {/* Pricing (Free, Pro) */}

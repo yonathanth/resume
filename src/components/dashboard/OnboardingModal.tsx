@@ -66,9 +66,9 @@ function stepsFor(me: ApiUser): { steps: Step[]; askName: boolean; askProfession
   const steps: Step[] = [];
   if (!me.signupIntent) steps.push("intent");
   if (askName) steps.push("about");
-  if (askProfession || !me.careerStage) steps.push("career");
+  if (askProfession) steps.push("career");
   if (!me.acquisitionSource) steps.push("source");
-  return { steps: steps.length ? steps : ["career"], askName, askProfession };
+  return { steps: steps.length ? steps : ["source"], askName, askProfession };
 }
 
 function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {
@@ -91,7 +91,7 @@ function Chip({ selected, onClick, children }: { selected: boolean; onClick: () 
  *   1. what they came to do (improve / tailor / create) — the flow that opens when they finish
  *   2. their name; choosing "improve", they can upload their CV instead and
  *      we fill in their details from it
- *   3. their professions (one or more, main first) and (optionally) career stage
+ *   3. their professions (one or more, main first) — career stage lives in Account settings
  *   4. how they heard about us (optional)
  * The answers go to the account (name and profession are the AI's defaults
  * on every CV) and to the admin's Insights. A phone number isn't asked: the
@@ -111,7 +111,6 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
   // Typed in the profession box but not added yet: counts as added on Continue.
   const [professionDraft, setProfessionDraft] = useState("");
   const allProfessions = addProfession(professions, professionDraft);
-  const [careerStage, setCareerStage] = useState<CareerStage | null>(me.careerStage);
   const [source, setSource] = useState<AcquisitionSource | null>(me.acquisitionSource);
   const [sourceDetail, setSourceDetail] = useState(me.acquisitionDetail ?? "");
   // "I have a CV to improve": the file, handed to the Improve flow when they finish.
@@ -153,7 +152,6 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
           ...(askName && firstName.trim() && lastName.trim() ? { firstName: firstName.trim(), lastName: lastName.trim() } : {}),
           ...(askProfession && allProfessions.length ? { professions: allProfessions } : {}),
           ...(intent ? { signupIntent: intent } : {}),
-          careerStage,
           acquisitionSource: source,
           acquisitionDetail: source === "other" && sourceDetail.trim() ? sourceDetail.trim() : null,
           signupSurface: "dashboard",
@@ -340,15 +338,10 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
         {step === "career" && (
           <>
             <StepEyebrow>{eyebrow}</StepEyebrow>
-            <h2 className="text-2xl font-bold tracking-tight text-neutral-950">{askProfession ? "What do you do?" : "One more thing"}</h2>
-            <p className="mt-1.5 text-sm text-neutral-500">
-              {askProfession
-                ? "Your main profession becomes the headline on new CVs, and your level helps us pitch them right."
-                : "So we can pitch your CVs at the right level."}
-            </p>
+            <h2 className="text-2xl font-bold tracking-tight text-neutral-950">What do you do?</h2>
+            <p className="mt-1.5 text-sm text-neutral-500">Your main profession becomes the headline on new CVs.</p>
 
-            {askProfession && (
-              <div className={`mt-5 ${usingCv ? "opacity-60" : ""}`}>
+            <div className={`mt-5 ${usingCv ? "opacity-60" : ""}`}>
                 <label htmlFor="onb-profession" className={LABEL_CLASS}>
                   Your profession{" "}
                   <span className="font-normal text-neutral-400">
@@ -363,23 +356,7 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
                   draft={professionDraft}
                   onDraftChange={setProfessionDraft}
                 />
-              </div>
-            )}
-
-            {!me.careerStage && (
-              <fieldset className="mt-5">
-                <legend className={LABEL_CLASS}>
-                  Where are you in your career? <span className="font-normal text-neutral-400">· optional</span>
-                </legend>
-                <div className="flex flex-wrap gap-2">
-                  {CAREER_STAGES.map(({ value, label }) => (
-                    <Chip key={value} selected={careerStage === value} onClick={() => setCareerStage(careerStage === value ? null : value)}>
-                      {label}
-                    </Chip>
-                  ))}
-                </div>
-              </fieldset>
-            )}
+            </div>
           </>
         )}
 

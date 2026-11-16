@@ -4,7 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken, restoreSession } from "@/lib/api";
 import { useMoxieWait } from "@/components/moxie/MoxieWait";
-import { CenteredSpinner } from "@/components/CenteredSpinner";
+import { DashboardShellSkeleton, ShimmerStatus } from "@/components/Shimmer";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { peekTryHandoff } from "@/lib/try-handoff";
 
@@ -64,7 +64,13 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (wait.active) return wait.node;
-  if (state !== "authed") return quiet ? <CenteredSpinner label="Checking you're signed in…" className="h-screen w-full bg-[#fbfbfb]" /> : null;
+  // After a /try hand-off: the dashboard's frame in outline while the session is restored.
+  if (state !== "authed")
+    return quiet ? (
+      <ShimmerStatus label="Checking you're signed in…">
+        <DashboardShellSkeleton />
+      </ShimmerStatus>
+    ) : null;
 
   return <>{children}</>;
 }

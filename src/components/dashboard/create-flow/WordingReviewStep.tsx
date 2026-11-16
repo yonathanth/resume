@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ChevronDown, Lock, Sparkles } from "lucide-react";
+import { ChevronDown, Lock, Wand } from "lucide-react";
 import { ApiError, WordingPreview, applyCvWording } from "@/lib/api";
 import { useInvalidateProfiles } from "@/hooks/use-profiles";
 
@@ -63,7 +63,7 @@ export function WordingReviewStep({ cvDocumentId, preview, children, onFinish, o
     <div>
       <div className="text-center mb-5">
         <span className="w-11 h-11 rounded-xl mx-auto mb-3 flex items-center justify-center bg-gradient-to-b from-violet-500 to-violet-600 border border-violet-600 text-white">
-          <Sparkles className="w-5 h-5" />
+          <Wand className="w-5 h-5" />
         </span>
         <h2 className="text-xl font-bold tracking-tight text-neutral-950">Use the improved wording in your {profile.title} profile?</h2>
         <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed">

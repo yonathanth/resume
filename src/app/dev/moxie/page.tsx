@@ -7,6 +7,7 @@ import { MOXIE_LOGOS } from "@/components/moxie/MoxieLogos";
 import { MoxieDidYouKnow } from "@/components/moxie/MoxieDidYouKnow";
 import { AiWaitLoader, type AiWait } from "@/components/dashboard/create-flow/FlowUI";
 import { useHasMounted } from "@/hooks/use-has-mounted";
+import { OgPreviews } from "./OgPreviews";
 
 const WAITS: AiWait[] = ["read-file", "read-story", "read-cv", "write", "improve", "tailor"];
 
@@ -361,6 +362,7 @@ export default function MoxiePlayground() {
         <p className="mt-3 text-sm text-neutral-500">Opens full screen, as in the app. Tickle her (wiggle over her, or double-tap her); click elsewhere or press Escape to close it.</p>
         {showWait && <AiWaitLoader key={run} wait={wait} done={done} fileName="my_cv.pdf" />}
       </section>
+      <OgPreviews />
     </main>
   );
 }

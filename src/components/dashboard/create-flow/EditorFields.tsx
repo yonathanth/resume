@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Plus, Trash2, X } from "lucide-react";
+import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Plus, Search, Trash2, X } from "lucide-react";
 import { CvBullet } from "./types";
 import { ICON_TONES, OptionTone } from "./OptionCard";
 import { newLocalId } from "@/lib/cv-mapper";
@@ -28,14 +28,325 @@ export function Field({ label, value, onChange, placeholder, type = "text", hint
   return (
     <label className="block" data-field={name}>
       <span className={labelClass}>{label}</span>
-      <input
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className={inputClass}
-      />
+      {type === "text" ? (
+        <GrowingText value={value} onChange={onChange} placeholder={placeholder} />
+      ) : (
+        <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className={inputClass} />
+      )}
       {hint && <span className="block mt-1.5 text-xs text-neutral-500">{hint}</span>}
+    </label>
+  );
+}
+
+/**
+ * A one-line value that wraps instead of scrolling sideways: it grows a line
+ * at a time so the whole text stays in view. Still a single line of data:
+ * Enter doesn't add a break, and pasted breaks become spaces.
+ */
+export function GrowingText({
+  value,
+  onChange,
+  placeholder,
+  className = "",
+  ...rest
+}: { value: string; onChange: (value: string) => void; placeholder?: string; className?: string } & Omit<
+  React.TextareaHTMLAttributes<HTMLTextAreaElement>,
+  "value" | "onChange" | "placeholder" | "className"
+>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const fit = () => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    // scrollHeight leaves out the border; add it back so nothing scrolls.
+    el.style.height = `${el.scrollHeight + (el.offsetHeight - el.clientHeight)}px`;
+  };
+  useLayoutEffect(fit, [value]);
+  // Rewrap when the column changes width (window resize, preview opened).
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <textarea
+      {...rest}
+      ref={ref}
+      rows={1}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value.replace(/[ \t]*\r?\n[ \t]*/g, " "))}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.preventDefault();
+        rest.onKeyDown?.(e);
+      }}
+      className={`${inputClass} block resize-none overflow-hidden leading-5 ${className}`}
+    />
+  );
+}
+
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** "2023-01" → {2023, 0}; "2023" → {2023, null}; anything else → null. */
+function parseMonth(value: string): { year: number; month: number | null } | null {
+  const text = value.trim();
+  let m = /^(\d{4})-(\d{1,2})$/.exec(text);
+  if (m && Number(m[2]) >= 1 && Number(m[2]) <= 12) return { year: Number(m[1]), month: Number(m[2]) - 1 };
+  m = /(\d{4})/.exec(text);
+  return m ? { year: Number(m[1]), month: null } : null;
+}
+
+/**
+ * A date on a CV (month and year, or just the year): type it, or pick it from
+ * the calendar button. Picking saves "2023-01" (the format every template
+ * formats); typing anything else ("Expected 2026") is kept as written.
+ */
+export function MonthField({
+  label,
+  value,
+  onChange,
+  placeholder = "2023-01",
+  name,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  name?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const parsed = parseMonth(value);
+  const thisYear = new Date().getFullYear();
+  const [year, setYear] = useState(parsed?.year ?? thisYear);
+  const box = useRef<HTMLDivElement>(null);
+
+  // Close on a click outside or Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const pick = (next: string) => {
+    onChange(next);
+    setOpen(false);
+  };
+
+  return (
+    <div className="block" data-field={name} ref={box}>
+      <span className={labelClass}>{label}</span>
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          placeholder={placeholder}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${inputClass} pr-10 disabled:bg-neutral-50 disabled:text-neutral-400`}
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            setYear(parseMonth(value)?.year ?? thisYear);
+            setOpen((v) => !v);
+          }}
+          aria-label={`Pick ${label.toLowerCase()} date`}
+          aria-expanded={open}
+          className={`absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
+            open ? "bg-accent-soft text-accent-strong" : "text-neutral-400 hover:text-neutral-800 hover:bg-neutral-100"
+          }`}
+        >
+          <CalendarDays className="w-4 h-4" />
+        </button>
+
+        {open && (
+          <div
+            role="dialog"
+            aria-label={`${label} date`}
+            className="absolute z-30 right-0 mt-1.5 w-64 rounded-lg border border-neutral-200 bg-white p-3 shadow-lg animate-in fade-in duration-100"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <button type="button" onClick={() => setYear((y) => y - 1)} className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 cursor-pointer" aria-label="Previous year">
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-semibold tabular-nums text-neutral-950">{year}</span>
+              <button
+                type="button"
+                onClick={() => setYear((y) => y + 1)}
+                disabled={year >= thisYear + 10}
+                className="p-1.5 rounded-md text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                aria-label="Next year"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {MONTH_NAMES.map((m, i) => {
+                const selected = parsed?.year === year && parsed.month === i;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => pick(`${year}-${String(i + 1).padStart(2, "0")}`)}
+                    className={`py-1.5 rounded-md text-xs font-semibold transition-colors cursor-pointer ${
+                      selected ? "bg-neutral-950 text-white" : "text-neutral-700 hover:bg-accent-soft hover:text-accent-strong"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2.5 pt-2.5 border-t border-neutral-100 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => pick(String(year))}
+                className={`text-xs font-semibold cursor-pointer ${
+                  parsed?.year === year && parsed.month === null ? "text-accent-strong" : "text-neutral-600 hover:text-neutral-950"
+                }`}
+              >
+                Just the year ({year})
+              </button>
+              {value && (
+                <button type="button" onClick={() => pick("")} className="text-xs font-semibold text-neutral-400 hover:text-red-600 cursor-pointer">
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Common languages for the language field's suggestions; anything else can still be typed.
+const LANGUAGES = [
+  "Afrikaans", "Albanian", "Amharic", "Arabic", "Armenian", "Azerbaijani", "Basque", "Belarusian", "Bengali", "Bosnian",
+  "Bulgarian", "Burmese", "Catalan", "Cantonese", "Croatian", "Czech", "Danish", "Dutch", "English", "Estonian", "Filipino",
+  "Finnish", "French", "Galician", "Georgian", "German", "Greek", "Gujarati", "Hausa", "Hebrew", "Hindi", "Hungarian",
+  "Icelandic", "Igbo", "Indonesian", "Irish", "Italian", "Japanese", "Kannada", "Kazakh", "Khmer", "Kinyarwanda", "Korean",
+  "Kurdish", "Kyrgyz", "Lao", "Latvian", "Lithuanian", "Macedonian", "Malay", "Malayalam", "Maltese", "Mandarin", "Marathi",
+  "Mongolian", "Nepali", "Norwegian", "Oromo", "Pashto", "Persian", "Polish", "Portuguese", "Punjabi", "Romanian", "Russian",
+  "Serbian", "Sign language", "Sinhala", "Slovak", "Slovenian", "Somali", "Spanish", "Swahili", "Swedish", "Tagalog", "Tajik",
+  "Tamil", "Telugu", "Thai", "Tigrinya", "Turkish", "Turkmen", "Ukrainian", "Urdu", "Uzbek", "Vietnamese", "Welsh", "Xhosa",
+  "Yoruba", "Zulu",
+];
+
+/** Languages matching what's typed: those that start with it first ("en" → English), then those that contain it. */
+function matchLanguages(query: string): string[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const starts = LANGUAGES.filter((l) => l.toLowerCase().startsWith(q));
+  const contains = LANGUAGES.filter((l) => !l.toLowerCase().startsWith(q) && l.toLowerCase().includes(q));
+  return [...starts, ...contains].slice(0, 8);
+}
+
+/**
+ * The language of a Languages entry, with suggestions as you type — the same
+ * typeahead as the profession field in onboarding. Anything not listed is
+ * kept as typed.
+ */
+export function LanguageField({ value, onChange, name = "language" }: { value: string; onChange: (value: string) => void; name?: string }) {
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const suggestions = matchLanguages(value);
+  const trimmed = value.trim();
+  const exact = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+  const showList = open && trimmed.length > 0 && (suggestions.length > 0 || !exact);
+
+  const choose = (language: string) => {
+    onChange(language);
+    setOpen(false);
+    setHighlight(-1);
+  };
+
+  return (
+    <label className="block" data-field={name}>
+      <span className={labelClass}>Language</span>
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+        <input
+          type="text"
+          role="combobox"
+          aria-expanded={showList}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={highlight >= 0 ? `${listId}-${highlight}` : undefined}
+          autoComplete="off"
+          value={value}
+          placeholder="e.g. English, Amharic"
+          onChange={(e) => {
+            onChange(e.target.value);
+            setOpen(true);
+            setHighlight(-1);
+          }}
+          // Delay so a click on a suggestion lands before the list closes.
+          onBlur={() => setTimeout(() => setOpen(false), 120)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setOpen(true);
+              setHighlight((h) => Math.min(h + 1, suggestions.length - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlight((h) => Math.max(h - 1, -1));
+            } else if (e.key === "Enter" && showList) {
+              e.preventDefault();
+              if (highlight >= 0 && suggestions[highlight]) choose(suggestions[highlight]);
+              else setOpen(false);
+            } else if (e.key === "Escape") {
+              setOpen(false);
+            }
+          }}
+          className={`${inputClass} pl-10`}
+        />
+        {showList && (
+          <div
+            id={listId}
+            role="listbox"
+            className="absolute z-30 mt-1.5 w-full max-h-64 overflow-y-auto rounded-lg border border-neutral-200 bg-white shadow-lg py-1 animate-in fade-in duration-100"
+          >
+            {suggestions.map((s, i) => (
+              <button
+                key={s}
+                id={`${listId}-${i}`}
+                type="button"
+                role="option"
+                aria-selected={highlight === i}
+                onMouseDown={(e) => e.preventDefault()}
+                onMouseEnter={() => setHighlight(i)}
+                onClick={() => choose(s)}
+                className={`w-full px-3.5 py-2 flex items-center justify-between gap-3 text-left text-sm font-medium text-neutral-900 cursor-pointer ${
+                  highlight === i ? "bg-neutral-50" : ""
+                }`}
+              >
+                {s}
+                {s.toLowerCase() === trimmed.toLowerCase() && <Check className="w-4 h-4 shrink-0 text-accent" />}
+              </button>
+            ))}
+            {!exact && (
+              <div className={`px-3.5 py-2 text-xs text-neutral-500 ${suggestions.length > 0 ? "border-t border-neutral-100 mt-1" : ""}`}>
+                Not listed? We&apos;ll keep <span className="font-semibold text-neutral-800">&ldquo;{trimmed}&rdquo;</span> as you wrote it.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </label>
   );
 }

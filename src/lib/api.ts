@@ -234,7 +234,36 @@ async function authedFetch(path: string, init: RequestInit = {}, isRetry = false
   return res;
 }
 
-export async function apiFetch<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
+// A database hiccup (the server waking up, a dropped connection) usually clears
+// in a few seconds. Requests the server marks safe to repeat get a couple of
+// quiet retries inside whatever loading state is already showing, so people
+// only hear about it when it lasts.
+const RETRY_DELAYS_MS = [1500, 3500];
+const SAFE_METHODS = new Set(["GET", "HEAD"]);
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isRetryable(err: unknown, method: string): boolean {
+  if (err instanceof ApiError) return err.code === "SERVICE_UNAVAILABLE" && err.details.retryable === true;
+  // fetch() itself failed (offline, server unreachable): only a read is safe to repeat.
+  return err instanceof TypeError && SAFE_METHODS.has(method);
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method ?? "GET").toUpperCase();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await apiFetchOnce<T>(path, options);
+    } catch (err) {
+      const signal = options.signal;
+      if (attempt >= RETRY_DELAYS_MS.length || signal?.aborted || !isRetryable(err, method)) throw err;
+      await wait(RETRY_DELAYS_MS[attempt]);
+      if (signal?.aborted) throw err;
+    }
+  }
+}
+
+async function apiFetchOnce<T>(path: string, options: RequestInit = {}, isRetry = false): Promise<T> {
   const token = await currentToken(path);
   const headers = new Headers(options.headers);
   // FormData (file uploads) must keep the browser-generated multipart
@@ -258,7 +287,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
   if (res.status === 401 && token && !isRetry && !SESSIONLESS_PATHS.has(path)) {
     const result = await requestRefresh();
     if (result.status === "ok") {
-      return apiFetch<T>(path, options, true);
+      return apiFetchOnce<T>(path, options, true);
     }
     if (result.status === "signed_out") goToSignIn();
   }
@@ -266,7 +295,9 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}, isRet
   const body = await res.json().catch(() => null);
 
   if (!res.ok || body?.error) {
-    const { code = "UNKNOWN_ERROR", message = "Something went wrong", ...details } = body?.error ?? {};
+    // Fastify's own error replies put a string in `error`; only our envelope is an object.
+    const envelope = body?.error && typeof body.error === "object" ? body.error : {};
+    const { code = "UNKNOWN_ERROR", message = "Something went wrong on our side. Please try again in a moment.", ...details } = envelope;
     // A suspended account is refused on every request — end the local
     // session and explain why on the sign-in page.
     if (code === "ACCOUNT_SUSPENDED" && token) {
@@ -768,7 +799,8 @@ export interface CVContentDTO {
     email?: string;
     phone?: string;
     location?: string;
-    links?: { label?: string; url?: string }[];
+    /** display: the address itself ("url") or the label as clickable text ("label"); unset keeps the template's default. */
+    links?: { label?: string; url?: string; display?: "url" | "label" }[];
     /** data:image/...;base64 — uploaded in the editor, never AI-generated. */
     photo?: string;
   };
@@ -1304,7 +1336,11 @@ export interface SubscriptionStatusResult {
   /** What each flow may still do on this plan (on Free, each is the shared free pool). */
   freeUses?: Record<CvFlowType, FlowUsage>;
   free?: FlowUsage;
-  unpaidCvs?: { count: number; cap: number };
+  /**
+   * count: locked CVs they have now (what's "waiting to be paid for").
+   * inUse: slots of the pay-later cap taken — also counts pay-later CVs deleted in the last 30 days.
+   */
+  unpaidCvs?: { count: number; inUse?: number; cap: number };
 }
 
 /** The user's plan, falling back sensibly for an older backend. */

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Bell, CheckCheck, X } from "lucide-react";
 import { useNotificationActions, useNotifications } from "@/hooks/use-notifications";
 import type { ApiNotification } from "@/lib/api";
+import { RowsSkeleton, ShimmerStatus } from "@/components/Shimmer";
 
 function timeAgo(iso: string): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -132,7 +133,9 @@ export function NotificationBell() {
           </div>
           <div className="max-h-[60vh] overflow-y-auto p-1.5">
             {isLoading ? (
-              <p className="px-3 py-6 text-center text-sm text-neutral-500">Loading…</p>
+              <ShimmerStatus label="Loading notifications…" className="px-3 py-4">
+                <RowsSkeleton rows={3} />
+              </ShimmerStatus>
             ) : isError ? (
               <p className="px-3 py-6 text-center text-sm text-neutral-500">Couldn&apos;t load notifications.</p>
             ) : !data?.items.length ? (

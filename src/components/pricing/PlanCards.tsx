@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Clock, Infinity as InfinityIcon, Loader2, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Clock, Infinity as InfinityIcon, Loader2 } from "lucide-react";
 import {
   ApiError,
   planTier,
@@ -16,7 +16,6 @@ import {
   PERIODS,
   PERIOD_LABEL,
   formatPrice,
-  billedAs,
   weeklyPrice,
   planFeatures,
   timeLeft,
@@ -208,10 +207,12 @@ interface PlanCardsProps {
   periodOnCards?: boolean;
   /** Free goes after Plus and Pro (the in-app plans page). */
   freeLast?: boolean;
+  /** Leave Free out (a signed-in user already on a paid plan: it would only say "Included"). */
+  hideFree?: boolean;
 }
 
 /** Free, Plus and Pro side by side with the period toggle. */
-export function PlanCards({ theme, signedIn, status, periodOnCards = false, freeLast = false }: PlanCardsProps) {
+export function PlanCards({ theme, signedIn, status, periodOnCards = false, freeLast = false, hideFree = false }: PlanCardsProps) {
   const t = T[theme];
   const { data } = usePricing();
   const pricing = data ?? FALLBACK_PRICING;
@@ -244,9 +245,11 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
     { tier: "plus", name: "Plus", blurb: "Plenty for a focused job search." },
     { tier: "pro", name: "Pro", blurb: "No limits on any of it.", popular: true },
   ];
-  const cards: { tier: "free" | PaidTier; name: string; blurb: string; popular?: boolean }[] = freeLast
-    ? [...paidCards, freeCard]
-    : [freeCard, ...paidCards];
+  const cards: { tier: "free" | PaidTier; name: string; blurb: string; popular?: boolean }[] = hideFree
+    ? paidCards
+    : freeLast
+      ? [...paidCards, freeCard]
+      : [freeCard, ...paidCards];
 
   return (
     <div>
@@ -256,7 +259,7 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
         </div>
       )}
 
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 md:grid-cols-3">
+      <div className={`mx-auto grid grid-cols-1 gap-6 ${cards.length === 2 ? "max-w-4xl md:grid-cols-2" : "max-w-6xl md:grid-cols-3"}`}>
         {cards.map((card) => {
           const period = periodOf(card.tier);
           const price = card.tier === "free" ? null : pricing.plans[card.tier][period];
@@ -284,9 +287,7 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
                 <span className={`text-5xl font-bold tracking-tight ${t.title}`}>{price ? weeklyPrice(price.price, period) : "$0"}</span>
                 {price && <span className={`text-[14px] ${t.muted}`}>/ week</span>}
               </div>
-              {/* What's actually charged. Same height on every card (blank on Free), so switching periods doesn't shift the cards. */}
-              <p className={`mt-1 min-h-5 text-[12.5px] ${t.muted}`}>{price ? billedAs(price.price, period) : ""}</p>
-              <p className={`mt-1.5 text-[14px] ${t.body}`}>{card.blurb}</p>
+              <p className={`mt-2.5 text-[14px] ${t.body}`}>{card.blurb}</p>
 
               {card.tier === "free" ? (
                 signedIn ? (
@@ -398,7 +399,7 @@ export function LifetimeDeal({ theme, signedIn, status }: { theme: PlanTheme; si
             onClick={() => purchase.mutate({ product: "plus_lifetime" })}
             className={`${BUTTON} ${t.primary}`}
           >
-            {purchase.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : onSale && <Sparkles className="h-4 w-4" />}
+            {purchase.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : onSale && <InfinityIcon className="h-4 w-4" />}
             {purchase.isPending ? "Redirecting..." : onSale ? "Get Lifetime" : "Coming soon"}
           </button>
         )}

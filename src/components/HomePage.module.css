@@ -55,9 +55,10 @@
   stroke-opacity: 0.6;
 }
 
+/* Beside the features section's heading, clear of its card. */
 .resume {
-  left: max(4%, calc((100% - 1300px) / 2));
-  top: 22%;
+  left: max(4%, calc((100% - 1320px) / 2));
+  top: 8px;
   transform: rotate(-12deg);
 }
 
@@ -86,10 +87,10 @@
   }
 
   .resume {
-    top: 19%;
     left: 4%;
   }
 
+  .resume,
   .keywords,
   .templates,
   .ready {

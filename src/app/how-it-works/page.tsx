@@ -44,7 +44,7 @@ export default function HowItWorksPage() {
 
       <Navbar />
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-36 sm:px-6 sm:pt-40 lg:px-8">
+      <main className="relative z-10 mx-auto w-full max-w-page px-4 pb-24 pt-36 sm:px-6 sm:pt-40 lg:px-8">
         {/* Header */}
         <Reveal className="mx-auto max-w-2xl text-center">
           <h1 className="text-4xl font-bold tracking-tight text-neutral-950 sm:text-6xl sm:leading-[1.05]">

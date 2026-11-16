@@ -10,7 +10,7 @@ interface GetStartedCTAProps {
 
 export function GetStartedCTA({ onStartBuilding }: GetStartedCTAProps) {
   return (
-    <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 max-w-6xl mx-auto w-full">
+    <section className="py-16 sm:py-20 px-4 sm:px-6 lg:px-8 max-w-page mx-auto w-full">
       {/* Dark High-Impact Banner Card */}
       <div className="relative rounded-3xl bg-[#0e0e0e] border border-neutral-800 text-white p-10 sm:p-14 lg:p-16 text-center overflow-hidden shadow-2xl">
         

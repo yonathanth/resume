@@ -6,7 +6,9 @@ import { FilePlus, LayoutTemplate, User, CreditCard, Search, Mail, ArrowRight } 
 import { useDashboard } from "./DashboardContext";
 import { useMe } from "@/hooks/use-auth";
 import { SOFT_TONES, SoftTone } from "./create-flow/OptionCard";
-import { SUPPORT_EMAIL, WRITING_TIPS, filterFaqGroups } from "@/lib/help-content";
+import { SUPPORT_EMAIL, WRITING_TIPS, faqGroups, filterFaqGroups } from "@/lib/help-content";
+import { usePricing } from "@/hooks/use-subscription";
+import { FALLBACK_PRICING } from "@/lib/plans";
 import { FaqItem } from "@/components/FaqItem";
 
 export function HelpView() {
@@ -16,7 +18,9 @@ export function HelpView() {
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   const q = query.trim().toLowerCase();
-  const groups = filterFaqGroups(query);
+  // Prices and limits in the answers come from the live price list.
+  const { data: pricing } = usePricing();
+  const groups = filterFaqGroups(faqGroups(pricing ?? FALLBACK_PRICING), query);
 
   const quickLinks: {
     title: string;
@@ -26,7 +30,7 @@ export function HelpView() {
     onClick?: () => void;
     href?: string;
   }[] = [
-    { title: "New Resume", description: "Start a new resume in a few minutes.", icon: FilePlus, tone: "peach", onClick: handleNewResume },
+    { title: "New CV", description: "Start a new CV in a few minutes.", icon: FilePlus, tone: "peach", onClick: handleNewResume },
     { title: "Browse templates", description: "Preview every layout.", icon: LayoutTemplate, tone: "sage", href: "/dashboard/templates" },
     { title: "Career profiles", description: "Your experience and skills, one profile per role.", icon: User, tone: "lavender", href: "/dashboard/career-profiles" },
     { title: "Plan & billing", description: "Upgrade, renew or cancel.", icon: CreditCard, tone: "blue", href: "/dashboard/settings#plan" },

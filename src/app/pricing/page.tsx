@@ -7,51 +7,15 @@ import { Reveal } from "@/components/Reveal";
 import { ChevronDown } from "lucide-react";
 import { useHasMounted } from "@/hooks/use-has-mounted";
 import { hasSession } from "@/lib/api";
-import { useSubscriptionStatus } from "@/hooks/use-subscription";
+import { usePricing, useSubscriptionStatus } from "@/hooks/use-subscription";
 import { LifetimeDeal, PlanCards } from "@/components/pricing/PlanCards";
+import { FALLBACK_PRICING } from "@/lib/plans";
+import { pricingFaqs } from "@/lib/help-content";
 
 // Free, Plus and Pro with a billing-period toggle, the Plus Lifetime deal and
 // pay-per-CV (see components/pricing/PlanCards.tsx). A signed-in visitor
 // starts checkout for that exact plan from here; a signed-out one goes to
 // /signup first — there's no anonymous checkout.
-
-interface FAQItem {
-  question: string;
-  answer: string;
-}
-
-const faqs: FAQItem[] = [
-  {
-    question: "What can I do on the free plan?",
-    answer:
-      "Your first AI CV is free (a new one, a tailored one or an improved one), with every template and the full editor. After that you can keep making CVs and pay only for the ones you download, or pick a plan.",
-  },
-  {
-    question: "How does paying per CV work?",
-    answer:
-      "Make your CV, edit it as much as you like, and pay when you download it: $2.99 for a new CV, $1.99 for one tailored or improved from a CV you already have. Any paid plan also unlocks the CVs you made on the free plan.",
-  },
-  {
-    question: "What's the difference between Plus and Pro?",
-    answer:
-      "Both include career profiles. Plus gives you a set number of tailorings, enhancements and new CVs each billing period. Pro has no limits on any of them, under our fair use policy.",
-  },
-  {
-    question: "What is Plus Lifetime?",
-    answer:
-      "One payment for Plus forever: 20 tailorings, 12 enhancements and 5 new CVs every month, reset monthly. It's only offered for a limited time.",
-  },
-  {
-    question: "Can I cancel or switch plans anytime?",
-    answer:
-      "Yes. Switch between plans and billing periods from your account settings, prorated. If you cancel, you keep your plan until the end of the period you've already paid for. Nothing already paid is refunded.",
-  },
-  {
-    question: "Which file formats are supported?",
-    answer:
-      "You can start from an existing CV as a PDF or Word (DOCX) file, and download your finished resume as a PDF, the format applicant tracking systems read most reliably.",
-  },
-];
 
 export default function PricingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -60,6 +24,9 @@ export default function PricingPage() {
   // render and the client's first hydration pass agree — see use-has-mounted.ts.
   const isSignedIn = hasMounted && hasSession();
   const { data: status } = useSubscriptionStatus();
+  // The same answers as the help center, with prices and limits from the live price list.
+  const { data: pricing } = usePricing();
+  const faqs = pricingFaqs(pricing ?? FALLBACK_PRICING);
 
   return (
     <div className="relative flex min-h-screen flex-col justify-between overflow-x-hidden bg-[#0a0a0a] font-sans text-white selection:bg-accent selection:text-white">
@@ -69,7 +36,7 @@ export default function PricingPage() {
 
       <Navbar theme="dark" />
 
-      <main className="relative z-10 mx-auto w-full max-w-6xl px-4 pb-24 pt-36 sm:px-6 sm:pt-40 lg:px-8">
+      <main className="relative z-10 mx-auto w-full max-w-page px-4 pb-24 pt-36 sm:px-6 sm:pt-40 lg:px-8">
         <Reveal className="mx-auto max-w-2xl text-center">
           <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl sm:leading-[1.05]">
             Simple <span className="text-accent">pricing.</span>
@@ -92,20 +59,20 @@ export default function PricingPage() {
             {faqs.map((faq, idx) => {
               const isOpen = openFaq === idx;
               return (
-                <div key={faq.question} className="overflow-hidden rounded-2xl border border-neutral-800/90 bg-[#141416]">
+                <div key={faq.q} className="overflow-hidden rounded-2xl border border-neutral-800/90 bg-[#141416]">
                   <button
                     type="button"
                     onClick={() => setOpenFaq(isOpen ? null : idx)}
                     aria-expanded={isOpen}
                     className="flex w-full cursor-pointer items-center justify-between gap-4 px-6 py-5 text-left transition-colors hover:bg-[#18181b]"
                   >
-                    <span className="text-[15px] font-semibold text-white sm:text-base">{faq.question}</span>
+                    <span className="text-[15px] font-semibold text-white sm:text-base">{faq.q}</span>
                     <ChevronDown
                       className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isOpen ? "rotate-180 text-accent-light" : "text-neutral-500"}`}
                     />
                   </button>
                   {isOpen && (
-                    <div className="border-t border-neutral-800/50 px-6 pb-5 pt-4 text-[14px] leading-relaxed text-neutral-400">{faq.answer}</div>
+                    <div className="border-t border-neutral-800/50 px-6 pb-5 pt-4 text-[14px] leading-relaxed text-neutral-400">{faq.a}</div>
                   )}
                 </div>
               );

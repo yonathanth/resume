@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { CenteredSpinner } from "@/components/CenteredSpinner";
+import { EditorSkeleton } from "@/components/dashboard/create-flow/EditorSkeleton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAllDrafts, CV_DRAFTS_QUERY_KEY } from "@/hooks/use-cv-drafts";
 import {
@@ -248,8 +248,9 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
     >
       {children}
       {openingCv && (
-        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-[#fbfbfb] animate-in fade-in duration-300">
-          <CenteredSpinner caption="Opening your CV…" />
+        // The editor in outline, so the hand-off to the editor page is seamless (it shows the same while it loads).
+        <div role="status" aria-label="Opening your CV" className="fixed inset-0 z-[95] bg-[#fbfbfb] animate-in fade-in duration-300">
+          <EditorSkeleton />
         </div>
       )}
     </DashboardContext.Provider>

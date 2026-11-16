@@ -367,10 +367,10 @@ export function HowItWorks() {
   }, []);
 
   return (
-    <section ref={section} id="how-it-works" onMouseEnter={enter} onMouseLeave={leave} className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+    <section ref={section} id="how-it-works" onMouseEnter={enter} onMouseLeave={leave} className="mx-auto w-full max-w-page px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
       {/* Header */}
       <Reveal className="mx-auto max-w-2xl text-center">
-        <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">How it works</h2>
+        <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl">How it <span className="text-accent">works</span></h2>
         <p className="mt-4 text-base text-neutral-500 sm:text-lg">From blank page to job-ready resume in three simple steps.</p>
       </Reveal>
 

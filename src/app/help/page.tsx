@@ -6,7 +6,9 @@ import { ArrowRight, CreditCard, LayoutTemplate, LogIn, Mail, Search, UserPlus }
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { FaqItem } from "@/components/FaqItem";
-import { SUPPORT_EMAIL, WRITING_TIPS, filterFaqGroups } from "@/lib/help-content";
+import { SUPPORT_EMAIL, WRITING_TIPS, faqGroups, filterFaqGroups } from "@/lib/help-content";
+import { usePricing } from "@/hooks/use-subscription";
+import { FALLBACK_PRICING } from "@/lib/plans";
 import { SOFT_TONES, type SoftTone } from "@/components/dashboard/create-flow/OptionCard";
 
 // The public Help center: the same answers as the dashboard's Help page, open
@@ -15,9 +17,9 @@ import { SOFT_TONES, type SoftTone } from "@/components/dashboard/create-flow/Op
 // Icon tiles in the same soft colours as the dashboard's cards.
 const QUICK_LINKS: { title: string; description: string; icon: React.ComponentType<{ className?: string }>; tone: SoftTone; href: string }[] = [
   { title: "Get started", description: "Create a free account.", icon: UserPlus, tone: "peach", href: "/signup" },
-  { title: "Browse templates", description: "See every layout.", icon: LayoutTemplate, tone: "sage", href: "/#templates" },
-  { title: "Pricing", description: "Free and Pro plans.", icon: CreditCard, tone: "blue", href: "/pricing" },
-  { title: "Log in", description: "Back to your resumes.", icon: LogIn, tone: "lavender", href: "/login" },
+  { title: "Browse templates", description: "See every layout.", icon: LayoutTemplate, tone: "sage", href: "/templates" },
+  { title: "Pricing", description: "Free, Plus and Pro plans.", icon: CreditCard, tone: "blue", href: "/pricing" },
+  { title: "Log in", description: "Back to your CVs.", icon: LogIn, tone: "lavender", href: "/login" },
 ];
 
 export default function PublicHelpPage() {
@@ -25,7 +27,9 @@ export default function PublicHelpPage() {
   const [openKey, setOpenKey] = useState<string | null>(null);
 
   const searching = query.trim().length > 0;
-  const groups = filterFaqGroups(query);
+  // Prices and limits in the answers come from the live price list.
+  const { data: pricing } = usePricing();
+  const groups = filterFaqGroups(faqGroups(pricing ?? FALLBACK_PRICING), query);
   const supportHref = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Help with gomoxie")}`;
 
   return (

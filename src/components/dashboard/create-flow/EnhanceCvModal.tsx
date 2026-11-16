@@ -269,9 +269,7 @@ export function EnhanceCvModal({
       setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
       if (proGate.isProRequired(err, () => handleUploadFile(file, templateId))) return;
-      setFlowError(
-        err instanceof Error ? err.message : "Could not read this file. Please try a different one."
-      );
+      setFlowError(flowErrorMessage(err, "Could not read this file. Please try a different one."));
     }
   };
 

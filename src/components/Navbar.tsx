@@ -4,6 +4,8 @@ import React, { useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useHasMounted } from "@/hooks/use-has-mounted";
+import { hasSession } from "@/lib/api";
 import { CtaButton } from "@/components/CtaButton";
 import { MenuToggleIcon } from "@/components/MenuToggleIcon";
 
@@ -48,6 +50,9 @@ export function Navbar({ theme = "light" }: NavbarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const isDark = theme === "dark";
+  // Read after mount: the session hint lives in browser storage.
+  const hasMounted = useHasMounted();
+  const signedIn = hasMounted && hasSession();
   const pathname = usePathname();
   // The page you're on (its section, e.g. /templates/classic → Templates).
   const isCurrent = (href: string) => !href.includes("#") && (pathname === href || pathname.startsWith(`${href}/`));
@@ -103,11 +108,12 @@ export function Navbar({ theme = "light" }: NavbarProps) {
     <header className={`fixed top-0 inset-x-0 z-50 border-b transition-colors duration-200 ${surface}`}>
       <nav
         aria-label="Main Navigation"
-        className="mx-auto flex h-20 sm:h-24 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8"
+        className="mx-auto flex h-20 sm:h-24 max-w-page items-center justify-between px-4 sm:px-6 lg:px-8"
       >
         {/* Logo + primary links */}
         <div className="flex items-center gap-6 lg:gap-8">
-          <Link href="/" className="flex items-center gap-2 group" aria-label="gomoxie home">
+          {/* Signed in, home is the Builder (the landing page would only send them there). */}
+          <Link href={signedIn ? "/dashboard" : "/"} className="flex items-center gap-2 group" aria-label={signedIn ? "gomoxie, go to the Builder" : "gomoxie home"}>
             <BrandMark size={36} className="transition-transform duration-200 group-hover:scale-105" />
             <span className={`text-[16px] font-bold tracking-tight ${isDark ? "text-white" : "text-neutral-950"}`}>
               gomoxie

@@ -15,7 +15,7 @@ import { ICON_TONES } from "@/components/dashboard/create-flow/OptionCard";
 import { DashboardMoxie } from "@/components/dashboard/DashboardMoxie";
 import { ChipListEditor, INPUT_CLASS, LABEL_CLASS, ProfileSectionEditor } from "./ProfileSectionEditor";
 import { ItemRecord, PROFILE_SECTIONS, describeChangeCounts, missingRequired, tempId, toSavePayload } from "./profile-sections";
-import { CenteredSpinner } from "@/components/CenteredSpinner";
+import { ProfileEditorSkeleton, ShimmerStatus } from "@/components/Shimmer";
 
 type Tab = "profile" | "resumes" | "history";
 
@@ -79,7 +79,11 @@ export function ProfileEditorView({ profileId }: { profileId: string }) {
     return () => window.removeEventListener("beforeunload", warn);
   }, [isDirty]);
 
-  if (isLoading || (!draft && !error)) return <CenteredSpinner label="Loading this profile…" className="py-32" />;
+  if (isLoading || (!draft && !error)) return (
+      <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 lg:px-20 max-w-5xl mx-auto w-full">
+        <ShimmerStatus label="Loading this profile…"><ProfileEditorSkeleton /></ShimmerStatus>
+      </div>
+    );
   if (error || !profile || !draft) {
     return (
       <div className="max-w-md mx-auto py-24 text-center">

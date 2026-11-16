@@ -18,11 +18,14 @@ export function PricingSection() {
   const { data: status } = useSubscriptionStatus();
 
   return (
-    <section id="pricing" className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
+    <section id="pricing" className="mx-auto w-full max-w-page px-4 py-10 sm:px-6 sm:py-16 lg:px-8 lg:py-20">
       <Reveal className="mx-auto max-w-2xl text-center">
         <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.08]">
           Simple <span className="text-accent">pricing.</span>
         </h2>
+        <p className="mt-5 text-base text-neutral-500 sm:text-lg">
+          Your first CV is free, whether it&apos;s new, improved or tailored. Upgrade only when you need more.
+        </p>
       </Reveal>
 
       <Reveal delay={100} className="mt-12">

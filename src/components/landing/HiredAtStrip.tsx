@@ -5,7 +5,7 @@ import { BrandIcon } from "./BrandIcon";
 /** Under the hero: where people who used gomoxie got hired. */
 export function HiredAtStrip() {
   return (
-    <section aria-label="Where our users got hired" className="mx-auto w-full max-w-5xl px-4 pb-16 pt-2 sm:px-6 sm:pb-24 lg:px-8">
+    <section aria-label="Where our users got hired" className="mx-auto w-full max-w-5xl xl:max-w-6xl 2xl:max-w-7xl px-4 pb-16 pt-2 sm:px-6 sm:pb-24 lg:px-8">
       <p className="text-center text-[15px] text-neutral-500">
         Helping job seekers land roles at {HIRED_AT.companiesCount} companies like
       </p>

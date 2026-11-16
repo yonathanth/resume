@@ -32,6 +32,7 @@ import {
   ShieldCheck,
   Target,
   Wand,
+  Link2,
   Trash2,
   Upload,
   User,
@@ -91,6 +92,8 @@ import {
   EmptyState,
   EntryCard,
   Field,
+  LanguageField,
+  MonthField,
   SectionHeader,
   TagInput,
   inputClass,
@@ -106,6 +109,8 @@ interface CvEditorWorkspaceProps {
   onDownloaded?: (cvDocumentId: string) => void;
   /** Load this CV again from the server (after it was tailored in place). Without it, the editor route is opened. */
   onReload?: () => void;
+  /** The CV just came out of a flow: open the score panel briefly so people see what it says (see CvScorePanel). */
+  introduceScore?: boolean;
 }
 
 // "personal" (the contact form) plus any section key from the backend's
@@ -348,6 +353,14 @@ const blankReference = (): CvReference => ({
 // The app's button styles (see SettingsView).
 const ACCENT_BUTTON =
   "inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg border border-accent bg-accent hover:bg-accent-strong hover:border-accent-strong text-white text-sm font-semibold transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed";
+/** A link as the templates print it: no protocol, no "www.", no trailing slash. */
+const shortUrl = (url: string) =>
+  url
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/$/, "");
+
 const CARD = "rounded-lg border border-neutral-300 bg-white p-5 space-y-4";
 
 /** "Jan 2021 – Present" style line for an entry header. */
@@ -373,9 +386,9 @@ function DateRangeFields({
 }) {
   return (
     <>
-      <Field name="startDate" label="Start" value={start} placeholder="2023-01" onChange={(v) => onChange({ startDate: v })} />
+      <MonthField name="startDate" label="Start" value={start} placeholder="2023-01" onChange={(v) => onChange({ startDate: v })} />
       <div>
-        <Field
+        <MonthField
           name="endDate"
           label="End"
           value={isCurrent ? "" : end}
@@ -544,7 +557,7 @@ function TemplateGalleryCard({
   );
 }
 
-export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, onReload }: CvEditorWorkspaceProps) {
+export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, onReload, introduceScore = false }: CvEditorWorkspaceProps) {
   const toast = useToast();
   const subscriptionStatus = useSubscriptionStatus().data;
   // AI polish comes with any paid plan (or a grant of just that feature).
@@ -1197,6 +1210,8 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
 
   // The same score panel sits in the top bar and on the phone preview.
   const scorePanelProps: CvScorePanelProps = {
+    // Not while the spotlight tour is up: it shows the score itself.
+    introduce: introduceScore && !showWalkthrough,
     score: cvScore,
     isPro,
     isSubscribed,
@@ -1527,8 +1542,14 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
 
                 <div className={CARD} data-field="links">
                   <span className={labelClass}>Links</span>
-                  {cv.personalInfo.links.map((link) => (
-                    <div key={link.id} className="flex items-center gap-2">
+                  {cv.personalInfo.links.map((link) => {
+                    const setLink = (patch: Partial<CvLink>) =>
+                      setLinks(cv.personalInfo.links.map((l) => (l.id === link.id ? { ...l, ...patch } : l)));
+                    const shownAs = link.display ?? "url";
+                    const label = link.label.trim();
+                    return (
+                    <div key={link.id} className="space-y-1.5">
+                    <div className="flex items-center gap-2">
                       <input
                         type="text"
                         value={link.label}
@@ -1558,10 +1579,54 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
+                    {/* How it reads on the CV: the address, or the label as clickable text. Shown once there's an address. */}
+                    {link.url.trim() && (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs text-neutral-500">
+                        <span>Show on CV as</span>
+                        <div role="radiogroup" aria-label="Show this link as" className="inline-flex min-w-0 max-w-full rounded-md border border-neutral-200 bg-neutral-50 p-0.5">
+                          {(
+                            [
+                              { value: "url", text: shortUrl(link.url) },
+                              { value: "label", text: label || "a name" },
+                            ] as const
+                          ).map((option) => {
+                            const selected = shownAs === option.value;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                role="radio"
+                                aria-checked={selected}
+                                onClick={() => setLink({ display: option.value })}
+                                title={
+                                  option.value === "url"
+                                    ? "The address itself, as it is"
+                                    : label
+                                      ? `"${label}", linking to the address`
+                                      : "Type a label on the left first, e.g. GitHub"
+                                }
+                                className={`min-w-0 max-w-[14rem] truncate px-2 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                                  selected ? "bg-white text-neutral-900 shadow-sm ring-1 ring-neutral-200" : "text-neutral-500 hover:text-neutral-800"
+                                } ${option.value === "label" && !label ? "italic" : ""}`}
+                              >
+                                {option.value === "label" && <Link2 className="inline w-3 h-3 mr-1 -mt-0.5 text-[#2563eb]" aria-hidden="true" />}
+                                {/* The name option looks the way it will on the CV: link blue, underlined. */}
+                                <span className={option.value === "label" && label ? "text-[#2563eb] underline decoration-1 underline-offset-2" : ""}>
+                                  {option.text}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        {shownAs === "label" && !label && <span className="text-amber-700">Add a label to use this.</span>}
+                      </div>
+                    )}
+                    </div>
+                    );
+                  })}
                   <AddButton
                     label="Add link"
-                    onClick={() => setLinks([...cv.personalInfo.links, { id: newLocalId("link"), label: "", url: "" }])}
+                    onClick={() => setLinks([...cv.personalInfo.links, { id: newLocalId("link"), label: "", url: "", display: "url" }])}
                   />
                 </div>
               </div>
@@ -1689,8 +1754,8 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                       />
                       <Field name="gpa" label="GPA" value={edu.gpa} placeholder="3.6/4.0" onChange={(v) => updateItem("education", edu.id, { gpa: v })} />
                       <Field name="honors" label="Honors" value={edu.honors} onChange={(v) => updateItem("education", edu.id, { honors: v })} />
-                      <Field name="startDate" label="Start" value={edu.startDate} placeholder="2019-09" onChange={(v) => updateItem("education", edu.id, { startDate: v })} />
-                      <Field name="endDate"
+                      <MonthField name="startDate" label="Start" value={edu.startDate} placeholder="2019-09" onChange={(v) => updateItem("education", edu.id, { startDate: v })} />
+                      <MonthField name="endDate"
                         label="End or graduation"
                         value={edu.endDate}
                         placeholder="2023-06 or Expected 2026"
@@ -1804,8 +1869,8 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field name="name" label="Name" value={cert.name} onChange={(v) => updateItem("certifications", cert.id, { name: v })} />
                     <Field name="issuer" label="Issuer" value={cert.issuer} onChange={(v) => updateItem("certifications", cert.id, { issuer: v })} />
-                    <Field name="date" label="Date" value={cert.date} placeholder="2024-05" onChange={(v) => updateItem("certifications", cert.id, { date: v })} />
-                    <Field name="expires" label="Expires" value={cert.expires} placeholder="2027-05" onChange={(v) => updateItem("certifications", cert.id, { expires: v })} />
+                    <MonthField name="date" label="Date" value={cert.date} placeholder="2024-05" onChange={(v) => updateItem("certifications", cert.id, { date: v })} />
+                    <MonthField name="expires" label="Expires" value={cert.expires} placeholder="2027-05" onChange={(v) => updateItem("certifications", cert.id, { expires: v })} />
                     <Field name="url" label="Link" value={cert.url} onChange={(v) => updateItem("certifications", cert.id, { url: v })} />
                   </div>
                 )}
@@ -1827,7 +1892,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                 itemMeta={(lang) => lang.proficiency}
                 renderItem={(lang) => (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field name="language" label="Language" value={lang.language} onChange={(v) => updateItem("languages", lang.id, { language: v })} />
+                    <LanguageField value={lang.language} onChange={(v) => updateItem("languages", lang.id, { language: v })} />
                     <Field name="proficiency"
                       label="Proficiency"
                       value={lang.proficiency}
@@ -1857,7 +1922,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <Field name="title" label="Title" value={award.title} onChange={(v) => updateItem("awards", award.id, { title: v })} />
                       <Field name="issuer" label="Issuer" value={award.issuer} onChange={(v) => updateItem("awards", award.id, { issuer: v })} />
-                      <Field name="date" label="Date" value={award.date} placeholder="2023-05" onChange={(v) => updateItem("awards", award.id, { date: v })} />
+                      <MonthField name="date" label="Date" value={award.date} placeholder="2023-05" onChange={(v) => updateItem("awards", award.id, { date: v })} />
                     </div>
                     <Field name="description"
                       label="Description (optional)"
@@ -1893,7 +1958,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                         placeholder="Journal, conference, or publisher"
                         onChange={(v) => updateItem("publications", pub.id, { venue: v })}
                       />
-                      <Field name="date" label="Date" value={pub.date} placeholder="2024" onChange={(v) => updateItem("publications", pub.id, { date: v })} />
+                      <MonthField name="date" label="Date" value={pub.date} placeholder="2024" onChange={(v) => updateItem("publications", pub.id, { date: v })} />
                       <Field name="url" label="Link" value={pub.url} onChange={(v) => updateItem("publications", pub.id, { url: v })} />
                     </div>
                   </>
@@ -1952,7 +2017,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field name="name" label="Course" value={course.name} onChange={(v) => updateItem("courses", course.id, { name: v })} />
                     <Field name="institution" label="Institution" value={course.institution} onChange={(v) => updateItem("courses", course.id, { institution: v })} />
-                    <Field name="date" label="Date" value={course.date} placeholder="2023-03" onChange={(v) => updateItem("courses", course.id, { date: v })} />
+                    <MonthField name="date" label="Date" value={course.date} placeholder="2023-03" onChange={(v) => updateItem("courses", course.id, { date: v })} />
                   </div>
                 )}
               />
@@ -2010,7 +2075,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                         placeholder="Conference, meetup, or workshop"
                         onChange={(v) => updateItem("presentations", talk.id, { event: v })}
                       />
-                      <Field name="date" label="Date" value={talk.date} placeholder="2024-10" onChange={(v) => updateItem("presentations", talk.id, { date: v })} />
+                      <MonthField name="date" label="Date" value={talk.date} placeholder="2024-10" onChange={(v) => updateItem("presentations", talk.id, { date: v })} />
                       <Field name="url" label="Link" value={talk.url} onChange={(v) => updateItem("presentations", talk.id, { url: v })} />
                     </div>
                   </>

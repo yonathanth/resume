@@ -103,21 +103,22 @@ function SidebarLink({
   );
 }
 
-// Moxie is the sidebar's brand mark. The sidebar lives in the dashboard
-// layout, so she greets once when the dashboard opens (not on every page
-// change), then idles; clicking her gets another wave.
+// Moxie is the sidebar's brand mark — and, like any logo, the way home: a
+// click takes you to the Builder (/dashboard) with a wave on the way. The
+// sidebar lives in the dashboard layout, so she greets once when the
+// dashboard opens (not on every page change), then idles.
 function SidebarMoxie({ crowned }: { crowned: boolean }) {
   const moxieRef = useRef<MoxieHandle>(null);
   return (
-    <button
-      type="button"
+    <Link
+      href="/dashboard"
       onClick={() => moxieRef.current?.play("wave")}
-      title="Moxie"
-      aria-label="Moxie, click to say hi"
+      title="Builder"
+      aria-label="gomoxie, go to the Builder"
       className="shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-border"
     >
       <Moxie ref={moxieRef} animation="welcome" decorative size={48} crowned={crowned} />
-    </button>
+    </Link>
   );
 }
 

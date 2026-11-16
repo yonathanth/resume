@@ -7,7 +7,6 @@ import {
   siShopify,
   siSpotify,
   siStripe,
-  siTrustpilot,
   type SimpleIcon,
 } from "simple-icons";
 
@@ -41,14 +40,6 @@ export const HIRED_AT = {
     { name: "Notion", icon: siNotion },
   ] as Brand[],
 };
-
-/**
- * The rating above the hero headline, and where it's from. PLACEHOLDER for the
- * design: before this goes live it must be our real Trustpilot rating, linked
- * to our Trustpilot page (`href`) — or removed. A made-up rating attributed to
- * Trustpilot misleads visitors and breaks Trustpilot's terms.
- */
-export const HERO_RATING = { score: 4.8, platform: "Trustpilot", icon: siTrustpilot, href: undefined as string | undefined };
 
 /** A before/after story for the swipeable results. */
 export interface ResultStory {
@@ -133,5 +124,68 @@ export const RESULT_STORIES: ResultStory[] = [
       ],
       skills: "Teaching, Google Classroom, PowerPoint, Patience",
     },
+  },
+];
+
+/**
+ * What users say about gomoxie, for the reviews section.
+ *
+ * PLACEHOLDERS, like the rest of this file: before this goes live, replace
+ * them with real reviews from users who agreed to be quoted (the CV ratings
+ * and comments in Admin → Feedback are a good place to find them). Made-up
+ * reviews shown as real ones mislead visitors and break consumer-protection
+ * rules in many countries.
+ */
+export interface Review {
+  name: string;
+  /** Their role now, or the move they made. */
+  role: string;
+  /** 1–5. */
+  stars: number;
+  quote: string;
+  /** When they left it, YYYY-MM-DD. */
+  date: string;
+}
+
+/** The numbers above the reviews. PLACEHOLDERS too: use real counts, or remove them. */
+export const REVIEW_STATS = { reviews: "500+", users: "10,000+" };
+
+/** The first review is shown large, so it can run longer. */
+export const REVIEWS: Review[] = [
+  {
+    name: "Hana Bekele",
+    role: "Clinical Research Coordinator",
+    stars: 5,
+    quote:
+      "I'd been sending the same CV for months and hearing nothing back. gomoxie rewrote it around what I'd actually achieved as a nurse, not just my duties, and the score showed me exactly what was still weak. I tailored it to each research role in minutes. Within three weeks I had four interviews, and I start my new job next month.",
+    date: "2026-10-12",
+  },
+  {
+    name: "Daniel Okafor",
+    role: "Account Executive",
+    stars: 5,
+    quote: "Tailoring used to take me an evening per application. Now I paste the job post and it's done in minutes, and it still reads like me.",
+    date: "2026-10-03",
+  },
+  {
+    name: "Sara Tesfaye",
+    role: "Financial Analyst",
+    stars: 5,
+    quote: "The tips showed me exactly what was weak. My old bullets were all duties, now they're results with numbers.",
+    date: "2026-09-27",
+  },
+  {
+    name: "Mateo Ruiz",
+    role: "Instructional Designer",
+    stars: 5,
+    quote: "Switching careers, I didn't know how to make teaching sound relevant. It found the parts I'd never have thought to mention.",
+    date: "2026-09-18",
+  },
+  {
+    name: "Amara Nwosu",
+    role: "Marketing Graduate",
+    stars: 5,
+    quote: "Started from a blank page as a fresh grad. A few questions in, I had a CV I was proud to send.",
+    date: "2026-09-09",
   },
 ];

@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   title: { default: `${SITE.name} – ${SITE.tagline}`, template: `%s – ${SITE.name}` },
   description: SITE.description,
   applicationName: SITE.name,
-  keywords: ["resume builder", "AI resume", "CV maker", "tailor resume to job", "ATS resume", "resume templates"],
+  keywords: ["resume builder", "AI resume", "CV maker", "improve my resume", "tailor resume to job", "resume checker", "ATS resume", "resume templates"],
   // Shared defaults only — no canonical URL here, or every page would claim
   // to be the home page. Public pages set their own canonical and share text
   // through pageMetadata() (lib/metadata.ts).

@@ -4,18 +4,19 @@ import { canAutoFocus } from "@/lib/autofocus";
 import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, User, Crown, FilePlus, Plus, Search, X } from "lucide-react";
+import { ArrowRight, User, Crown, FilePlus, Layers, Plus, RefreshCw, Search, WandSparkles, X } from "lucide-react";
 import { ApiCareerProfile, ApiError, canUseCareerProfiles } from "@/lib/api";
 import { useCreateProfile, useProfiles } from "@/hooks/use-profiles";
 import { useSubscriptionStatus } from "@/hooks/use-subscription";
 import { ICON_TONES, OptionTone } from "./create-flow/OptionCard";
 import { DashboardMoxie } from "./DashboardMoxie";
+import { UpgradeGate, type GateBenefit } from "./UpgradeGate";
 import { SortMenu } from "./SortMenu";
 import { ProfessionInput } from "./ProfessionInput";
 import { CareerProfilesPaywall, ProUpgradeModal } from "./ProUpgradeModal";
 import { ChipListEditor, LABEL_CLASS } from "./career-profiles/ProfileSectionEditor";
 import { tempId } from "./career-profiles/profile-sections";
-import { CenteredSpinner } from "@/components/CenteredSpinner";
+import { ProfileCardsSkeleton, ShimmerStatus } from "@/components/Shimmer";
 
 interface CareerProfilesViewProps {
   onCreateCvFromProfile?: (profileId: string) => void;
@@ -44,6 +45,85 @@ function profileFacts(profile: ApiCareerProfile): string[] {
     counts.education ? `${counts.education} education` : null,
     counts.projects ? plural(counts.projects, "project") : null,
   ].filter((f): f is string => Boolean(f));
+}
+
+// What a free user sees instead of an empty page: what profiles are and what they do.
+// (Only claims the product keeps: one profile per role, CVs start from it, new CVs
+// add to it without overwriting edits, approved wording is saved back.)
+const PROFILE_BENEFITS: GateBenefit[] = [
+  {
+    icon: Layers,
+    title: "One home for each role",
+    text: "Your experience, skills, education and projects for the role you're going for, saved once.",
+    tone: "violet",
+  },
+  {
+    icon: FilePlus,
+    title: "New CVs in a click",
+    text: "Start any CV from a profile and Moxie writes it from what's there. No retyping your history.",
+    tone: "accent",
+  },
+  {
+    icon: RefreshCw,
+    title: "Grows with every CV",
+    text: "New CVs add what's new to the matching profile. Anything you edited yourself is never overwritten.",
+    tone: "sky",
+  },
+  {
+    icon: WandSparkles,
+    title: "Keeps your best wording",
+    text: "Improved bullets you approve are saved back, so your next CV starts from the stronger version.",
+    tone: "emerald",
+  },
+];
+
+/** Two example profiles in the real card style, and the CV they turn into. */
+function ProfilesPreview() {
+  const examples = [
+    { title: "Product Designer", sub: "Design", facts: "4 roles · 18 skills · 3 projects", tone: "violet" as const },
+    { title: "Frontend Engineer", sub: "Engineering", facts: "3 roles · 22 skills · 2 projects", tone: "sky" as const },
+  ];
+  return (
+    <div className="relative mx-auto max-w-sm pt-2">
+      {examples.map((ex, i) => (
+        <div
+          key={ex.title}
+          className={`rounded-lg border border-neutral-300 bg-gradient-to-b from-white to-neutral-50 p-4 shadow-[0_12px_28px_-18px_rgba(15,17,21,0.35)] ${
+            i === 0 ? "relative z-10" : "relative -mt-6 ml-10 rotate-[2deg] opacity-80"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-b ${ICON_TONES[ex.tone]}`}>
+              <User className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-neutral-950">{ex.title}</p>
+              <p className="text-[11px] text-neutral-500">{ex.sub}</p>
+            </div>
+          </div>
+          <p className="mt-3 text-[11px] text-neutral-600">{ex.facts}</p>
+          {i === 0 && (
+            <div className="mt-3 flex items-center justify-between border-t border-neutral-200 pt-3">
+              <span className="text-[10px] font-medium text-neutral-500">5 CVs · updated today</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-accent-strong">
+                <FilePlus className="h-3 w-3" /> Create CV <ArrowRight className="h-3 w-3" />
+              </span>
+            </div>
+          )}
+        </div>
+      ))}
+      {/* …and the CV it turns into */}
+      <div className="absolute -bottom-2 -right-2 z-20 w-28 rotate-[-4deg] rounded-md border border-neutral-200 bg-white p-2.5 shadow-lg">
+        <div className="h-1.5 w-14 rounded-full bg-neutral-800" />
+        <div className="mt-1 h-1 w-10 rounded-full bg-accent" />
+        <div className="mt-2.5 space-y-1">
+          {["w-full", "w-11/12", "w-4/5", "w-full", "w-3/4"].map((w, i) => (
+            <div key={i} className={`h-1 rounded-full bg-neutral-200 ${w}`} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesViewProps) {
@@ -108,6 +188,23 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
     }
   };
 
+  // On Free with nothing saved: the page explains the feature instead of an empty list.
+  if (!isLoading && !hasProfiles && !isPro) {
+    return (
+      <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-6xl mx-auto w-full">
+        <UpgradeGate
+          icon={Layers}
+          title="Career profiles"
+          tagline="Save everything about a role you're going for in one place, then build a tailored CV from it whenever a job comes up."
+          benefits={PROFILE_BENEFITS}
+          preview={<ProfilesPreview />}
+          onUpgrade={() => setPaywallOpen(true)}
+        />
+        <CareerProfilesPaywall isOpen={paywallOpen} onClose={() => setPaywallOpen(false)} />
+      </div>
+    );
+  }
+
   return (
     <div className="px-8 pt-6 pb-10 sm:px-14 sm:pt-8 sm:pb-14 lg:px-20 lg:pt-8 lg:pb-16 max-w-7xl mx-auto w-full">
       {/* Toolbar, same as Past projects: search, then "New profile" at the
@@ -163,7 +260,7 @@ export function CareerProfilesView({ onCreateCvFromProfile }: CareerProfilesView
       )}
 
       {isLoading ? (
-        <CenteredSpinner label="Loading your career profiles…" className="py-24" />
+        <ShimmerStatus label="Loading your career profiles…"><ProfileCardsSkeleton /></ShimmerStatus>
       ) : hasProfiles && shownProfiles.length === 0 ? (
         <div className="rounded-lg border border-dashed border-neutral-300 bg-white/60 px-6 py-16 text-center">
           <DashboardMoxie animation="searching" size={120} className="mx-auto -mt-4 mb-2" />

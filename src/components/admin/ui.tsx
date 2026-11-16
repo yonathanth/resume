@@ -1,5 +1,6 @@
 "use client";
 
+import { RowsSkeleton, ShimmerStatus } from "@/components/Shimmer";
 import React, { useEffect, useState } from "react";
 import { AlertTriangle, ChevronLeft, ChevronRight, Inbox, Loader2, RefreshCw, X } from "lucide-react";
 import { errorText } from "@/lib/admin-format";
@@ -235,12 +236,12 @@ export function StatusBadge({ status }: { status: string | null | undefined }) {
   return <Badge tone={STATUS_TONES[status] ?? "neutral"}>{status.replace(/_/g, " ")}</Badge>;
 }
 
+/** A table or panel loading: rows in outline (the label is for screen readers). */
 export function LoadingState({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="flex items-center justify-center gap-2 py-12 text-sm text-neutral-500">
-      <Loader2 className="w-4 h-4 animate-spin" />
-      {label}
-    </div>
+    <ShimmerStatus label={label} className="px-4 py-6">
+      <RowsSkeleton rows={5} />
+    </ShimmerStatus>
   );
 }
 

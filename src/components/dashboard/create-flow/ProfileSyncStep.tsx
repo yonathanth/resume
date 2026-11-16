@@ -17,7 +17,7 @@ import { ProfessionInput } from "@/components/dashboard/ProfessionInput";
 import { MoxieMoment } from "@/components/moxie";
 import { describeChangeCounts, isEmptyChange, sectionLabel } from "@/components/dashboard/career-profiles/profile-sections";
 import { ProfileChangeList } from "@/components/dashboard/career-profiles/ProfileChangeList";
-import { CenteredSpinner } from "@/components/CenteredSpinner";
+import { RowsSkeleton, Shimmer, ShimmerStatus } from "@/components/Shimmer";
 
 // The last step of making a CV: offer to keep the matching career profile up
 // to date (or start one). Shown after the CV is ready, so it never stands
@@ -215,7 +215,14 @@ export function ProfileSyncStep({
   }
 
   // ---- loading (or handing over to the background sync)
-  if (suggestion.isLoading || automatic) return <CenteredSpinner caption="Checking your career profiles…" className="py-16" />;
+  if (suggestion.isLoading || automatic) return (
+      <ShimmerStatus label="Checking your career profiles…" className="py-4">
+        <Shimmer className="h-6 w-48 mb-2" />
+        <Shimmer className="h-3.5 w-72 max-w-full mb-6" />
+        <RowsSkeleton rows={2} avatar className="rounded-xl border border-neutral-200 p-4" />
+        <Shimmer className="mt-6 h-11 w-full rounded-lg" />
+      </ShimmerStatus>
+    );
 
   // ---- suggestion failed: never block the CV over it
   if (suggestion.isError && !sourceProfile) {

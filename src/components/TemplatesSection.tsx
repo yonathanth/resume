@@ -1,9 +1,8 @@
 "use client";
 
 import React from "react";
-import { useCvTemplates } from "@/hooks/use-cv-templates";
+import Image from "next/image";
 import { usePrefersReducedMotion } from "@/hooks/use-prefers-reduced-motion";
-import { TemplateThumbnail } from "@/components/dashboard/create-flow/TemplateThumbnail";
 import { Reveal } from "@/components/Reveal";
 import { CtaButton } from "@/components/CtaButton";
 
@@ -19,29 +18,32 @@ const COLUMNS = [
   { direction: "down", seconds: 82 },
   { direction: "up", seconds: 76 },
 ] as const;
-/** Templates that contrast with each other, dark and colorful next to light — shown first, in this order. */
-const CONTRAST_ORDER = ["midnight", "classic", "spark", "linen", "slate", "minimal", "sidebar", "clarity", "crest", "formal"];
+/**
+ * The templates on the wall, dark and colorful next to light, in this order.
+ * Each is a static picture of its first page in public/landing-templates/
+ * (rendered from the backend's sample CV), so the wall shows at once without
+ * waiting on the backend. Changed a template's look, or adding one here? Re-render
+ * its picture too (476×674 WebP, the template's sample CV in thumbnail mode).
+ */
+const WALL_TEMPLATES = ["midnight", "classic", "spark", "linen", "minimal", "clarity", "formal", "banner", "focus", "stack", "prose", "research"];
 /** Templates per column, before it repeats for the seamless loop. */
 const PER_COLUMN = 4;
 
+// Down each column the templates follow the order above; each column starts further along it.
+const columnIds = (col: number) => Array.from({ length: PER_COLUMN }, (_, i) => WALL_TEMPLATES[(col + i * COLUMNS.length) % WALL_TEMPLATES.length]);
+
 export function TemplatesSection() {
-  const { data: templates } = useCvTemplates();
   const reducedMotion = usePrefersReducedMotion();
-  const all = (templates ?? []).map((t) => t.id);
-  const ids = [...CONTRAST_ORDER.filter((id) => all.includes(id)), ...all.filter((id) => !CONTRAST_ORDER.includes(id))];
-  // Down each column the templates follow the contrast order; each column starts further along it.
-  const columnIds = (col: number) =>
-    ids.length ? Array.from({ length: PER_COLUMN }, (_, i) => ids[(col + i * COLUMNS.length) % ids.length]) : [];
 
   return (
     <section id="templates" className="relative overflow-hidden py-10 sm:py-16 lg:py-20">
-      <div className="mx-auto grid max-w-6xl grid-cols-1 px-4 sm:px-6 lg:px-8 items-center gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
+      <div className="mx-auto grid max-w-page grid-cols-1 px-4 sm:px-6 lg:px-8 items-center gap-8 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:gap-10">
         {/* Copy */}
         <Reveal className="flex flex-col items-center text-center lg:items-start lg:text-left">
           <h2 className="text-3xl font-bold tracking-tight text-neutral-950 sm:text-5xl sm:leading-[1.08]">
-            Built to pass the scan.
+            Templates built to
             <br />
-            <span className="text-neutral-400">Designed to impress.</span>
+            <span className="text-accent">pass the scan.</span>
           </h2>
           <p className="mt-5 max-w-md text-lg leading-relaxed text-neutral-500">
             Recruiter-tested templates that read cleanly in any applicant tracking system.
@@ -86,17 +88,17 @@ export function TemplatesSection() {
                       }
                     >
                       {/* Twice over, so the loop (which moves half its height) never shows a gap. */}
-                      {(items.length ? [...items, ...items] : Array.from({ length: PER_COLUMN * 2 }, () => "")).map((id, i) =>
-                        id ? (
-                          <TemplateThumbnail
-                            key={i}
-                            templateId={id}
-                            className="aspect-[210/297] w-full shrink-0 rounded-2xl border border-neutral-200/80 shadow-[0_1px_2px_rgba(15,17,21,0.05),0_12px_24px_-14px_rgba(15,17,21,0.25)]"
-                          />
-                        ) : (
-                          <div key={i} className="aspect-[210/297] w-full shrink-0 animate-pulse rounded-2xl bg-neutral-100" />
-                        ),
-                      )}
+                      {[...items, ...items].map((id, i) => (
+                        <Image
+                          key={i}
+                          src={`/landing-templates/${id}.webp`}
+                          alt=""
+                          width={476}
+                          height={674}
+                          unoptimized
+                          className="aspect-[210/297] w-full shrink-0 rounded-2xl border border-neutral-200/80 bg-white object-cover object-top shadow-[0_1px_2px_rgba(15,17,21,0.05),0_12px_24px_-14px_rgba(15,17,21,0.25)]"
+                        />
+                      ))}
                     </div>
                   </div>
                 );
