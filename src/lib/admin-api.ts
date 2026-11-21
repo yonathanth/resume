@@ -126,14 +126,14 @@ export interface CurrencyAmount {
   count: number;
 }
 
-export type PolarRevenue =
+export type DodoRevenue =
   | {
       available: true;
-      source: "polar_api";
+      source: "dodo_api";
       byCurrency: Record<string, { gross: number; net: number; refunded: number; orders: number }>;
       truncated: boolean;
     }
-  | { available: false; source: "polar_api"; error: string };
+  | { available: false; source: "dodo_api"; error: string };
 
 export interface Overview {
   days: number;
@@ -161,7 +161,7 @@ export interface Overview {
   revenue: {
     chapa: { source: "database"; successful: CurrencyAmount[]; byStatus: Record<string, number> };
     /** Amounts in minor units (cents). */
-    polar: PolarRevenue;
+    dodo: DodoRevenue;
   };
   content: {
     source: "database";
@@ -402,10 +402,10 @@ export interface UserDetail {
     status: string | null;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
-    polarCustomerId: string | null;
-    polarSubscriptionId: string | null;
-    polarProductId: string | null;
-    renewingPolar: boolean;
+    dodoCustomerId: string | null;
+    dodoSubscriptionId: string | null;
+    dodoProductId: string | null;
+    renewingSubscription: boolean;
   };
   entitlements: Entitlement[];
   payments: ChapaPaymentRow[];
@@ -454,7 +454,7 @@ export const listEntitlements = (query: {
 
 // ---------------------------------------------------------------- billing
 
-export interface PolarLinks {
+export interface DodoLinks {
   environment: "sandbox" | "production";
   organization: { id: string; slug: string; name: string } | null;
   dashboard: string;
@@ -473,7 +473,7 @@ export interface BillingSummary {
   };
   chapa: { byStatus: Record<string, number>; successfulRevenue: CurrencyAmount[] };
   webhooks: Record<string, number>;
-  polar: PolarLinks;
+  dodo: DodoLinks;
 }
 
 export const getBillingSummary = () => get<BillingSummary>("/billing/summary");
@@ -488,9 +488,9 @@ export interface SubscriptionRow {
   subscriptionStatus: string | null;
   subscriptionCurrentPeriodEnd: string | null;
   subscriptionCancelAtPeriodEnd: boolean;
-  polarSubscriptionId: string | null;
-  polarCustomerId: string | null;
-  polarProductId: string | null;
+  dodoSubscriptionId: string | null;
+  dodoCustomerId: string | null;
+  dodoProductId: string | null;
   hasPaidAccess: boolean;
 }
 
@@ -498,7 +498,7 @@ export const listSubscriptions = (query: {
   page?: number;
   pageSize?: number;
   status?: string;
-  provider?: "POLAR" | "CHAPA";
+  provider?: "DODO" | "CHAPA";
   view?: "all" | "active" | "cancelling" | "lapsed";
   q?: string;
 }) => get<Paged<SubscriptionRow>>("/billing/subscriptions", query);
@@ -515,7 +515,7 @@ export const listChapaPayments = (query: {
 export const reverifyChapaPayment = (id: string) =>
   send<{ id: string; status: ChapaPaymentRow["status"]; changed: boolean }>("POST", `/billing/payments/${id}/verify`);
 
-export interface PolarOrder {
+export interface DodoOrder {
   id: string;
   createdAt: string;
   status: "draft" | "pending" | "paid" | "refunded" | "partially_refunded" | "void";
@@ -534,10 +534,10 @@ export interface PolarOrder {
   invoiceNumber: string | null;
 }
 
-export const listPolarOrders = (query: { page?: number; pageSize?: number; status?: PolarOrder["status"]; userId?: string; from?: string; to?: string }) =>
-  get<{ items: PolarOrder[]; total: number; maxPage: number; page: number; pageSize: number }>("/billing/polar/orders", query);
+export const listDodoOrders = (query: { page?: number; pageSize?: number; status?: DodoOrder["status"]; userId?: string; from?: string; to?: string }) =>
+  get<{ items: DodoOrder[]; total: number; maxPage: number; page: number; pageSize: number }>("/billing/dodo/orders", query);
 
-export interface PolarRefund {
+export interface DodoRefund {
   id: string;
   createdAt: string;
   status: string;
@@ -549,10 +549,10 @@ export interface PolarRefund {
   customerId: string;
 }
 
-export const listPolarRefunds = (query: { page?: number; pageSize?: number; userId?: string }) =>
-  get<{ items: PolarRefund[]; total: number }>("/billing/polar/refunds", query);
+export const listDodoRefunds = (query: { page?: number; pageSize?: number; userId?: string }) =>
+  get<{ items: DodoRefund[]; total: number }>("/billing/dodo/refunds", query);
 
-export interface PolarDispute {
+export interface DodoDispute {
   id: string;
   createdAt: string;
   status: string;
@@ -565,18 +565,18 @@ export interface PolarDispute {
   customerEmail: string | null;
 }
 
-export const listPolarDisputes = (query: { page?: number; pageSize?: number }) =>
-  get<{ items: PolarDispute[]; total: number }>("/billing/polar/disputes", query);
+export const listDodoDisputes = (query: { page?: number; pageSize?: number }) =>
+  get<{ items: DodoDispute[]; total: number }>("/billing/dodo/disputes", query);
 
 export const listWebhookEvents = (query: { page?: number; pageSize?: number; status?: string }) =>
   get<Paged<WebhookEventRow>>("/billing/webhooks", query);
 
-export const retryWebhookEvent = (id: string) => send<{ status: string; polar: unknown }>("POST", `/billing/webhooks/${id}/retry`);
+export const retryWebhookEvent = (id: string) => send<{ status: string; dodo: unknown }>("POST", `/billing/webhooks/${id}/retry`);
 
 export const syncUserBilling = (userId: string) =>
   send<{
-    polar: { found: boolean; status?: string; currentPeriodEnd?: string; cancelAtPeriodEnd?: boolean } | null;
-    polarError: string | null;
+    dodo: { found: boolean; status?: string; currentPeriodEnd?: string; cancelAtPeriodEnd?: boolean } | null;
+    dodoError: string | null;
     chapa: { id: string; before: string; after: string; error?: string }[];
   }>("POST", `/users/${userId}/billing/sync`);
 
@@ -589,7 +589,7 @@ export const resumeUserSubscription = (userId: string, reason: string) =>
 
 export type FeatureAccessLevel = "all" | "pro" | "beta" | "off";
 
-/** Plan numbers (prices live in Polar). See the backend's settings.service.ts "plans". */
+/** Plan numbers (prices live in Dodo). See the backend's settings.service.ts "plans". */
 export interface PlansSettings {
   free: { generations: number; unpaidCvCap: number };
   plus: Record<"weekly" | "monthly" | "quarterly" | "lifetime", Record<FlowKey, number>>;
@@ -627,7 +627,7 @@ export interface Health {
   email: { provider: string | null; delivers: boolean; fromDomain: string | null; configured: boolean };
   push: { configured: boolean };
   ai: { provider: string; model: string; keyConfigured: boolean };
-  polar: { environment: string; reachable: boolean; organization: string | null; latencyMs: number | null };
+  dodo: { environment: string; reachable: boolean; organization: string | null; latencyMs: number | null };
   chapa: { configured: boolean; apiVersion: string };
   google: { signInConfigured: boolean; redirectConfigured: boolean };
   last24h: { failedWebhooks: number; failedEmails: number; aiErrors: number };

@@ -44,11 +44,11 @@ export function usePricing() {
 }
 
 // Re-fetches subscription status — call this when the user returns from the
-// Polar checkout redirect, since the webhook may not have synced yet and a
+// Dodo checkout redirect, since the webhook may not have synced yet and a
 // stale cached "Free" must not be shown as final.
 export function useRefreshSubscriptionStatus() {
   const queryClient = useQueryClient();
-  // Stable identity — callers (e.g. the Polar return page) put this in a
+  // Stable identity — callers (e.g. the Dodo return page) put this in a
   // useEffect dependency array, and a new function on every render would
   // otherwise re-trigger that effect needlessly.
   return useCallback(
@@ -63,7 +63,7 @@ export interface StartCheckoutInput {
 }
 
 // Starts a Plus / Pro subscription checkout and sends the browser there. The
-// plan only changes once Polar's webhook confirms the payment — this only
+// plan only changes once Dodo's webhook confirms the payment — this only
 // gets the user to the checkout page.
 export function useStartProCheckout() {
   return useMutation({

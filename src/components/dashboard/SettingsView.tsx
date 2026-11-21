@@ -701,9 +701,9 @@ function PlanSection() {
   const tier = planTier(subscription);
   const paid = tier !== "free";
   const source = subscription.planSource;
-  // Only a Polar subscription can be changed or cancelled here; a gift, the
+  // Only a Dodo subscription can be changed or cancelled here; a gift, the
   // lifetime deal or an old one-off period just runs its course.
-  const manageable = source === "subscription" && subscription.subscriptionProvider === "POLAR";
+  const manageable = source === "subscription" && subscription.subscriptionProvider === "DODO";
   const period = subscription.plan && subscription.plan !== "lifetime" ? subscription.plan : null;
   const planName = tier === "pro" ? "Pro" : tier === "plus" ? "Plus" : "Free";
   const periodLabel = subscription.plan === "lifetime" ? "Lifetime" : period ? PERIOD_LABEL[period] : null;

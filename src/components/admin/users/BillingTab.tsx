@@ -6,12 +6,12 @@ import { ExternalLink, RefreshCw, ShieldCheck } from "lucide-react";
 import {
   cancelUserSubscription,
   getBillingSummary,
-  listPolarOrders,
+  listDodoOrders,
   resumeUserSubscription,
   reverifyChapaPayment,
   syncUserBilling,
   type ChapaPaymentRow,
-  type PolarOrder,
+  type DodoOrder,
   type UserDetail,
 } from "@/lib/admin-api";
 import { errorText, formatDateTime, formatMinorMoney, formatMoney, formatRelative, SHOW_CHAPA } from "@/lib/admin-format";
@@ -34,18 +34,18 @@ function ExternalA({ href, children }: { href: string; children: ReactNode }) {
 function SyncSummary({ result }: { result: SyncResult }) {
   const changed = result.chapa.filter((c) => c.before !== c.after);
   return (
-    <Note tone={result.polarError || result.chapa.some((c) => c.error) ? "warn" : "info"}>
+    <Note tone={result.dodoError || result.chapa.some((c) => c.error) ? "warn" : "info"}>
       <div className="space-y-1">
         <div>
-          <strong>Polar:</strong>{" "}
-          {result.polarError
-            ? `sync failed — ${result.polarError}`
-            : !result.polar
-              ? "no Polar subscription to sync."
-              : !result.polar.found
-                ? "Polar has no subscription for this user."
-                : `status ${result.polar.status ?? "unknown"}${result.polar.currentPeriodEnd ? `, period ends ${formatDateTime(result.polar.currentPeriodEnd)}` : ""}${
-                    result.polar.cancelAtPeriodEnd ? ", cancelling at period end" : ""
+          <strong>Dodo:</strong>{" "}
+          {result.dodoError
+            ? `sync failed — ${result.dodoError}`
+            : !result.dodo
+              ? "no Dodo subscription to sync."
+              : !result.dodo.found
+                ? "Dodo has no subscription for this user."
+                : `status ${result.dodo.status ?? "unknown"}${result.dodo.currentPeriodEnd ? `, period ends ${formatDateTime(result.dodo.currentPeriodEnd)}` : ""}${
+                    result.dodo.cancelAtPeriodEnd ? ", cancelling at period end" : ""
                   }.`}
         </div>
         <div>
@@ -82,11 +82,11 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
     enabled: canRead,
     staleTime: 5 * 60_000,
   });
-  const polar = summary.data?.polar;
+  const dodo = summary.data?.dodo;
 
   const orders = useQuery({
-    queryKey: ["admin", "polar-orders", { userId }],
-    queryFn: () => listPolarOrders({ userId, pageSize: 50 }),
+    queryKey: ["admin", "dodo-orders", { userId }],
+    queryFn: () => listDodoOrders({ userId, pageSize: 50 }),
     enabled: canRead,
     retry: false,
   });
@@ -96,9 +96,9 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
     onSuccess: async (result) => {
       setLastSync(result);
       const chapaErrors = result.chapa.filter((c) => c.error).length;
-      if (result.polarError || chapaErrors) {
+      if (result.dodoError || chapaErrors) {
         toast.error("Billing sync finished with problems", {
-          description: [result.polarError && `Polar: ${result.polarError}`, chapaErrors && `${chapaErrors} Chapa payment(s) couldn't be verified`].filter(Boolean).join(" · "),
+          description: [result.dodoError && `Dodo: ${result.dodoError}`, chapaErrors && `${chapaErrors} Chapa payment(s) couldn't be verified`].filter(Boolean).join(" · "),
         });
       } else {
         toast.success("Billing synced from providers");
@@ -119,8 +119,8 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
     onError: (err) => toast.error("Chapa re-verification failed", { description: errorText(err) }),
   });
 
-  const subscriptionLink = sub.polarSubscriptionId && polar ? (polar.subscriptionBase ? `${polar.subscriptionBase}/${sub.polarSubscriptionId}` : polar.dashboard) : null;
-  const customerLink = sub.polarCustomerId && polar ? (polar.customerBase ? `${polar.customerBase}/${sub.polarCustomerId}` : polar.dashboard) : null;
+  const subscriptionLink = sub.dodoSubscriptionId && dodo ? (dodo.subscriptionBase ? `${dodo.subscriptionBase}/${sub.dodoSubscriptionId}` : dodo.dashboard) : null;
+  const customerLink = sub.dodoCustomerId && dodo ? (dodo.customerBase ? `${dodo.customerBase}/${sub.dodoCustomerId}` : dodo.dashboard) : null;
   const hasSubscription = Boolean(sub.provider || sub.status);
 
   const paymentColumns: Column<ChapaPaymentRow>[] = [
@@ -172,7 +172,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
       : []),
   ];
 
-  const orderColumns: Column<PolarOrder>[] = [
+  const orderColumns: Column<DodoOrder>[] = [
     { key: "time", header: "Date", className: "whitespace-nowrap", cell: (o) => formatDateTime(o.createdAt) },
     {
       key: "product",
@@ -197,15 +197,15 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
       key: "link",
       header: "",
       className: "text-right",
-      cell: (o) => (polar?.orderBase ? <ExternalA href={`${polar.orderBase}/${o.id}`}>Open in Polar</ExternalA> : <Mono>{o.id}</Mono>),
+      cell: (o) => (dodo?.orderBase ? <ExternalA href={`${dodo.orderBase}/${o.id}`}>Open in Dodo</ExternalA> : <Mono>{o.id}</Mono>),
     },
   ];
 
   return (
     <div className="space-y-5">
       <Note tone="info">
-        Billing is managed by the payment processors: <strong>Polar</strong> (subscriptions, orders, refunds, disputes) and <strong>Chapa</strong> (one-off
-        payments). Nothing here marks a payment as paid or edits a subscription by hand — the only actions are provider-backed (sync, cancel/resume in Polar,
+        Billing is managed by the payment processors: <strong>Dodo</strong> (subscriptions, payments, refunds, disputes) and <strong>Chapa</strong> (one-off
+        payments). Nothing here marks a payment as paid or edits a subscription by hand — the only actions are provider-backed (sync, cancel/resume in Dodo,
         re-verify with Chapa). Complimentary access is a separate, manual grant under <em>Access &amp; entitlements</em>.
       </Note>
 
@@ -241,37 +241,37 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
                   ),
                 ],
                 ["Cancel at period end", sub.cancelAtPeriodEnd ? <Badge tone="warn">Yes — won&apos;t renew</Badge> : "No"],
-                ["Renews automatically (Polar)", sub.renewingPolar ? <Badge tone="good">Yes</Badge> : "No"],
+                ["Renews automatically (Dodo)", sub.renewingSubscription ? <Badge tone="good">Yes</Badge> : "No"],
                 [
-                  "Polar customer",
-                  sub.polarCustomerId ? (
+                  "Dodo customer",
+                  sub.dodoCustomerId ? (
                     <span className="flex flex-wrap items-center gap-2">
-                      <Mono>{sub.polarCustomerId}</Mono>
-                      {customerLink && <ExternalA href={customerLink}>Open in Polar</ExternalA>}
+                      <Mono>{sub.dodoCustomerId}</Mono>
+                      {customerLink && <ExternalA href={customerLink}>Open in Dodo</ExternalA>}
                     </span>
                   ) : (
                     <span className="text-neutral-400">—</span>
                   ),
                 ],
                 [
-                  "Polar subscription",
-                  sub.polarSubscriptionId ? (
+                  "Dodo subscription",
+                  sub.dodoSubscriptionId ? (
                     <span className="flex flex-wrap items-center gap-2">
-                      <Mono>{sub.polarSubscriptionId}</Mono>
-                      {subscriptionLink && <ExternalA href={subscriptionLink}>Open in Polar</ExternalA>}
+                      <Mono>{sub.dodoSubscriptionId}</Mono>
+                      {subscriptionLink && <ExternalA href={subscriptionLink}>Open in Dodo</ExternalA>}
                     </span>
                   ) : (
                     <span className="text-neutral-400">—</span>
                   ),
                 ],
-                ["Polar product", sub.polarProductId ? <Mono>{sub.polarProductId}</Mono> : <span className="text-neutral-400">—</span>],
+                ["Dodo product", sub.dodoProductId ? <Mono>{sub.dodoProductId}</Mono> : <span className="text-neutral-400">—</span>],
               ]}
             />
           ) : (
             <p className="text-sm text-neutral-500">This user has never had a subscription.</p>
           )}
 
-          {canWrite && sub.polarSubscriptionId && (
+          {canWrite && sub.dodoSubscriptionId && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               {sub.cancelAtPeriodEnd ? (
                 <Button size="sm" onClick={() => setDialog("resume")}>
@@ -282,7 +282,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
                   Cancel at period end
                 </Button>
               )}
-              <span className="text-xs text-neutral-500">Calls Polar&apos;s API. No refund is issued.</span>
+              <span className="text-xs text-neutral-500">Calls Dodo&apos;s API. No refund is issued.</span>
             </div>
           )}
 
@@ -303,13 +303,13 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
 
       {canRead && (
         <Card
-          title="Polar orders"
-          description="Read live from Polar's API. Amounts are as Polar reports them."
+          title="Dodo payments"
+          description="Read live from Dodo's API. Amounts are as Dodo reports them."
           padded={false}
           actions={
             <>
-              <SourceTag source={orders.error ? "unavailable" : "polar"} />
-              <Button size="sm" variant="ghost" loading={orders.isFetching} onClick={() => orders.refetch()} aria-label="Reload Polar orders">
+              <SourceTag source={orders.error ? "unavailable" : "dodo"} />
+              <Button size="sm" variant="ghost" loading={orders.isFetching} onClick={() => orders.refetch()} aria-label="Reload Dodo payments">
                 <RefreshCw className="w-3.5 h-3.5" />
               </Button>
             </>
@@ -322,18 +322,18 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
             isLoading={orders.isLoading}
             error={orders.error}
             onRetry={() => orders.refetch()}
-            emptyTitle="No Polar orders"
-            emptyDescription="Polar has no orders linked to this user."
+            emptyTitle="No Dodo payments"
+            emptyDescription="Dodo has no payments for this user's Dodo customer."
           />
           {orders.data && orders.data.total > orders.data.items.length && (
             <p className="px-4 py-2 border-t border-neutral-200 text-xs text-neutral-500">
-              Showing the {orders.data.items.length} most recent of {orders.data.total} orders.
+              Showing the {orders.data.items.length} most recent payments.
             </p>
           )}
           <div className="px-4 py-3 border-t border-neutral-200">
             <Note>
-              Refunds and disputes are handled in the Polar dashboard, not here.{" "}
-              {polar && <ExternalA href={polar.dashboard}>Open the Polar dashboard</ExternalA>}
+              Refunds and disputes are handled in the Dodo dashboard, not here.{" "}
+              {dodo && <ExternalA href={dodo.dashboard}>Open the Dodo dashboard</ExternalA>}
             </Note>
           </div>
         </Card>
@@ -345,7 +345,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
         danger
         description={
           <>
-            This calls Polar&apos;s API to stop the subscription from renewing. No refund is issued, and {account.email} keeps their plan until the current period ends
+            This calls Dodo&apos;s API to stop the subscription from renewing. No refund is issued, and {account.email} keeps their plan until the current period ends
             {sub.currentPeriodEnd ? ` (${formatDateTime(sub.currentPeriodEnd)})` : ""}. You can resume it before then.
           </>
         }
@@ -355,7 +355,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
         onConfirm={(reason) =>
           run(() => cancelUserSubscription(userId, reason), {
             success: (r) => toast.success("Subscription will cancel at period end", { description: `Access continues until ${formatDateTime(r.currentPeriodEnd)}.` }),
-            error: "Polar couldn't cancel the subscription",
+            error: "Dodo couldn't cancel the subscription",
           })
         }
       />
@@ -365,7 +365,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
         title="Resume subscription"
         description={
           <>
-            This calls Polar&apos;s API to undo the scheduled cancellation, so the subscription renews at the end of the current period
+            This calls Dodo&apos;s API to undo the scheduled cancellation, so the subscription renews at the end of the current period
             {sub.currentPeriodEnd ? ` (${formatDateTime(sub.currentPeriodEnd)})` : ""} and {account.email} is billed as usual. Nothing is charged now.
           </>
         }
@@ -375,7 +375,7 @@ export function BillingTab({ detail }: { detail: UserDetail }) {
         onConfirm={(reason) =>
           run(() => resumeUserSubscription(userId, reason), {
             success: (r) => toast.success("Subscription resumed", { description: `It renews on ${formatDateTime(r.currentPeriodEnd)}.` }),
-            error: "Polar couldn't resume the subscription",
+            error: "Dodo couldn't resume the subscription",
           })
         }
       />

@@ -45,7 +45,7 @@ export function formatMoney(amount: number, currency: string): string {
   }
 }
 
-/** Minor-unit amounts (Polar reports cents). */
+/** Minor-unit amounts (Dodo reports cents). */
 export function formatMinorMoney(amount: number, currency: string): string {
   return formatMoney(amount / 100, currency);
 }

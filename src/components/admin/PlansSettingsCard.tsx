@@ -11,7 +11,7 @@ import { formatDateTime } from "@/lib/admin-format";
 
 // The plans' numbers (the "plans" setting): free CVs, the pay-per-CV cap,
 // Plus limits per billing period, Pro's hidden fair-use caps and the Plus
-// Lifetime offer. Prices aren't here — they live on the products in Polar.
+// Lifetime offer. Prices aren't here — they live on the products in Dodo.
 
 const FLOWS: { key: FlowKey; label: string }[] = [
   { key: "tailor", label: "Tailorings" },
@@ -278,7 +278,7 @@ export function PlansSettingsCard({ settings }: { settings: SettingsResponse }) 
 
         {error && <Note tone="warn">{error}</Note>}
         <Note>
-          <b>Prices</b> aren&apos;t set here — they&apos;re on the products in the Polar dashboard, and the app&apos;s copies must match them.
+          <b>Prices</b> aren&apos;t set here — they&apos;re on the products in the Dodo dashboard, and the app&apos;s copies must match them.
         </Note>
       </div>
 

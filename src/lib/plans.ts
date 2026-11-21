@@ -55,7 +55,7 @@ export function formatPrice(amount: number): string {
  * Weeks a billing period is counted as for the "/ week" price. A month is
  * counted as 4 weeks and 3 months as 12 (not 4.33 / 13), so the per-week
  * figure is never lower than what it really works out to — and prices are set
- * so it comes out whole (services/polar/plans.ts in the backend).
+ * so it comes out whole (services/billing/plans.ts in the backend).
  */
 export const PERIOD_WEEKS: Record<BillingPeriod, number> = { weekly: 1, monthly: 4, quarterly: 12 };
 

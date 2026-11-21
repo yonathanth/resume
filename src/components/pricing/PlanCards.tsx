@@ -225,7 +225,7 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
 
   const tier = planTier(status);
   // An active subscription switches plan in place instead of starting a second one.
-  const subscribed = status?.planSource === "subscription" && status.subscriptionProvider === "POLAR";
+  const subscribed = status?.planSource === "subscription" && status.subscriptionProvider === "DODO";
   const currentPeriod = status?.plan && status.plan !== "lifetime" ? status.plan : null;
   const isCurrent = (cardTier: "free" | PaidTier) =>
     signedIn && cardTier === tier && (cardTier === "free" || status?.planSource !== "subscription" || currentPeriod === periodOf(cardTier));
@@ -353,7 +353,7 @@ export function LifetimeDeal({ theme, signedIn, status }: { theme: PlanTheme; si
   const purchase = useStartPurchase();
   const pricing = data ?? FALLBACK_PRICING;
   const { offer, limits } = pricing.lifetime;
-  // Listed like Plus and Pro: shown with a "Coming soon" button until its Polar product exists.
+  // Listed like Plus and Pro: shown with a "Coming soon" button until its Dodo product exists.
   if (!(offer.listed ?? offer.available)) return null;
   const onSale = offer.available;
   const owned = Boolean(status?.hasLifetime);

@@ -4,7 +4,7 @@ import React from "react";
 import { Moxie } from "@/components/moxie";
 import { WordByWord } from "@/components/moxie/WordByWord";
 
-export type PaymentReturnState = "pending" | "confirmed" | "timeout";
+export type PaymentReturnState = "pending" | "confirmed" | "timeout" | "failed";
 
 /** After a successful payment: long enough to watch the crown land on her and her jump for joy. */
 export const PAYMENT_CONFIRMED_REDIRECT_MS = 3000;
@@ -15,6 +15,10 @@ const COPY: Record<PaymentReturnState, { line: string; note?: string }> = {
   timeout: {
     line: "Still confirming your payment",
     note: "This can take a moment. We'll update your account as soon as it's confirmed.",
+  },
+  failed: {
+    line: "Your payment didn't go through",
+    note: "You haven't been charged. Taking you back so you can try again…",
   },
 };
 

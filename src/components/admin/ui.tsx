@@ -123,7 +123,7 @@ export function Card({
 
 const SOURCE_STYLES = {
   database: { label: "Live · database", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-  polar: { label: "Live · Polar API", className: "bg-sky-50 text-sky-700 border-sky-200" },
+  dodo: { label: "Live · Dodo API", className: "bg-sky-50 text-sky-700 border-sky-200" },
   tracked: { label: "Tracked since launch", className: "bg-amber-50 text-amber-700 border-amber-200" },
   estimate: { label: "Estimate", className: "bg-violet-50 text-violet-700 border-violet-200" },
   synced: { label: "As last synced", className: "bg-neutral-100 text-neutral-600 border-neutral-200" },

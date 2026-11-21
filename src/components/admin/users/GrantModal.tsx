@@ -227,7 +227,7 @@ export function GrantModal({ userId, userEmail, onClose }: { userId: string; use
         </div>
 
         <Note tone="info">
-          This is a manual grant, not a payment. It never creates a Polar or Chapa record. When it ends, access falls back to what the user&apos;s billing allows.
+          This is a manual grant, not a payment. It never creates a Dodo or Chapa record. When it ends, access falls back to what the user&apos;s billing allows.
         </Note>
         <p className="text-xs text-neutral-600">{summary}</p>
 

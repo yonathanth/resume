@@ -20,7 +20,7 @@ export const WEBSITE = {
   publisher: { "@id": siteUrl("/#organization") },
 };
 
-// Prices as on the pricing page (Polar plans in USD).
+// Prices as on the pricing page (Dodo plans in USD).
 export const SOFTWARE_APPLICATION = {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",

@@ -24,7 +24,7 @@ import {
 import { errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, formatNumber, formatRelative, SHOW_CHAPA } from "@/lib/admin-format";
 
 // Overview: one request to /admin/overview. Every block is labelled with its
-// source (database / Polar API / tracked) and nothing is filled in when a
+// source (database / Dodo API / tracked) and nothing is filled in when a
 // source has no data.
 
 const FLOWS: { key: FlowKey; label: string }[] = [
@@ -122,9 +122,9 @@ function Section({ title, action, children }: { title: React.ReactNode; action?:
 }
 
 function RevenueCard({ data }: { data: Overview }) {
-  const { chapa, polar } = data.revenue;
+  const { chapa, dodo } = data.revenue;
   const statuses = Object.entries(chapa.byStatus).sort((a, b) => b[1] - a[1]);
-  const polarRows = polar.available ? Object.entries(polar.byCurrency) : [];
+  const dodoRows = dodo.available ? Object.entries(dodo.byCurrency) : [];
   return (
     <Card title="Revenue" description={`Last ${data.days} days`}>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -169,20 +169,20 @@ function RevenueCard({ data }: { data: Overview }) {
 
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-neutral-950">Polar</h3>
-            <SourceTag source={polar.available ? "polar" : "unavailable"} />
+            <h3 className="text-sm font-bold text-neutral-950">Dodo</h3>
+            <SourceTag source={dodo.available ? "dodo" : "unavailable"} />
           </div>
-          {!polar.available ? (
+          {!dodo.available ? (
             <Note tone="warn">
-              <span className="font-semibold">Polar revenue unavailable:</span> {polar.error}
+              <span className="font-semibold">Dodo revenue unavailable:</span> {dodo.error}
             </Note>
           ) : (
             <>
-              {polar.truncated && (
-                <Note tone="warn">Polar returned more orders than were fetched. These totals cover only the first pages and are lower than the real figure.</Note>
+              {dodo.truncated && (
+                <Note tone="warn">Dodo returned more orders than were fetched. These totals cover only the first pages and are lower than the real figure.</Note>
               )}
-              {polarRows.length === 0 ? (
-                <p className="text-sm text-neutral-500">No paid Polar orders in this period.</p>
+              {dodoRows.length === 0 ? (
+                <p className="text-sm text-neutral-500">No paid Dodo orders in this period.</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -196,7 +196,7 @@ function RevenueCard({ data }: { data: Overview }) {
                       </tr>
                     </thead>
                     <tbody className="tabular-nums">
-                      {polarRows.map(([currency, t]) => (
+                      {dodoRows.map(([currency, t]) => (
                         <tr key={currency} className="border-b border-neutral-100 last:border-0">
                           <td className="py-1.5 pr-3 font-semibold uppercase">{currency}</td>
                           <td className="py-1.5 pr-3 text-right">{formatMinorMoney(t.gross, currency)}</td>

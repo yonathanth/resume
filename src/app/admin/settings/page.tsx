@@ -684,13 +684,13 @@ function HealthBody({ h }: { h: Health }) {
             Model: <Mono>{h.ai.model}</Mono>
           </p>
         </HealthItem>
-        <HealthItem label="Polar" tone={h.polar.reachable ? "good" : "bad"} status={h.polar.reachable ? "Reachable" : "Unreachable"}>
+        <HealthItem label="Dodo" tone={h.dodo.reachable ? "good" : "bad"} status={h.dodo.reachable ? "Reachable" : "Unreachable"}>
           <p>
             Environment:{" "}
-            <Badge tone={h.polar.environment === "production" ? "dark" : "warn"}>{h.polar.environment}</Badge>
+            <Badge tone={h.dodo.environment === "production" ? "dark" : "warn"}>{h.dodo.environment}</Badge>
           </p>
-          {h.polar.organization && <p>Organization: {h.polar.organization}</p>}
-          {h.polar.latencyMs !== null && <p>API latency {formatNumber(h.polar.latencyMs)} ms</p>}
+          {h.dodo.organization && <p>Organization: {h.dodo.organization}</p>}
+          {h.dodo.latencyMs !== null && <p>API latency {formatNumber(h.dodo.latencyMs)} ms</p>}
         </HealthItem>
         {SHOW_CHAPA && (
           <HealthItem label="Chapa" tone={h.chapa.configured ? "good" : "warn"} status={h.chapa.configured ? "Configured" : "Not configured"}>

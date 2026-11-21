@@ -12,7 +12,7 @@ const MAX_POLLS = 6; // ~9s before giving up and sending the user on anyway
 
 // This is CHAPA_RETURN_URL's target — Chapa lands the browser here after a
 // gomoxie Pro checkout, regardless of outcome. It never assumes success
-// itself: unlike Polar, Chapa's payment confirmation is only finalized by
+// itself: unlike Dodo, Chapa's payment confirmation is only finalized by
 // GET /api/v1/payments/:id/status actually re-verifying against Chapa (the
 // same call that grants the 1-month Pro period on success — see the
 // backend's verifyAndSyncPayment/grantChapaProPeriod), so this explicitly
@@ -25,7 +25,7 @@ export default function ChapaReturnPage() {
   const [state, setState] = useState<PaymentReturnState>("pending");
 
   useEffect(() => {
-    // No ref-based "already started" guard — see polar/return/page.tsx's
+    // No ref-based "already started" guard — see dodo/return/page.tsx's
     // identical comment for why that breaks React Strict Mode's dev replay.
     let cancelled = false;
 

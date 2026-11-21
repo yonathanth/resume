@@ -92,9 +92,9 @@ export function ProUpgradeModal({
       ? copy?.body
       : reason ?? "Get more AI CVs and career profiles.";
   const fairUse = paywall?.reason === "fair_use";
-  const subscribed = status?.planSource === "subscription" && status.subscriptionProvider === "POLAR";
+  const subscribed = status?.planSource === "subscription" && status.subscriptionProvider === "DODO";
   // Plans worth offering: never the one they're on (or a lower one).
-  // Only what can be bought right now: a plan or period whose Polar product
+  // Only what can be bought right now: a plan or period whose Dodo product
   // isn't set up yet (see the backend's price list) isn't offered at all.
   const periodsFor = (t: PaidTier) => PERIODS.filter((p) => pricing.plans[t][p].available);
   const tiers: PaidTier[] = (["plus", "pro"] as PaidTier[])
@@ -107,7 +107,7 @@ export function ProUpgradeModal({
   const busy = checkout.isPending || changePlan.isPending || purchase.isPending;
   const lifetime = pricing.lifetime;
   // Shown to Free users in every paywall (the download dialog too) while the
-  // deal is listed; it can only be bought once its Polar product is set up.
+  // deal is listed; it can only be bought once its Dodo product is set up.
   const showLifetime = (lifetime.offer.listed ?? lifetime.offer.available) && tier === "free" && !status?.hasLifetime;
   const lifetimeOnSale = lifetime.offer.available;
   const payLaterPrice = paywall?.price ?? pricing.payPerCv.cv_new.price;

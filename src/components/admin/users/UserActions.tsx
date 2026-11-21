@@ -72,8 +72,8 @@ export function UserActions({ detail }: { detail: UserDetail }) {
   const restrictions: string[] = [];
   if (isSelf) restrictions.push("You can't suspend or delete your own account.");
   else if (isAdminTarget) restrictions.push("Admin accounts can't be suspended or deleted from the dashboard — use the server script.");
-  if (canDelete && !protectedTarget && subscription.renewingPolar) {
-    restrictions.push("Delete is blocked while the Polar subscription still renews. Cancel it first under Billing → Cancel at period end.");
+  if (canDelete && !protectedTarget && subscription.renewingSubscription) {
+    restrictions.push("Delete is blocked while the Dodo subscription still renews. Cancel it first under Billing → Cancel at period end.");
   }
 
   return (
@@ -119,9 +119,9 @@ export function UserActions({ detail }: { detail: UserDetail }) {
           <Button
             size="sm"
             variant="danger-outline"
-            disabled={protectedTarget || subscription.renewingPolar}
+            disabled={protectedTarget || subscription.renewingSubscription}
             onClick={() => open("delete")}
-            title={protectedTarget || subscription.renewingPolar ? restrictions.join(" ") : undefined}
+            title={protectedTarget || subscription.renewingSubscription ? restrictions.join(" ") : undefined}
           >
             <Trash2 className="w-3.5 h-3.5" />
             Delete account
@@ -152,7 +152,7 @@ export function UserActions({ detail }: { detail: UserDetail }) {
         description={
           <>
             <strong>{account.email}</strong> will be signed out everywhere immediately and can&apos;t sign in or refresh a session until reactivated. Their CVs,
-            profiles and billing are kept untouched. A Polar subscription is <em>not</em> cancelled by suspending.
+            profiles and billing are kept untouched. A Dodo subscription is <em>not</em> cancelled by suspending.
           </>
         }
         confirmLabel="Suspend account"
@@ -229,7 +229,7 @@ export function UserActions({ detail }: { detail: UserDetail }) {
           <>
             This permanently deletes <strong>{account.email}</strong> and everything the account owns ({detail.content.cvCount} CVs,{" "}
             {detail.content.profileCount} profiles, imports, Chapa payment records, grants, sessions, notifications and email logs). It can&apos;t be undone.
-            It follows the same rules as a user deleting their own account, and it&apos;s refused while a Polar subscription still renews.
+            It follows the same rules as a user deleting their own account, and it&apos;s refused while a Dodo subscription still renews.
           </>
         }
         confirmLabel="Delete permanently"
@@ -251,8 +251,8 @@ export function UserActions({ detail }: { detail: UserDetail }) {
         }}
       >
         <Note tone="neutral">
-          AI usage events stay for cost totals with the user unlinked, and the audit log keeps a record of this deletion. Orders already in Polar stay in the
-          Polar dashboard.
+          AI usage events stay for cost totals with the user unlinked, and the audit log keeps a record of this deletion. Payments already in Dodo stay in the
+          Dodo dashboard.
         </Note>
       </ActionDialog>
     </div>

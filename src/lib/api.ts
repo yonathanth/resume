@@ -1272,22 +1272,21 @@ export function getPaymentStatus(paymentId: string) {
   return apiFetch<ApiPayment>(`/api/v1/payments/${paymentId}/status`);
 }
 
-// Mirrors the backend's Polar SubscriptionStatus verbatim, plus "revoked"
-// for a hard revocation — see the backend's entitlement.service.ts. Null
-// until the user's first Polar subscription event has synced.
+// Mirrors Dodo's subscription status verbatim (and "active" for a Chapa
+// period). Null until the user's first paid plan has synced.
 export type SubscriptionStatus =
-  | "incomplete"
-  | "incomplete_expired"
-  | "trialing"
+  | "pending"
   | "active"
-  | "past_due"
-  | "canceled"
-  | "unpaid"
+  | "on_hold"
   | "paused"
-  | "revoked"
+  | "cancelled"
+  | "failed"
+  | "expired"
+  | "past_due"
   | null;
 
-export type SubscriptionProvider = "POLAR" | "CHAPA" | null;
+/** "POLAR" only on rows left over from the retired Polar sandbox; never a paid plan. */
+export type SubscriptionProvider = "DODO" | "CHAPA" | "POLAR" | null;
 
 export type PlanTier = "free" | "plus" | "pro";
 export type PaidTier = "plus" | "pro";
@@ -1395,19 +1394,19 @@ export interface CheckoutResult {
   checkoutUrl: string;
 }
 
-// Starts a Polar checkout for a Plus or Pro subscription. The backend
+// Starts a Dodo checkout for a Plus or Pro subscription. The backend
 // identifies the user from the auth token — never pass a user id here.
 export function createSubscriptionCheckout(tier: PaidTier, period: BillingPeriod = "monthly") {
   return apiFetch<CheckoutResult>("/api/v1/subscriptions/checkout", {
     method: "POST",
-    body: JSON.stringify({ provider: "polar", tier, period }),
+    body: JSON.stringify({ provider: "dodo", tier, period }),
   });
 }
 
 export type OneTimePurchase = { product: "plus_lifetime" } | { product: "cv_unlock"; cvDocumentId: string };
 
-// A one-time Polar checkout: Plus Lifetime, or unlocking one CV's download.
-// Fulfillment happens off the Polar webhook once payment is confirmed.
+// A one-time Dodo checkout: Plus Lifetime, or unlocking one CV's download.
+// Fulfillment happens off Dodo's webhook once payment is confirmed.
 export function createPurchaseCheckout(purchase: OneTimePurchase) {
   return apiFetch<CheckoutResult>("/api/v1/purchases/checkout", {
     method: "POST",

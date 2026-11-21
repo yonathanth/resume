@@ -810,7 +810,7 @@ export default function PlansPage() {
           </li>
           <li>
             <b>Plus</b>: set limits per billing period (Lifetime resets monthly). <b>Pro</b>: unlimited to the user, with hidden fair-use caps. Both
-            come from a Polar subscription, Plus Lifetime, or an admin grant, and open the features whose rule is &ldquo;Paid&rdquo;.
+            come from a Dodo subscription, Plus Lifetime, or an admin grant, and open the features whose rule is &ldquo;Paid&rdquo;.
           </li>
           <li>Manual grants never create payments or touch the subscription; they&apos;re recorded separately with an owner and a reason.</li>
           <li>Grants with an end date stop applying automatically when they expire — no job needs to run.</li>

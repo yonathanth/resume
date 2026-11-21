@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { getCvDocument, getSubscriptionStatus, planTier } from "@/lib/api";
 import { clearPendingPurchase, readPendingPurchase, type PendingPurchase } from "@/lib/payment-session";
@@ -10,16 +10,23 @@ import { PAYMENT_CONFIRMED_REDIRECT_MS, PaymentReturnView, type PaymentReturnSta
 const POLL_INTERVAL_MS = 1500;
 const MAX_POLLS = 6; // ~9s before giving up and sending the user on anyway
 
-// This is POLAR_CHECKOUT_RETURN_URL's target — Polar lands the browser here
+// Dodo adds the payment's outcome to the return URL (?status=succeeded |
+// failed | cancelled | ...). Read once on the client; null while prerendering.
+const subscribeNever = () => () => {};
+const readOutcome = () => new URLSearchParams(window.location.search).get("status");
+
+// This is DODO_CHECKOUT_RETURN_URL's target — Dodo lands the browser here
 // after checkout regardless of outcome. It never assumes success itself:
 // the backend/webhook is the sole source of truth for subscription state, so
 // this polls GET /api/v1/subscriptions/status until it reflects Pro access
 // (or gives up and sends the user on anyway — the dashboard will pick up the
 // real status as soon as the webhook lands).
-export default function PolarReturnPage() {
+export default function DodoReturnPage() {
   const router = useRouter();
   const refreshStatus = useRefreshSubscriptionStatus();
   const [state, setState] = useState<PaymentReturnState>("pending");
+  const outcome = useSyncExternalStore(subscribeNever, readOutcome, () => null);
+  const failed = outcome === "failed" || outcome === "cancelled";
 
   useEffect(() => {
     // No ref-based "already started" guard here — that would break React
@@ -32,7 +39,7 @@ export default function PolarReturnPage() {
     // that invocation's own (throwaway) loop.
     let cancelled = false;
 
-    // What the checkout was for (saved before leaving for Polar).
+    // What the checkout was for (saved before leaving for Dodo).
     const pending: PendingPurchase | null = readPendingPurchase();
     // An unlocked CV goes straight back to its editor, to download it.
     const destination = pending?.kind === "unlock" ? `/dashboard/editor/${encodeURIComponent(pending.cvDocumentId)}` : "/dashboard";
@@ -44,6 +51,21 @@ export default function PolarReturnPage() {
         }
       }, delayMs);
     };
+
+    // A failed or abandoned payment needs no polling: send them back to try
+    // again (the editor for a CV, the upgrade page for a plan).
+    if (failed) {
+      setTimeout(() => {
+        if (!cancelled) {
+          clearPendingPurchase();
+          router.replace(pending?.kind === "unlock" ? destination : "/dashboard/upgrade");
+        }
+      }, 3500);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const isDone = async (): Promise<boolean> => {
       if (pending?.kind === "unlock") return Boolean((await getCvDocument(pending.cvDocumentId)).unlockedAt);
       const status = await getSubscriptionStatus();
@@ -78,7 +100,7 @@ export default function PolarReturnPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, refreshStatus]);
+  }, [router, refreshStatus, failed]);
 
-  return <PaymentReturnView state={state} />;
+  return <PaymentReturnView state={failed ? "failed" : state} />;
 }

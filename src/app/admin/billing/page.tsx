@@ -7,19 +7,19 @@ import { ExternalLink, RefreshCw, Search, ShieldCheck } from "lucide-react";
 import {
   getBillingSummary,
   listChapaPayments,
-  listPolarDisputes,
-  listPolarOrders,
-  listPolarRefunds,
+  listDodoDisputes,
+  listDodoOrders,
+  listDodoRefunds,
   listSubscriptions,
   listWebhookEvents,
   reverifyChapaPayment,
   retryWebhookEvent,
   type BillingSummary,
   type ChapaPaymentRow,
-  type PolarDispute,
-  type PolarLinks,
-  type PolarOrder,
-  type PolarRefund,
+  type DodoDispute,
+  type DodoLinks,
+  type DodoOrder,
+  type DodoRefund,
   type SubscriptionRow,
   type WebhookEventRow,
 } from "@/lib/admin-api";
@@ -48,13 +48,13 @@ import { useToast } from "@/components/Toaster";
 import { dateInputToIso, errorText, formatDate, formatDateTime, formatMinorMoney, formatMoney, formatNumber, formatRelative, SHOW_CHAPA } from "@/lib/admin-format";
 
 // Subscriptions & Payments. What lives where:
-//   Polar — source of truth for Polar subscriptions, orders, refunds and
-//           disputes (orders/refunds/disputes are read live from Polar's API).
-//   gomoxie — mirrors each user's subscription from Polar webhooks; Chapa
+//   Dodo — source of truth for Dodo subscriptions, orders, refunds and
+//           disputes (orders/refunds/disputes are read live from Dodo's API).
+//   gomoxie — mirrors each user's subscription from Dodo webhooks; Chapa
 //           payments live in gomoxie's own table.
 // Nothing on this page marks a payment successful or edits subscription
 // status by hand. The only actions ask the provider for the real answer:
-// "Re-verify with Chapa" and "Retry sync" (re-fetch from Polar).
+// "Re-verify with Chapa" and "Retry sync" (re-fetch from Dodo).
 
 const PAGE_SIZE = 25;
 
@@ -63,14 +63,14 @@ type TabId = "subscriptions" | "chapa" | "orders" | "disputes" | "webhooks";
 const TABS: { id: TabId; label: string }[] = [
   { id: "subscriptions", label: "Subscriptions" },
   ...(SHOW_CHAPA ? [{ id: "chapa" as const, label: "Chapa payments" }] : []),
-  { id: "orders", label: "Polar orders" },
+  { id: "orders", label: "Dodo payments" },
   { id: "disputes", label: "Refunds & disputes" },
   { id: "webhooks", label: "Webhooks" },
 ];
 
-const SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due", "canceled", "revoked", "unpaid", "incomplete", "incomplete_expired", "paused"];
+const SUBSCRIPTION_STATUSES = ["active", "pending", "on_hold", "past_due", "paused", "cancelled", "expired", "failed"];
 const CHAPA_STATUSES: ChapaPaymentRow["status"][] = ["PENDING", "SUCCESS", "FAILED", "CANCELLED", "EXPIRED"];
-const ORDER_STATUSES: PolarOrder["status"][] = ["paid", "pending", "refunded", "partially_refunded", "void", "draft"];
+const ORDER_STATUSES: DodoOrder["status"][] = ["paid", "pending", "refunded", "partially_refunded", "void", "draft"];
 const WEBHOOK_STATUSES: { value: string; label: string }[] = [
   { value: "failed", label: "Failed" },
   { value: "unmatched", label: "Unmatched" },
@@ -80,9 +80,9 @@ const WEBHOOK_STATUSES: { value: string; label: string }[] = [
   { value: "legacy", label: "Legacy (before outcome tracking)" },
 ];
 
-/** The backend prefixes Polar failures with "Polar API error:"; show them consistently. */
-function polarError(err: unknown): Error {
-  return new Error(`Polar API unavailable: ${errorText(err, "request failed").replace(/^Polar API error:\s*/i, "")}`);
+/** The backend prefixes Dodo failures with "Dodo API error:"; show them consistently. */
+function dodoError(err: unknown): Error {
+  return new Error(`Dodo API unavailable: ${errorText(err, "request failed").replace(/^Dodo API error:\s*/i, "")}`);
 }
 
 function sumValues(record: Record<string, number> | undefined): number {
@@ -169,7 +169,7 @@ function CardShell({
 }: {
   title: string;
   description?: React.ReactNode;
-  source: "synced" | "database" | "polar";
+  source: "synced" | "database" | "dodo";
   sourceTitle?: string;
   children: React.ReactNode;
 }) {
@@ -182,23 +182,23 @@ function CardShell({
 
 // ---------------------------------------------------------------- summary
 
-function PolarIntro({ links }: { links: PolarLinks | undefined }) {
+function DodoIntro({ links }: { links: DodoLinks | undefined }) {
   return (
     <Note tone="info">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <p>
-            Polar is the source of truth for Polar subscriptions, orders, refunds and disputes. gomoxie mirrors subscription state from Polar webhooks. Refunds,
-            disputes and full billing management happen in the Polar dashboard.
+            Dodo is the source of truth for card subscriptions, payments, refunds and disputes. gomoxie mirrors subscription state from Dodo webhooks. Refunds,
+            disputes and full billing management happen in the Dodo dashboard.
           </p>
           <p>
             Nothing here marks a payment successful or edits a subscription by hand. The only actions ask the provider for the real answer: <b>Re-verify with Chapa</b>{" "}
-            on pending Chapa payments, and <b>Retry sync</b> on failed Polar webhooks.
+            on pending Chapa payments, and <b>Retry sync</b> on failed Dodo webhooks.
           </p>
           {links && !links.organization && (
             <p className="font-semibold">
-              The Polar organization couldn&apos;t be read, so links are limited: the dashboard link goes to Polar&apos;s home and per-order / per-subscription links
-              are unavailable.
+              Dodo has no per-record links, so the dashboard link goes to Dodo&apos;s home: search there by the payment or subscription id shown
+              here.
             </p>
           )}
         </div>
@@ -211,7 +211,7 @@ function PolarIntro({ links }: { links: PolarLinks | undefined }) {
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg border border-sky-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-sky-800 hover:bg-sky-100 whitespace-nowrap"
             >
-              Open Polar dashboard
+              Open Dodo dashboard
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
@@ -301,9 +301,9 @@ function SummaryCards({ summary }: { summary: BillingSummary }) {
 
 // ---------------------------------------------------------------- subscriptions
 
-function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
+function SubscriptionsTab({ links }: { links: DodoLinks | undefined }) {
   const [view, setView] = useState<"all" | "active" | "cancelling" | "lapsed">("all");
-  const [provider, setProvider] = useState<"" | "POLAR" | "CHAPA">("");
+  const [provider, setProvider] = useState<"" | "DODO" | "CHAPA">("");
   const [status, setStatus] = useState("");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
@@ -336,32 +336,32 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
       ),
     },
     {
-      key: "polar",
-      header: "Polar ids",
+      key: "dodo",
+      header: "Dodo ids",
       cell: (r) =>
-        r.polarSubscriptionId || r.polarCustomerId ? (
+        r.dodoSubscriptionId || r.dodoCustomerId ? (
           <div className="space-y-1 max-w-[260px]">
-            {r.polarSubscriptionId && (
+            {r.dodoSubscriptionId && (
               <div>
                 <span className="text-[11px] text-neutral-400">sub </span>
                 {links?.subscriptionBase ? (
-                  <a href={`${links.subscriptionBase}/${r.polarSubscriptionId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                    <Mono>{r.polarSubscriptionId}</Mono>
+                  <a href={`${links.subscriptionBase}/${r.dodoSubscriptionId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    <Mono>{r.dodoSubscriptionId}</Mono>
                   </a>
                 ) : (
-                  <Mono>{r.polarSubscriptionId}</Mono>
+                  <Mono>{r.dodoSubscriptionId}</Mono>
                 )}
               </div>
             )}
-            {r.polarCustomerId && (
+            {r.dodoCustomerId && (
               <div>
                 <span className="text-[11px] text-neutral-400">cus </span>
                 {links?.customerBase ? (
-                  <a href={`${links.customerBase}/${r.polarCustomerId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
-                    <Mono>{r.polarCustomerId}</Mono>
+                  <a href={`${links.customerBase}/${r.dodoCustomerId}`} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                    <Mono>{r.dodoCustomerId}</Mono>
                   </a>
                 ) : (
-                  <Mono>{r.polarCustomerId}</Mono>
+                  <Mono>{r.dodoCustomerId}</Mono>
                 )}
               </div>
             )}
@@ -375,7 +375,7 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
   return (
     <CardShell
       title="Subscriptions"
-      description="gomoxie's mirror of each user's subscription, as last synced from Polar webhooks (or Chapa payments). Polar holds the authoritative record."
+      description="gomoxie's mirror of each user's subscription, as last synced from Dodo webhooks (or Chapa payments). Dodo holds the authoritative record."
       source="synced"
       sourceTitle="Local mirror of the provider's subscription state"
     >
@@ -405,7 +405,7 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
             }}
           >
             <option value="">Any provider</option>
-            <option value="POLAR">Polar</option>
+            <option value="DODO">Dodo</option>
             {SHOW_CHAPA && <option value="CHAPA">Chapa</option>}
           </select>
         </Field>
@@ -428,7 +428,7 @@ function SubscriptionsTab({ links }: { links: PolarLinks | undefined }) {
         </Field>
         <Field label="Search">
           <SearchBox
-            placeholder="Email or Polar subscription / customer id"
+            placeholder="Email or Dodo subscription / customer id"
             onSearch={(v) => {
               setQ(v);
               setPage(1);
@@ -646,22 +646,22 @@ function ChapaTab() {
   );
 }
 
-// ---------------------------------------------------------------- Polar orders
+// ---------------------------------------------------------------- Dodo orders
 
-function OrdersTab({ links }: { links: PolarLinks | undefined }) {
-  const [status, setStatus] = useState<"" | PolarOrder["status"]>("");
+function OrdersTab({ links }: { links: DodoLinks | undefined }) {
+  const [status, setStatus] = useState<"" | DodoOrder["status"]>("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
 
   const query = useQuery({
-    queryKey: ["admin", "billing", "polar", "orders", { status, from, to, page }],
-    queryFn: () => listPolarOrders({ status: status || undefined, from: dateInputToIso(from), to: dateInputToIso(to, true), page, pageSize: PAGE_SIZE }),
+    queryKey: ["admin", "billing", "dodo", "orders", { status, from, to, page }],
+    queryFn: () => listDodoOrders({ status: status || undefined, from: dateInputToIso(from), to: dateInputToIso(to, true), page, pageSize: PAGE_SIZE }),
     placeholderData: keepPreviousData,
     retry: 1,
   });
 
-  const columns: Column<PolarOrder>[] = [
+  const columns: Column<DodoOrder>[] = [
     { key: "time", header: "Time", cell: (r) => <span className="whitespace-nowrap">{formatDateTime(r.createdAt)}</span> },
     {
       key: "customer",
@@ -701,12 +701,12 @@ function OrdersTab({ links }: { links: PolarLinks | undefined }) {
     {
       key: "open",
       header: "",
-      cell: (r) => (links?.orderBase ? <OutLink href={`${links.orderBase}/${r.id}`}>Open in Polar</OutLink> : <Mono>{r.id}</Mono>),
+      cell: (r) => (links?.orderBase ? <OutLink href={`${links.orderBase}/${r.id}`}>Open in Dodo</OutLink> : <Mono>{r.id}</Mono>),
     },
   ];
 
   return (
-    <CardShell title="Polar orders" description="Read live from Polar's API. Amounts are as Polar reports them." source="polar">
+    <CardShell title="Dodo payments" description="Read live from Dodo's API, newest first. Dodo doesn't report totals, so the page count grows as you page on." source="dodo">
       <FilterBar>
         <Field label="Status">
           <select
@@ -753,9 +753,9 @@ function OrdersTab({ links }: { links: PolarLinks | undefined }) {
         rows={query.data?.items}
         rowKey={(r) => r.id}
         isLoading={query.isFetching}
-        error={query.error ? polarError(query.error) : null}
+        error={query.error ? dodoError(query.error) : null}
         onRetry={() => query.refetch()}
-        emptyTitle="No Polar orders match"
+        emptyTitle="No Dodo payments match"
       />
       {query.data && query.data.total > 0 && <Pagination page={page} pageCount={query.data.maxPage} total={query.data.total} onChange={setPage} />}
     </CardShell>
@@ -764,15 +764,15 @@ function OrdersTab({ links }: { links: PolarLinks | undefined }) {
 
 // ---------------------------------------------------------------- refunds & disputes
 
-function RefundsCard({ links }: { links: PolarLinks | undefined }) {
+function RefundsCard({ links }: { links: DodoLinks | undefined }) {
   const [page, setPage] = useState(1);
   const query = useQuery({
-    queryKey: ["admin", "billing", "polar", "refunds", { page }],
-    queryFn: () => listPolarRefunds({ page, pageSize: PAGE_SIZE }),
+    queryKey: ["admin", "billing", "dodo", "refunds", { page }],
+    queryFn: () => listDodoRefunds({ page, pageSize: PAGE_SIZE }),
     placeholderData: keepPreviousData,
     retry: 1,
   });
-  const columns: Column<PolarRefund>[] = [
+  const columns: Column<DodoRefund>[] = [
     { key: "time", header: "Time", cell: (r) => <span className="whitespace-nowrap">{formatDateTime(r.createdAt)}</span> },
     { key: "status", header: "Status", cell: (r) => <StatusBadge status={r.status} /> },
     { key: "amount", header: "Amount", className: "text-right", cell: (r) => <span className="tabular-nums whitespace-nowrap">{formatMinorMoney(r.amount, r.currency)}</span> },
@@ -785,13 +785,13 @@ function RefundsCard({ links }: { links: PolarLinks | undefined }) {
   ];
   const pageCount = query.data ? Math.max(1, Math.ceil(query.data.total / PAGE_SIZE)) : 1;
   return (
-    <CardShell title="Refunds" description="Read live from Polar's API. Refunds are issued in the Polar dashboard." source="polar">
+    <CardShell title="Refunds" description="Read live from Dodo's API. Refunds are issued in the Dodo dashboard." source="dodo">
       <DataTable
         columns={columns}
         rows={query.data?.items}
         rowKey={(r) => r.id}
         isLoading={query.isFetching}
-        error={query.error ? polarError(query.error) : null}
+        error={query.error ? dodoError(query.error) : null}
         onRetry={() => query.refetch()}
         emptyTitle="No refunds"
       />
@@ -800,15 +800,15 @@ function RefundsCard({ links }: { links: PolarLinks | undefined }) {
   );
 }
 
-function DisputesCard({ links }: { links: PolarLinks | undefined }) {
+function DisputesCard({ links }: { links: DodoLinks | undefined }) {
   const [page, setPage] = useState(1);
   const query = useQuery({
-    queryKey: ["admin", "billing", "polar", "disputes", { page }],
-    queryFn: () => listPolarDisputes({ page, pageSize: PAGE_SIZE }),
+    queryKey: ["admin", "billing", "dodo", "disputes", { page }],
+    queryFn: () => listDodoDisputes({ page, pageSize: PAGE_SIZE }),
     placeholderData: keepPreviousData,
     retry: 1,
   });
-  const columns: Column<PolarDispute>[] = [
+  const columns: Column<DodoDispute>[] = [
     { key: "time", header: "Opened", cell: (r) => <span className="whitespace-nowrap">{formatDateTime(r.createdAt)}</span> },
     {
       key: "status",
@@ -845,14 +845,14 @@ function DisputesCard({ links }: { links: PolarLinks | undefined }) {
   const needsResponse = query.data?.items.filter((d) => d.status === "needs_response").length ?? 0;
   const pageCount = query.data ? Math.max(1, Math.ceil(query.data.total / PAGE_SIZE)) : 1;
   return (
-    <CardShell title="Disputes" description="Chargebacks, read live from Polar's API. Respond with evidence in the Polar dashboard." source="polar">
+    <CardShell title="Disputes" description="Chargebacks, read live from Dodo's API. Respond with evidence in the Dodo dashboard." source="dodo">
       {needsResponse > 0 && (
         <div className="px-4 sm:px-5 py-3 border-b border-neutral-200">
           <Note tone="warn">
             <b>
               {needsResponse} dispute{needsResponse === 1 ? "" : "s"} on this page need{needsResponse === 1 ? "s" : ""} a response.
             </b>{" "}
-            Submit evidence in the Polar dashboard before the due date, or the dispute is lost by default.
+            Submit evidence in the Dodo dashboard before the due date, or the dispute is lost by default.
           </Note>
         </div>
       )}
@@ -861,7 +861,7 @@ function DisputesCard({ links }: { links: PolarLinks | undefined }) {
         rows={query.data?.items}
         rowKey={(r) => r.id}
         isLoading={query.isFetching}
-        error={query.error ? polarError(query.error) : null}
+        error={query.error ? dodoError(query.error) : null}
         onRetry={() => query.refetch()}
         emptyTitle="No disputes"
       />
@@ -870,17 +870,17 @@ function DisputesCard({ links }: { links: PolarLinks | undefined }) {
   );
 }
 
-function DisputesTab({ links }: { links: PolarLinks | undefined }) {
+function DisputesTab({ links }: { links: DodoLinks | undefined }) {
   return (
     <div className="space-y-4">
       <Note>
-        Refunds and disputes are handled in the Polar dashboard — gomoxie can&apos;t issue refunds or answer disputes. When Polar revokes a subscription after a
-        refund or lost dispute, the webhook updates the user&apos;s access here.
+        Refunds and disputes are handled in the Dodo dashboard — gomoxie can&apos;t issue refunds or answer disputes. A full refund takes back what it paid for
+        automatically (the webhook ends the subscription, revokes Plus Lifetime or locks the CV again); a partial refund leaves access as it is.
         {links && (
           <>
             {" "}
             <a href={links.dashboard} target="_blank" rel="noopener noreferrer" className="font-semibold text-accent-strong hover:underline">
-              Open Polar dashboard
+              Open Dodo dashboard
             </a>
           </>
         )}
@@ -893,11 +893,11 @@ function DisputesTab({ links }: { links: PolarLinks | undefined }) {
 
 // ---------------------------------------------------------------- webhooks
 
-function describePolarResult(polar: unknown): string | undefined {
-  if (!polar || typeof polar !== "object") return undefined;
-  const p = polar as Record<string, unknown>;
+function describeDodoResult(dodo: unknown): string | undefined {
+  if (!dodo || typeof dodo !== "object") return undefined;
+  const p = dodo as Record<string, unknown>;
   const parts: string[] = [];
-  if (typeof p.status === "string") parts.push(`Polar status: ${p.status.replace(/_/g, " ")}`);
+  if (typeof p.status === "string") parts.push(`Dodo status: ${p.status.replace(/_/g, " ")}`);
   if (typeof p.currentPeriodEnd === "string") parts.push(`period ends ${formatDate(p.currentPeriodEnd)}`);
   return parts.length ? parts.join(" · ") : undefined;
 }
@@ -918,12 +918,12 @@ function WebhooksTab() {
 
   const retry = async (event: WebhookEventRow) => {
     const result = await retryWebhookEvent(event.id);
-    const detail = describePolarResult(result.polar);
+    const detail = describeDodoResult(result.dodo);
     if (result.status === "processed") {
       toast.success("Re-synced: processed", { description: detail ? `Applied to the matching gomoxie user. ${detail}` : "Applied to the matching gomoxie user." });
     } else {
       toast.info(`Re-synced: ${result.status}`, {
-        description: `Polar returned the subscription, but no gomoxie user matches it yet.${detail ? ` ${detail}` : ""}`,
+        description: `Dodo returned the subscription, but no gomoxie user matches it yet.${detail ? ` ${detail}` : ""}`,
       });
     }
     await Promise.all([
@@ -971,7 +971,7 @@ function WebhooksTab() {
       header: "",
       className: "text-right",
       cell: (r) =>
-        canWrite && r.provider === "POLAR" && r.resourceId && (r.status === "failed" || r.status === "unmatched") ? (
+        canWrite && r.provider === "DODO" && r.resourceId && (r.status === "failed" || r.status === "unmatched") ? (
           <Button size="sm" onClick={() => setRetryTarget(r)}>
             <RefreshCw className="w-3.5 h-3.5" />
             Retry sync
@@ -1002,8 +1002,8 @@ function WebhooksTab() {
         </Field>
         <div className="sm:col-span-1 lg:col-span-3">
           <Note>
-            <b>Retry sync</b> re-fetches the subscription from Polar&apos;s API and applies its current state to the matching gomoxie user. The original payload
-            isn&apos;t replayed. <b>Unmatched</b> means no gomoxie user could be linked to the Polar customer.
+            <b>Retry sync</b> re-fetches the subscription from Dodo&apos;s API and applies its current state to the matching gomoxie user. The original payload
+            isn&apos;t replayed. <b>Unmatched</b> means no gomoxie user could be linked to the Dodo customer.
           </Note>
         </div>
       </FilterBar>
@@ -1020,15 +1020,15 @@ function WebhooksTab() {
 
       <ActionDialog
         open={retryTarget !== null}
-        title="Retry sync from Polar"
-        confirmLabel="Re-fetch from Polar"
+        title="Retry sync from Dodo"
+        confirmLabel="Re-fetch from Dodo"
         description={
           retryTarget && (
             <div className="space-y-2">
-              <p>Re-fetches this subscription from Polar&apos;s API and applies its current state. The original payload isn&apos;t replayed.</p>
+              <p>Re-fetches this subscription from Dodo&apos;s API and applies its current state. The original payload isn&apos;t replayed.</p>
               <p>
-                Nothing changes in Polar. In gomoxie, the matching user&apos;s subscription mirror (status, period end, cancel-at-period-end) is updated to what
-                Polar reports now, and this event is marked processed — or stays unmatched if no gomoxie user matches.
+                Nothing changes in Dodo. In gomoxie, the matching user&apos;s subscription mirror (status, period end, cancel-at-period-end) is updated to what
+                Dodo reports now, and this event is marked processed — or stays unmatched if no gomoxie user matches.
               </p>
               <p className="text-xs text-neutral-500">
                 Subscription: <Mono>{retryTarget.resourceId}</Mono>
@@ -1048,13 +1048,13 @@ function WebhooksTab() {
 export default function BillingPage() {
   const [tab, setTab] = useState<TabId>("subscriptions");
   const summary = useQuery({ queryKey: ["admin", "billing", "summary"], queryFn: getBillingSummary });
-  const links = summary.data?.polar;
+  const links = summary.data?.dodo;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Subscriptions & Payments"
-        description="Subscription mirror, Chapa payments, live Polar orders, refunds and disputes, and the webhook log."
+        description="Subscription mirror, Chapa payments, live Dodo orders, refunds and disputes, and the webhook log."
         actions={
           <Button size="sm" onClick={() => summary.refetch()} loading={summary.isFetching}>
             <RefreshCw className="w-3.5 h-3.5" />
@@ -1063,7 +1063,7 @@ export default function BillingPage() {
         }
       />
 
-      <PolarIntro links={links} />
+      <DodoIntro links={links} />
 
       {summary.error ? (
         <Card>

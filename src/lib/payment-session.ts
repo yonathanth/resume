@@ -24,7 +24,7 @@ export function readAndClearLastChapaPaymentId(): string | null {
   }
 }
 
-// What a Polar checkout was for, so the return page knows what to wait for
+// What a Dodo checkout was for, so the return page knows what to wait for
 // (the plan, the lifetime deal, or one CV's unlock) and where to go after.
 export type PendingPurchase =
   | { kind: "plan"; tier: "plus" | "pro" }
