@@ -25,6 +25,10 @@ const SHOW_SIX_SECONDS = false;
 // the companies and count in lib/social-proof.ts are real ones.
 const SHOW_HIRED_AT = false;
 
+// The reviews and "500+ reviews / 10,000+ users" stats — hidden until
+// REVIEWS and REVIEW_STATS in lib/social-proof.ts are real ones.
+const SHOW_REVIEWS = false;
+
 export function HomePage() {
   const router = useRouter();
 
@@ -76,9 +80,11 @@ export function HomePage() {
         {SHOW_SIX_SECONDS && <RealResultsSection />}
 
         {/* What users say */}
-        <div className={`${styles.sectionScene} ${styles.glowLeft}`}>
-          <ReviewsSection />
-        </div>
+        {SHOW_REVIEWS && (
+          <div className={`${styles.sectionScene} ${styles.glowLeft}`}>
+            <ReviewsSection />
+          </div>
+        )}
 
         {/* Pricing (Free, Pro) */}
         <div className={`${styles.sectionScene} ${styles.glowRight}`}>
