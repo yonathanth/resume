@@ -21,6 +21,10 @@ import { ReviewsSection } from "./landing/ReviewsSection";
 // hidden for now; the swipeable "Real results" stories below take its place.
 const SHOW_SIX_SECONDS = false;
 
+// "Helping job seekers land roles at 1,000+ companies like…" — hidden until
+// the companies and count in lib/social-proof.ts are real ones.
+const SHOW_HIRED_AT = false;
+
 export function HomePage() {
   const router = useRouter();
 
@@ -48,7 +52,7 @@ export function HomePage() {
         <Hero />
 
         {/* Where users got hired */}
-        <HiredAtStrip />
+        {SHOW_HIRED_AT && <HiredAtStrip />}
 
         {/* Everything it does: create, improve, tailor, and the tools around them */}
         <div className={`${styles.sectionScene} ${styles.glowRight}`}>
