@@ -65,8 +65,13 @@ export function CancelPlanModal({
           <>
             <h3 className="text-sm font-bold text-neutral-950 mb-1.5">Cancel your plan?</h3>
             <p className="text-xs text-neutral-500 leading-relaxed mb-2">
-              You&apos;ll keep Pro access until {periodEndLabel}. Nothing already paid is refunded, and it
-              won&apos;t renew after that.
+              You&apos;ll keep Pro access until {periodEndLabel}, and it won&apos;t renew after that. Cancelling
+              doesn&apos;t refund what you&apos;ve paid, but within 7 days of your first payment you can ask for a
+              refund (see our{" "}
+              <a href="/refunds" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-neutral-800">
+                refund policy
+              </a>
+              ).
             </p>
           </>
         )}

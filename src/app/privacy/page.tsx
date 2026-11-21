@@ -64,7 +64,7 @@ const sections: LegalSection[] = [
         <ul>
           <li>our AI provider, to generate resume content;</li>
           <li>Google, if you choose to sign in with Google;</li>
-          <li>Polar, to process payments;</li>
+          <li>Dodo Payments, our merchant of record, and Chapa, to process payments;</li>
           <li>the hosting and database services that store your account.</li>
         </ul>
         <p>We may also disclose information when the law requires it.</p>
@@ -108,7 +108,7 @@ export default function PrivacyPage() {
   return (
     <LegalPage
       title="Privacy Policy"
-      updated="October 6, 2026"
+      updated="November 21, 2026"
       intro={
         <p>
           Your resume holds a lot about you. This policy explains what gomoxie collects, why, and the choices you have.

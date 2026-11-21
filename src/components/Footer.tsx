@@ -4,6 +4,7 @@ import React from "react";
 import { BrandMark } from "@/components/BrandMark";
 import Link from "next/link";
 import { ArrowUp } from "lucide-react";
+import { SUPPORT_EMAIL } from "@/lib/help-content";
 
 // Only pages and sections that exist.
 const LINK_COLUMNS = [
@@ -32,6 +33,7 @@ const LINK_COLUMNS = [
       { label: "Log in", href: "/login" },
       { label: "Dashboard", href: "/dashboard" },
       { label: "Help center", href: "/help" },
+      { label: SUPPORT_EMAIL, href: `mailto:${SUPPORT_EMAIL}` },
     ],
   },
 ];
@@ -99,6 +101,8 @@ export function Footer() {
           <div className="order-1 sm:order-2 sm:mr-auto flex items-center gap-6">
             <Link href="/terms" className="hover:text-accent-light transition-colors duration-150">Terms</Link>
             <Link href="/privacy" className="hover:text-accent-light transition-colors duration-150">Privacy</Link>
+            <Link href="/refunds" className="hover:text-accent-light transition-colors duration-150">Refunds</Link>
+            <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-accent-light transition-colors duration-150">Contact</a>
           </div>
           <Link href="#" className="order-2 sm:order-3 group inline-flex items-center gap-1.5 hover:text-accent-light transition-colors duration-150">
             Back to top

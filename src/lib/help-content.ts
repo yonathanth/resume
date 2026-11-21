@@ -55,7 +55,7 @@ function planFaqs(p: PricingCatalog) {
     },
     cancel: {
       q: "Can I cancel or switch plans anytime?",
-      a: "Yes. Switch between plans and billing periods from Account settings; the change is prorated. If you cancel, you keep your plan until the end of the period you've paid for, and you can undo the cancellation before then. Nothing already paid is refunded.",
+      a: "Yes. Switch between plans and billing periods from Account settings; the change is prorated. If you cancel, you keep your plan until the end of the period you've paid for, and you can undo the cancellation before then. Within 7 days of your first payment you can ask for a full refund by emailing support@gomoxie.app; see the Refund and Cancellation Policy at gomoxie.app/refunds.",
     },
   };
 }

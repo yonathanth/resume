@@ -85,7 +85,7 @@ const sections: LegalSection[] = [
         <ul>
           <li>
             <strong className="font-semibold text-neutral-800">Plus and Pro</strong>: weekly, monthly or 3-month
-            subscriptions through Polar that renew automatically until you cancel them in Settings. You keep your plan
+            subscriptions that renew automatically until you cancel them in Settings. You keep your plan
             until the end of the period you&apos;ve paid for. Plus includes a set number of tailorings, enhancements and
             new CVs each billing period.
           </li>
@@ -105,7 +105,18 @@ const sections: LegalSection[] = [
           for example automated or bulk use, or making CVs for other people. Your plan stays active, and generation
           resumes with your next billing period.
         </p>
-        <p>Payments already made aren&apos;t refunded, except where the law requires it.</p>
+        <p>
+          Card payments are processed by Dodo Payments, our merchant of record, which handles checkout, billing and
+          sales tax and appears on your statement. Local payments in Ethiopia are processed by Chapa.
+        </p>
+        <p>
+          You can get a full refund within 7 days of your first payment for a plan or a CV. How to cancel, what&apos;s
+          covered and how to ask for a refund are set out in our{" "}
+          <Link href="/refunds" className="font-medium text-neutral-900 underline decoration-neutral-300 underline-offset-2">
+            Refund and Cancellation Policy
+          </Link>
+          .
+        </p>
       </>
     ),
   },
@@ -142,7 +153,7 @@ export default function TermsPage() {
   return (
     <LegalPage
       title="Terms of Service"
-      updated="October 6, 2026"
+      updated="November 21, 2026"
       intro={
         <p>
           These terms explain what you can expect from gomoxie and what we expect from you. By creating an account or
