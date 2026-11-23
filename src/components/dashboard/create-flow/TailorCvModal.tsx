@@ -34,7 +34,7 @@ import {
 } from "./ClarifyingQuestionsForm";
 import { ClarificationQuestion, CVContentDTO, canUseCareerProfiles, updateCvContent, type GenerateCvMismatch } from "@/lib/api";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
-import { useProGate } from "@/hooks/use-pro-gate";
+import { useProGate, useResumeAfterPayment } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useAccountGate } from "@/components/account-gate/AccountGate";
 import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
@@ -102,7 +102,16 @@ interface TailorDraft {
   jobGaps: string[];
   confirmedGaps: ConfirmedGap[];
   sourceProfileId: string | null;
+  /** The AI step the paywall stopped, while it's open: run again once a plan is bought (see useResumeAfterPayment). */
+  afterPayment?: TailorResume | null;
 }
+
+/** An AI step of this flow, described so it can be saved and run again after checkout. (Reading an uploaded file can't be: the file doesn't survive the trip.) */
+type TailorResume =
+  | { action: "prepareExistingSource"; sourceId: string; templateId: TemplateId }
+  | { action: "analyzeStory"; templateId: TemplateId }
+  | { action: "tailor" }
+  | { action: "addConfirmedGaps"; added: ConfirmedGap[] };
 
 /** The steps in the URL, which need data to show, and which only last while the AI works. */
 const TAILOR_STEPS: FlowStepConfig<TailorStep, TailorDraft> = {
@@ -187,7 +196,6 @@ export function TailorCvModal({
   const [targetRole, setTargetRole] = useState(saved?.targetRole ?? "");
   const [jobDescription, setJobDescription] = useState(saved?.jobDescription ?? "");
 
-
   // Template selection state
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? initialTemplate ?? DEFAULT_TEMPLATE_ID);
 
@@ -228,7 +236,7 @@ export function TailorCvModal({
   const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
-  const proGate = useProGate();
+  const proGate = useProGate<TailorResume>();
   // Signed out (the /try pages): only what needs no account, and an account before the AI.
   const { isGuest, requireAccount } = useAccountGate();
   // Career profiles come with Plus and Pro; free users see the option with a Pro badge.
@@ -251,15 +259,13 @@ export function TailorCvModal({
     step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, sourceType, selectedProjectId,
     newCvMethod, freestyleStory, fullName, email, phone, uploadedFileName, targetRole, jobDescription,
     selectedTemplate, cvDocumentId, latestContent, analyzedSourceText, clarifyingQuestions, questionAnswers, jobGaps,
-    confirmedGaps, sourceProfileId,
+    confirmedGaps, sourceProfileId, afterPayment: proGate.resume,
   };
   // Back / Forward check the step they land on against this.
   useEffect(() => trackStepData(draft));
   useSaveFlowDraft<TailorDraft>("tailor", draft, step !== "select-source");
 
   const toast = useToast();
-
-  if (!isOpen) return null;
 
   // Pulls the REAL content behind the selected career profile or past
   // project (never the fabricated skeleton) before moving to the JD step.
@@ -309,7 +315,14 @@ export function TailorCvModal({
       setTargetRole(personal.title || targetRole);
       setStep("jd-and-slider");
     } catch (err) {
-      if (proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId))) return;
+      if (
+        proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId), {
+          action: "prepareExistingSource",
+          sourceId,
+          templateId,
+        })
+      )
+        return;
       setFlowError(flowErrorMessage(err, "Could not load that resume. Please try again."));
     } finally {
       setLoadingSourceId(null);
@@ -403,7 +416,7 @@ export function TailorCvModal({
       // Nothing to ask: go straight on to the job description.
       setStep(document.questions?.length ? "new-cv-missing" : "jd-and-slider");
     } catch (err) {
-      if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId))) return;
+      if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId), { action: "analyzeStory", templateId })) return;
       setFlowError(flowErrorMessage(err, "Could not analyze your story. Please try again."));
     }
   };
@@ -485,7 +498,8 @@ export function TailorCvModal({
   // `retry` re-runs the step that called this, after "pay at download" on the paywall.
   const runTailoring = async (
     gapsToAdd: ConfirmedGap[],
-    retry: () => void
+    retry: () => void,
+    resumeAs: TailorResume
   ): Promise<{ remaining: string[]; content: CVContentDTO } | null> => {
     if (!cvDocumentId) return null;
 
@@ -546,7 +560,7 @@ export function TailorCvModal({
       setJobGaps(remaining);
       return { remaining, content };
     } catch (err) {
-      if (proGate.isProRequired(err, retry)) return null;
+      if (proGate.isProRequired(err, retry, resumeAs)) return null;
       setFlowError(flowErrorMessage(err, "Could not tailor your CV. Please try again."));
       return null;
     }
@@ -560,7 +574,7 @@ export function TailorCvModal({
       handleFinish();
       return;
     }
-    const result = await runTailoring(confirmedGaps, () => void handleContinueToTemplate());
+    const result = await runTailoring(confirmedGaps, () => void handleContinueToTemplate(), { action: "tailor" });
     if (!result) return;
     // Gaps left to review means it isn't finished yet — save the ta-da for the end.
     if (result.remaining.length > 0) {
@@ -580,7 +594,7 @@ export function TailorCvModal({
     // look like requirements they were never asked about, so they're not shown.
     const picked = new Set(added.map((a) => a.gap.toLowerCase()));
     const notPicked = jobGaps.filter((gap) => !picked.has(gap.toLowerCase()));
-    const result = await runTailoring(all, () => void handleAddConfirmedGaps(added));
+    const result = await runTailoring(all, () => void handleAddConfirmedGaps(added), { action: "addConfirmedGaps", added });
     if (!result) return;
     setConfirmedGaps(all);
     setJobGaps(notPicked);
@@ -605,6 +619,16 @@ export function TailorCvModal({
             ? "tailor"
             : null);
 
+  // Back from buying a plan at the paywall: carry on with the step it stopped.
+  // (Here, below the steps it runs and above the early return, so every render calls it.)
+  useResumeAfterPayment(saved?.afterPayment, (resume) => {
+    if (resume.action === "prepareExistingSource") void handlePrepareExistingSource(resume.sourceId, resume.templateId);
+    else if (resume.action === "analyzeStory") void handleAnalyzeStory(resume.templateId);
+    else if (resume.action === "tailor") void handleContinueToTemplate();
+    else void handleAddConfirmedGaps(resume.added);
+  });
+
+  if (!isOpen) return null;
   return (
     <FlowModal
       stepKey={step}

@@ -9,6 +9,11 @@ export type PaymentReturnState = "pending" | "confirmed" | "timeout" | "failed";
 /** After a successful payment: long enough to watch the crown land on her and her jump for joy. */
 export const PAYMENT_CONFIRMED_REDIRECT_MS = 3000;
 
+/** A plan (or the lifetime deal) gets the crown; unlocking one CV gets it stamped and sent to download. */
+export type PaymentReturnKind = "plan" | "cv";
+
+const CV_CONFIRMED = { line: "Payment confirmed!", note: "Downloading your CV…" };
+
 const COPY: Record<PaymentReturnState, { line: string; note?: string }> = {
   pending: { line: "Confirming your payment…" },
   confirmed: { line: "Payment confirmed!", note: "Taking you back…" },
@@ -27,9 +32,20 @@ const COPY: Record<PaymentReturnState, { line: string; note?: string }> = {
  * confirmed: Moxie inspecting a coin through her glasses — then, once it
  * goes through, a crown drops onto her and she jumps for joy.
  */
-export function PaymentReturnView({ state }: { state: PaymentReturnState }) {
-  const { line, note } = COPY[state];
+export function PaymentReturnView({
+  state,
+  kind = "plan",
+  downloadsCv = kind === "cv",
+}: {
+  state: PaymentReturnState;
+  kind?: PaymentReturnKind;
+  /** A CV downloads next (one just unlocked, or the one a plan was bought from). */
+  downloadsCv?: boolean;
+}) {
   const confirmed = state === "confirmed";
+  const { line, note } = confirmed && downloadsCv ? CV_CONFIRMED : COPY[state];
+  // The crown is for joining a plan; a single CV is approved with her stamp instead.
+  const confirmedAnimation = kind === "cv" ? "stamp" : "paid";
   return (
     <div className="h-screen w-full flex items-center justify-center bg-[#f5f5f7] px-4">
       <div className="flex max-w-sm flex-col items-center text-center">
@@ -40,7 +56,12 @@ export function PaymentReturnView({ state }: { state: PaymentReturnState }) {
             style={{ background: "radial-gradient(circle, color-mix(in srgb, var(--accent) 18%, transparent), transparent 65%)" }}
           />
           <div className="relative">
-            <Moxie animation={confirmed ? "paid" : "verifying"} size={168} decorative crowned={confirmed} />
+            <Moxie
+              animation={confirmed ? confirmedAnimation : "verifying"}
+              size={168}
+              decorative
+              crowned={confirmed && kind === "plan"}
+            />
           </div>
         </div>
         <div role="status" className="mt-3">

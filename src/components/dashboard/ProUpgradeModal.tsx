@@ -73,9 +73,10 @@ export function ProUpgradeModal({
   const pricing = data ?? FALLBACK_PRICING;
   const { data: status } = useSubscriptionStatus();
   const tier = planTier(status);
-  const checkout = useStartProCheckout();
+  // From a locked CV's download: whatever is bought, that CV downloads once it's paid.
+  const checkout = useStartProCheckout(unlock?.cvDocumentId);
   const changePlan = useChangePlan();
-  const purchase = useStartPurchase();
+  const purchase = useStartPurchase(unlock?.cvDocumentId);
   // Nothing is picked up front; a plan row opens its billing periods once clicked.
   const [choice, setChoice] = useState<Choice>(unlock ? { kind: "unlock" } : null);
   // Opening a plan starts on its cheapest period.
@@ -243,10 +244,6 @@ export function ProUpgradeModal({
                           >
                             <span className="block text-[11px] font-semibold text-neutral-600">{PERIOD_LABEL[p]}</span>
                             <span className="block text-[13px] font-bold text-neutral-950">{weeklyPrice(plan[p].price, p)} / week</span>
-                            {/* What's actually charged for this period. */}
-                            <span className="block text-[10.5px] text-neutral-500">
-                              {formatPrice(plan[p].price)} {PERIOD_SUFFIX[p]}
-                            </span>
                           </button>
                         ))}
                       </span>

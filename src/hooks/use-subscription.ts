@@ -65,23 +65,26 @@ export interface StartCheckoutInput {
 // Starts a Plus / Pro subscription checkout and sends the browser there. The
 // plan only changes once Dodo's webhook confirms the payment — this only
 // gets the user to the checkout page.
-export function useStartProCheckout() {
+// `downloadCvId`: started from that CV's locked download, so it's downloaded once paid.
+export function useStartProCheckout(downloadCvId?: string) {
   return useMutation({
     mutationFn: ({ tier, period }: StartCheckoutInput) => createSubscriptionCheckout(tier, period),
     onSuccess: ({ checkoutUrl }, { tier }) => {
-      savePendingPurchase({ kind: "plan", tier });
+      savePendingPurchase({ kind: "plan", tier, downloadCvId });
       window.location.href = checkoutUrl;
     },
   });
 }
 
 // Starts a one-time checkout: Plus Lifetime, or unlocking one CV's download.
-export function useStartPurchase() {
+export function useStartPurchase(downloadCvId?: string) {
   return useMutation({
     mutationFn: (purchase: OneTimePurchase) => createPurchaseCheckout(purchase),
     onSuccess: ({ checkoutUrl }, purchase) => {
       savePendingPurchase(
-        purchase.product === "cv_unlock" ? { kind: "unlock", cvDocumentId: purchase.cvDocumentId } : { kind: "lifetime" }
+        purchase.product === "cv_unlock"
+          ? { kind: "unlock", cvDocumentId: purchase.cvDocumentId }
+          : { kind: "lifetime", downloadCvId }
       );
       window.location.href = checkoutUrl;
     },

@@ -12,6 +12,29 @@ import { deleteCvDocument } from "@/lib/api";
 // (b) the modal is closed before the flow completes. Call `markCompleted()`
 // right before the final `onComplete(...)` call in each modal's finish
 // handler so a successfully finished CV is never touched.
+// Deleting on unmount waits a tick: React's Strict Mode (development) unmounts
+// and remounts every component once on mount, and a flow restored with its CV
+// (a refresh, or back from checkout) must not lose it to that rehearsal. A
+// remount of the same flow cancels the pending delete; a real unmount lets it run.
+const pendingDeletes = new Map<string, ReturnType<typeof setTimeout>>();
+
+function deleteSoon(id: string) {
+  clearTimeout(pendingDeletes.get(id));
+  pendingDeletes.set(
+    id,
+    setTimeout(() => {
+      pendingDeletes.delete(id);
+      deleteCvDocument(id).catch(() => {});
+    }, 0)
+  );
+}
+
+function keep(id: string | null) {
+  if (!id) return;
+  clearTimeout(pendingDeletes.get(id));
+  pendingDeletes.delete(id);
+}
+
 export function useDraftCvLifecycle(isOpen: boolean, cvDocumentId: string | null) {
   const prevIdRef = useRef<string | null>(null);
   const completedRef = useRef(false);
@@ -45,12 +68,11 @@ export function useDraftCvLifecycle(isOpen: boolean, cvDocumentId: string | null
   // close button — the `isOpen` effect above never runs in that case, so
   // this is the last chance to clean up an abandoned document.
   useEffect(() => {
+    // Mounted again straight after an unmount (Strict Mode): it isn't abandoned after all.
+    keep(prevIdRef.current);
     return () => {
-      if (prevIdRef.current && !completedRef.current) {
-        deleteCvDocument(prevIdRef.current).catch(() => {});
-      }
+      if (prevIdRef.current && !completedRef.current) deleteSoon(prevIdRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const markCompleted = () => {

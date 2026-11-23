@@ -111,6 +111,8 @@ interface CvEditorWorkspaceProps {
   onReload?: () => void;
   /** The CV just came out of a flow: open the score panel briefly so people see what it says (see CvScorePanel). */
   introduceScore?: boolean;
+  /** Start the PDF download as soon as the editor opens (back from paying to unlock this CV). */
+  autoDownload?: boolean;
 }
 
 // "personal" (the contact form) plus any section key from the backend's
@@ -557,7 +559,7 @@ function TemplateGalleryCard({
   );
 }
 
-export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, onReload, introduceScore = false }: CvEditorWorkspaceProps) {
+export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, onReload, introduceScore = false, autoDownload = false }: CvEditorWorkspaceProps) {
   const toast = useToast();
   const subscriptionStatus = useSubscriptionStatus().data;
   // AI polish comes with any paid plan (or a grant of just that feature).
@@ -1119,6 +1121,15 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
       setIsDownloading(false);
     }
   };
+
+  // Back from paying to unlock this CV: download it right away, once.
+  const autoDownloadStarted = useRef(false);
+  useEffect(() => {
+    if (!autoDownload || autoDownloadStarted.current) return;
+    autoDownloadStarted.current = true;
+    void handleDownload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once on open
+  }, [autoDownload]);
 
   // "Tailor to a job": its own short flow (QuickTailorDialog) — into a new
   // copy, or this CV itself — then the tailored CV opens.

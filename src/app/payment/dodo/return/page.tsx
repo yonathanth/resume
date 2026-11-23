@@ -3,7 +3,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { getCvDocument, getSubscriptionStatus, planTier } from "@/lib/api";
-import { clearPendingPurchase, readPendingPurchase, type PendingPurchase } from "@/lib/payment-session";
+import {
+  clearPendingPurchase,
+  markPaidReturn,
+  pendingPurchaseDestination,
+  readPendingPurchase,
+  type PendingPurchase,
+} from "@/lib/payment-session";
 import { useRefreshSubscriptionStatus } from "@/hooks/use-subscription";
 import { PAYMENT_CONFIRMED_REDIRECT_MS, PaymentReturnView, type PaymentReturnState } from "@/components/PaymentReturnView";
 
@@ -27,6 +33,11 @@ export default function DodoReturnPage() {
   const [state, setState] = useState<PaymentReturnState>("pending");
   const outcome = useSyncExternalStore(subscribeNever, readOutcome, () => null);
   const failed = outcome === "failed" || outcome === "cancelled";
+  // Only decides which animation plays once it's confirmed (the "pending" view is the same for every kind).
+  const [{ isCvUnlock, downloadsCv }] = useState(() => {
+    const pending = typeof window !== "undefined" ? readPendingPurchase() : null;
+    return { isCvUnlock: pending?.kind === "unlock", downloadsCv: pending?.kind === "unlock" || Boolean(pending?.downloadCvId) };
+  });
 
   useEffect(() => {
     // No ref-based "already started" guard here — that would break React
@@ -41,24 +52,25 @@ export default function DodoReturnPage() {
 
     // What the checkout was for (saved before leaving for Dodo).
     const pending: PendingPurchase | null = readPendingPurchase();
-    // An unlocked CV goes straight back to its editor, to download it.
-    const destination = pending?.kind === "unlock" ? `/dashboard/editor/${encodeURIComponent(pending.cvDocumentId)}` : "/dashboard";
-    const goToDashboard = (delayMs: number) => {
+    // Back to where the checkout started (see pendingPurchaseDestination):
+    // a CV being downloaded opens in its editor and downloads once paid.
+    const goToDashboard = (delayMs: number, confirmed: boolean) => {
       setTimeout(() => {
         if (!cancelled) {
           clearPendingPurchase();
-          router.replace(destination);
+          // A plan is active now: the flow the paywall stopped carries on by itself.
+          if (confirmed && pending?.kind !== "unlock") markPaidReturn();
+          router.replace(pendingPurchaseDestination(pending, confirmed ? "confirmed" : "unconfirmed"));
         }
       }, delayMs);
     };
 
-    // A failed or abandoned payment needs no polling: send them back to try
-    // again (the editor for a CV, the upgrade page for a plan).
+    // A failed or abandoned payment needs no polling: send them back to try again.
     if (failed) {
       setTimeout(() => {
         if (!cancelled) {
           clearPendingPurchase();
-          router.replace(pending?.kind === "unlock" ? destination : "/dashboard/upgrade");
+          router.replace(pendingPurchaseDestination(pending, "failed"));
         }
       }, 3500);
       return () => {
@@ -82,7 +94,7 @@ export default function DodoReturnPage() {
             if (cancelled) return;
             setState("confirmed");
             refreshStatus();
-            goToDashboard(PAYMENT_CONFIRMED_REDIRECT_MS);
+            goToDashboard(PAYMENT_CONFIRMED_REDIRECT_MS, true);
             return;
           }
         } catch {
@@ -93,7 +105,7 @@ export default function DodoReturnPage() {
       if (cancelled) return;
       setState("timeout");
       refreshStatus();
-      goToDashboard(1500);
+      goToDashboard(1500, false);
     };
 
     poll();
@@ -102,5 +114,5 @@ export default function DodoReturnPage() {
     };
   }, [router, refreshStatus, failed]);
 
-  return <PaymentReturnView state={failed ? "failed" : state} />;
+  return <PaymentReturnView state={failed ? "failed" : state} kind={isCvUnlock ? "cv" : "plan"} downloadsCv={downloadsCv} />;
 }

@@ -34,7 +34,7 @@ import { ClarificationQuestion, CVContentDTO, WordingPreview, canUseCareerProfil
 import { useToast } from "@/components/Toaster";
 import { takeHeroHandoff } from "@/lib/hero-handoff";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
-import { useProGate } from "@/hooks/use-pro-gate";
+import { useProGate, useResumeAfterPayment } from "@/hooks/use-pro-gate";
 import { useAccountGate } from "@/components/account-gate/AccountGate";
 import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
 import { useFlowStep, type FlowStepConfig } from "@/lib/flow-steps";
@@ -83,7 +83,14 @@ interface EnhanceDraft {
   questionAnswers: Record<string, string>;
   jobGaps: string[];
   wordingPreview: ProfileWordingPreview | null;
+  /** The AI step the paywall stopped, while it's open: run again once a plan is bought (see useResumeAfterPayment). */
+  afterPayment?: EnhanceResume | null;
 }
+
+/** An AI step of this flow, described so it can be saved and run again after checkout. (Reading an uploaded file can't be: the file doesn't survive the trip.) */
+type EnhanceResume =
+  | { action: "prepareExistingSource"; sourceId: string; templateId: TemplateId }
+  | { action: "continueToTemplate"; jobDescription: string };
 
 /** The steps in the URL, and which need data to show. `first` is the upload for a guest (nothing saved to pick from). */
 function enhanceSteps(first: EnhanceStep): FlowStepConfig<EnhanceStep, EnhanceDraft> {
@@ -199,7 +206,7 @@ export function EnhanceCvModal({
   const analyzeUploadMutation = useAnalyzeUpload();
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
-  const proGate = useProGate();
+  const proGate = useProGate<EnhanceResume>();
   const canUseProfiles = canUseCareerProfiles(useSubscriptionStatus().data);
   // Profile updates set to automatic: the improved wording goes into the profile in the background.
   const backgroundSync = useBackgroundProfileSync();
@@ -213,7 +220,7 @@ export function EnhanceCvModal({
   const draft: EnhanceDraft = {
     step, templateNext: templateNext?.kind === "upload" ? null : templateNext, templateBackStep, sourceType, uploadedFileName,
     selectedProjectId, improvementGoal, optionalJd, selectedTemplate, cvDocumentId, latestContent, analyzedSourceText,
-    clarifyingQuestions, questionAnswers, jobGaps, wordingPreview,
+    clarifyingQuestions, questionAnswers, jobGaps, wordingPreview, afterPayment: proGate.resume,
   };
   // Back / Forward check the step they land on against this.
   useEffect(() => trackStepData(draft));
@@ -227,8 +234,6 @@ export function EnhanceCvModal({
     // Once, when the flow opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  if (!isOpen) return null;
 
   // Real file upload — OCRs/extracts the file server-side, then runs the
   // extracted text through the AI parse (same as CreateCvModal's upload flow).
@@ -299,7 +304,14 @@ export function EnhanceCvModal({
       setQuestionAnswers({});
       setStep(document.questions?.length ? "enhance-questions" : "improvement-goals");
     } catch (err) {
-      if (proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId))) return;
+      if (
+        proGate.isProRequired(err, () => handlePrepareExistingSource(sourceId, templateId), {
+          action: "prepareExistingSource",
+          sourceId,
+          templateId,
+        })
+      )
+        return;
       setFlowError(flowErrorMessage(err, "Could not load that resume. Please try again."));
     } finally {
       setLoadingSourceId(null);
@@ -415,7 +427,13 @@ export function EnhanceCvModal({
         handleFinish(document.content);
       }
     } catch (err) {
-      if (proGate.isProRequired(err, () => void handleContinueToTemplate(jobDescription))) return;
+      if (
+        proGate.isProRequired(err, () => void handleContinueToTemplate(jobDescription), {
+          action: "continueToTemplate",
+          jobDescription,
+        })
+      )
+        return;
       setFlowError(flowErrorMessage(err, "Could not enhance your CV. Please try again."));
     }
   };
@@ -443,6 +461,14 @@ export function EnhanceCvModal({
     onComplete(finalCv);
   };
 
+  // Back from buying a plan at the paywall: carry on with the step it stopped.
+  // (Here, below the steps it runs and above the early return, so every render calls it.)
+  useResumeAfterPayment(saved?.afterPayment, (resume) => {
+    if (resume.action === "prepareExistingSource") void handlePrepareExistingSource(resume.sourceId, resume.templateId);
+    else void handleContinueToTemplate(resume.jobDescription);
+  });
+
+  if (!isOpen) return null;
   return (
     <FlowModal
       stepKey={step}

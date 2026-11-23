@@ -35,7 +35,7 @@ import {
 } from "./ClarifyingQuestionsForm";
 import { useDraftCvLifecycle } from "@/hooks/use-draft-cv-lifecycle";
 import { useMe } from "@/hooks/use-auth";
-import { useProGate } from "@/hooks/use-pro-gate";
+import { useProGate, useResumeAfterPayment } from "@/hooks/use-pro-gate";
 import { useProfiles } from "@/hooks/use-profiles";
 import { useAccountGate } from "@/components/account-gate/AccountGate";
 import { useRestoredFlowDraft, useSaveFlowDraft } from "@/lib/flow-drafts";
@@ -65,8 +65,6 @@ type Step =
   | "job-ask"
   | "job-target"
   | "save-profile-prompt";
-
-
 
 const FREESTYLE_PLACEHOLDER =
   "I'm an accountant with 3 years at Awash Bank. I handled reconciliations for 40+ branch accounts and cut month-end closing from 6 days to 4. I have a BA in Accounting from Addis Ababa University (2021), I'm good with Excel, Peachtree and IFRS, and I speak Amharic and English. I want a senior accountant role.";
@@ -115,7 +113,15 @@ export interface CreateDraft {
   clarifyingQuestions: ClarificationQuestion[];
   questionAnswers: Record<string, string>;
   jobGaps: string[];
+  /** The AI step the paywall stopped, while it's open: run again once a plan is bought (see useResumeAfterPayment). */
+  afterPayment?: CreateResume | null;
 }
+
+/** An AI step of this flow, described so it can be saved and run again after checkout. */
+type CreateResume =
+  | { action: "analyzeStory"; templateId: TemplateId }
+  | { action: "generateFromProfile"; jobDescription: string }
+  | { action: "continueFromMissing"; jobDescription: string };
 
 /** The steps in the URL, and which need data to show. `first` is the story for a guest (no career profiles to offer). */
 const createSteps = (first: Step): FlowStepConfig<Step, CreateDraft> => ({
@@ -206,8 +212,6 @@ export function CreateCvModal({
   // linked to that profile, so there's no "save to a profile" step after.
   const [fromProfile, setFromProfile] = useState(saved?.fromProfile ?? Boolean(fromProfileStart));
 
-
-
   // Selection states
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateId>(saved?.selectedTemplate ?? initialTemplate ?? DEFAULT_TEMPLATE_ID);
 
@@ -263,7 +267,7 @@ export function CreateCvModal({
   const analyzeMutation = useAnalyzeFreestyle();
   const analyzeExistingMutation = useAnalyzeExisting();
   const refineMutation = useRefineCv();
-  const proGate = useProGate();
+  const proGate = useProGate<CreateResume>();
   const { done: aiDone, celebrate } = useAiDone();
 
   // Generates the CV from the chosen profile's own content (see
@@ -308,7 +312,7 @@ export function CreateCvModal({
         goToProfileStep(document.content, gaps, docId);
       }
     } catch (err) {
-      if (proGate.isProRequired(err, () => generateFromProfile(jobDescription))) return;
+      if (proGate.isProRequired(err, () => generateFromProfile(jobDescription), { action: "generateFromProfile", jobDescription })) return;
       setFlowError(flowErrorMessage(err, "Could not build your CV from this profile. Please try again."));
     }
   };
@@ -318,13 +322,11 @@ export function CreateCvModal({
     step, templateNext, templateBackStep, selectedProfileId,
     fromProfile, selectedTemplate, freestyleText, targetRole, fullName, email, phone, optionalJd, jobBackStep,
     flowExtraDetails, cvDocumentId, latestContent, analyzedSourceText, analyzedInputs,
-    clarifyingQuestions, questionAnswers, jobGaps,
+    clarifyingQuestions, questionAnswers, jobGaps, afterPayment: proGate.resume,
   };
   // Back / Forward check the step they land on against this.
   useEffect(() => trackStepData(draft));
   useSaveFlowDraft<CreateDraft>("create", draft, step !== firstStep);
-
-  if (!isOpen) return null;
 
   // Handle Free Style Analysis — sends the raw story to the backend AI parser
   // and seeds the "missing essentials" form with only what it actually found.
@@ -370,7 +372,7 @@ export function CreateCvModal({
         setStep("job-ask");
       }
     } catch (err) {
-      if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId))) return;
+      if (proGate.isProRequired(err, () => handleAnalyzeStory(templateId), { action: "analyzeStory", templateId })) return;
       setFlowError(flowErrorMessage(err, "Could not analyze your story. Please try again."));
     }
   };
@@ -430,7 +432,12 @@ export function CreateCvModal({
       goToProfileStep(document.content, gaps);
       return true;
     } catch (err) {
-      if (!proGate.isProRequired(err, () => void handleContinueFromMissing(jobDescription))) {
+      if (
+        !proGate.isProRequired(err, () => void handleContinueFromMissing(jobDescription), {
+          action: "continueFromMissing",
+          jobDescription,
+        })
+      ) {
         setFlowError(flowErrorMessage(err, "Could not update your CV. Please try again."));
       }
       return false;
@@ -578,6 +585,15 @@ export function CreateCvModal({
   // Faded until there's a profile to build from (shown as available while they load).
   const hasUsableProfile = !profilesLoaded || availableProfiles.some(isProfileUsable);
 
+  // Back from buying a plan at the paywall: carry on with the step it stopped.
+  // (Here, below the steps it runs and above the early return, so every render calls it.)
+  useResumeAfterPayment(saved?.afterPayment, (resume) => {
+    if (resume.action === "analyzeStory") void handleAnalyzeStory(resume.templateId);
+    else if (resume.action === "generateFromProfile") void generateFromProfile(resume.jobDescription);
+    else void handleContinueFromMissing(resume.jobDescription);
+  });
+
+  if (!isOpen) return null;
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 transition-colors ${
@@ -659,7 +675,6 @@ export function CreateCvModal({
                 />
               )}
             </div>
-
 
           </div>
         )}

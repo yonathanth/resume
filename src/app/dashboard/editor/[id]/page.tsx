@@ -19,6 +19,12 @@ function readFreshFlow(): CvFlowType | null {
   const value = new URLSearchParams(window.location.search).get("fresh") as CvFlowType | null;
   return value && FLOW_KINDS.includes(value) ? value : null;
 }
+
+/** ?download=1: back from paying to unlock this CV, so it downloads straight away (see the effect that drops it). */
+function readAutoDownload(): boolean {
+  if (typeof window === "undefined") return false;
+  return new URLSearchParams(window.location.search).get("download") === "1";
+}
 import { applyCvContent, createBlankCv, toResumeDraft } from "@/lib/cv-mapper";
 import { CvData, DEFAULT_TEMPLATE_ID } from "@/components/dashboard/create-flow/types";
 
@@ -49,6 +55,15 @@ export default function CvEditorPage({
   // Read once: the feedback card drops the param from the address when it opens.
   // (Nothing that uses it renders before the CV has loaded, so the server render is unaffected.)
   const [freshFlow] = useState(readFreshFlow);
+  const [autoDownload] = useState(readAutoDownload);
+
+  // Drop ?download=1 from the address, so a refresh doesn't download it again.
+  useEffect(() => {
+    if (!autoDownload) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("download");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }, [autoDownload]);
 
   useEffect(() => {
     let cancelled = false;
@@ -138,6 +153,7 @@ export default function CvEditorPage({
         initialData={cvData}
         onReload={() => setVersion((v) => v + 1)}
         introduceScore={Boolean(freshFlow)}
+        autoDownload={autoDownload && loaded?.version === 0}
         onBack={() => {
           notifyLeftEditor(id);
           router.push("/dashboard");
