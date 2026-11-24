@@ -35,6 +35,10 @@ export function TemplateThumbnail({ templateId, className = "", title, story, ea
         // eslint-disable-next-line @next/next/no-img-element -- served (and cached) by the API, not Next's image optimizer
         <img
           key={src}
+          // A cached image can finish before React attaches onLoad (it would then stay invisible): check on mount.
+          ref={(img) => {
+            if (img?.complete && state === "loading") setState(img.naturalWidth > 0 ? "loaded" : "error");
+          }}
           src={src}
           alt={title ?? `${templateId} template`}
           loading={eager ? "eager" : "lazy"}
