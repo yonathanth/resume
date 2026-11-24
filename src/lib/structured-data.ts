@@ -7,8 +7,11 @@ export const ORGANIZATION = {
   "@type": "Organization",
   "@id": siteUrl("/#organization"),
   name: SITE.name,
+  // How people also write the name: helps a search for "go moxie" find the site.
+  alternateName: ["Go Moxie", "GoMoxie"],
   url: SITE.url,
-  logo: siteUrl("/icon.svg"),
+  // A raster image (Google doesn't take SVG logos), at least 112px square.
+  logo: siteUrl("/apple-icon"),
 };
 
 export const WEBSITE = {
@@ -16,6 +19,7 @@ export const WEBSITE = {
   "@type": "WebSite",
   "@id": siteUrl("/#website"),
   name: SITE.name,
+  alternateName: ["Go Moxie", "GoMoxie"],
   url: SITE.url,
   publisher: { "@id": siteUrl("/#organization") },
 };

@@ -108,7 +108,7 @@ export function Footer() {
             Back to top
             <ArrowUp className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5" />
           </Link>
-          <span className="order-3 sm:order-1 w-full sm:w-auto text-neutral-600 sm:text-neutral-500">© gomoxie 2026. All rights reserved.</span>
+          <span className="order-3 sm:order-1 w-full sm:w-auto text-neutral-600 sm:text-neutral-500">© gomoxie (Go Moxie) 2026. All rights reserved.</span>
         </div>
       </div>
     </footer>
