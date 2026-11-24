@@ -5,9 +5,9 @@ export const SITE = {
   name: "gomoxie",
   /** Production origin, no trailing slash. NEXT_PUBLIC_SITE_URL overrides it (staging, previews). */
   url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://gomoxie.app").replace(/\/$/, ""),
-  tagline: "AI resume builder that lands interviews",
+  tagline: "Free Resume Builder with AI",
   description:
-    "Create a resume, tailor it to any job posting, or improve the one you have with AI, in minutes. ATS-friendly templates, PDF download, free to start.",
+    "Build a professional resume in minutes. Answer a few questions or paste your old CV, and gomoxie writes it, matches it to the job and checks it gets past screening software. Free to start.",
   locale: "en_US",
   /** The brand's accent (see --accent in globals.css). */
   accent: "#ff5e1f",
