@@ -26,6 +26,8 @@ async function shareTarget(intent: QuickIntent): Promise<{ path: string; title: 
         : { path: "/templates", title: PAGE_CARDS.templates.title, description: PAGE_CARDS.templates.description };
     }
     case "pro":
+    case "checkout":
+    case "lifetime":
       return { path: "/pricing", title: PAGE_CARDS.pricing.title, description: PAGE_CARDS.pricing.description };
   }
 }

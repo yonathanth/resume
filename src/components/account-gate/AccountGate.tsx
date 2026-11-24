@@ -25,7 +25,7 @@ import type { FlowKind } from "@/lib/flow-drafts";
 /** The /try flow a fallback intent belongs to (a template link is a create flow). */
 function flowOf(intent: QuickIntent): FlowKind | null {
   if (intent.kind === "template") return "create";
-  return intent.kind === "pro" ? null : intent.kind;
+  return intent.kind === "pro" || intent.kind === "checkout" || intent.kind === "lifetime" ? null : intent.kind;
 }
 
 /**

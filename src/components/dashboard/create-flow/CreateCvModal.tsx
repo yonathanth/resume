@@ -66,8 +66,12 @@ type Step =
   | "job-target"
   | "save-profile-prompt";
 
-const FREESTYLE_PLACEHOLDER =
-  "I'm an accountant with 3 years at Awash Bank. I handled reconciliations for 40+ branch accounts and cut month-end closing from 6 days to 4. I have a BA in Accounting from Addis Ababa University (2021), I'm good with Excel, Peachtree and IFRS, and I speak Amharic and English. I want a senior accountant role.";
+const FREESTYLE_PLACEHOLDER = `For example:
+• Your current or last job: title, company, years, what you did and achieved
+• Earlier jobs
+• Education: degree, field, university, year
+• Skills, software and languages
+• Certificates or training`;
 
 const FREESTYLE_GUIDE = [
   { title: "Your role", hint: "Your current or most recent job title, and the role you want next" },

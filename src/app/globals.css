@@ -687,3 +687,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .hero-underline { animation: none; stroke-dashoffset: 0; }
 }
+
+/* Thin, light brand-tinted scrollbars everywhere (sidebar, main pane, modals, lists). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-border) transparent;
+}
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background-color: var(--accent-border); border-radius: 9999px; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--accent-light); }
+.scrollbar-none { scrollbar-width: none; }
+.scrollbar-none::-webkit-scrollbar { display: none; }

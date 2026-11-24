@@ -8,6 +8,7 @@ import { latestFlowDraft } from "@/lib/flow-drafts";
 import { readOpenFlow } from "@/lib/flow-url";
 import type { CreateDraft } from "./create-flow/CreateCvModal";
 import { useDashboard } from "./DashboardContext";
+import { useStartProCheckout, useStartPurchase } from "@/hooks/use-subscription";
 import type { TemplateId } from "./create-flow/types";
 
 /**
@@ -21,6 +22,8 @@ export function QuickLinkLauncher({ ready }: { ready: boolean }) {
   const router = useRouter();
   const { handleNewResume, handleUseTemplate, openFlow } = useDashboard();
   const { data: templates, isError: templatesFailed } = useCvTemplates();
+  const { mutate: startCheckout } = useStartProCheckout();
+  const { mutate: startPurchase } = useStartPurchase();
   const launched = useRef(false);
 
   useEffect(() => {
@@ -58,8 +61,16 @@ export function QuickLinkLauncher({ ready }: { ready: boolean }) {
       case "pro":
         router.push("/dashboard/upgrade");
         break;
+      case "checkout":
+        // Picked a plan before signing in: on to pay for it. If checkout can't
+        // start (e.g. already subscribed), the plans page lets them pick again.
+        startCheckout({ tier: intent.tier, period: intent.period }, { onError: () => router.push("/dashboard/upgrade") });
+        break;
+      case "lifetime":
+        startPurchase({ product: "plus_lifetime" }, { onError: () => router.push("/dashboard/upgrade") });
+        break;
     }
-  }, [ready, templates, templatesFailed, handleNewResume, handleUseTemplate, openFlow, router]);
+  }, [ready, templates, templatesFailed, handleNewResume, handleUseTemplate, openFlow, router, startCheckout, startPurchase]);
 
   return null;
 }

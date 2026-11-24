@@ -112,6 +112,7 @@ export function useChangePlan() {
     mutationFn: ({ tier, period }: StartCheckoutInput) => changeSubscriptionPlan(tier, period),
     onSuccess: (status) => {
       queryClient.setQueryData(SUBSCRIPTION_STATUS_QUERY_KEY, status);
+      void queryClient.invalidateQueries({ queryKey: ["scheduled-plan-change"] });
     },
   });
 }

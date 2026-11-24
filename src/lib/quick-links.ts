@@ -8,7 +8,10 @@ export type QuickIntent =
   | { kind: "tailor" }
   | { kind: "improve" }
   | { kind: "template"; templateId: string }
-  | { kind: "pro" };
+  | { kind: "pro" }
+  /** A plan picked on a public pricing card: straight to its checkout once signed in. */
+  | { kind: "checkout"; tier: "plus" | "pro"; period: "weekly" | "monthly" | "quarterly" }
+  | { kind: "lifetime" };
 
 const STORAGE_KEY = "quickLinkIntent";
 /** A link someone clicked but didn't finish signing up from shouldn't fire days later. */
@@ -40,6 +43,10 @@ export function describeQuickIntent(intent: QuickIntent): string {
       return "start your CV from this template";
     case "pro":
       return "upgrade to Pro";
+    case "checkout":
+      return `get ${intent.tier === "pro" ? "Pro" : "Plus"}`;
+    case "lifetime":
+      return "get Plus Lifetime";
   }
 }
 

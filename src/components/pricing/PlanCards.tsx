@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { ArrowRight, Check, Clock, Infinity as InfinityIcon, Loader2 } from "lucide-react";
+import { ArrowRight, Check, Clock, Infinity as InfinityIcon, Loader2, X } from "lucide-react";
 import {
   ApiError,
   planTier,
@@ -10,6 +11,9 @@ import {
   type PaidTier,
   type PricingCatalog,
   type SubscriptionStatusResult,
+  type PlanChangePreview,
+  getScheduledPlanChange,
+  previewPlanChange,
 } from "@/lib/api";
 import {
   FALLBACK_PRICING,
@@ -22,6 +26,7 @@ import {
 } from "@/lib/plans";
 import { useChangePlan, usePricing, useStartProCheckout, useStartPurchase } from "@/hooks/use-subscription";
 import { useHasMounted } from "@/hooks/use-has-mounted";
+import { saveQuickIntent } from "@/lib/quick-links";
 
 // Free / Plus / Pro as three cards with a billing-period toggle, the Plus
 // Lifetime deal and pay-per-CV — shared by the pricing page (dark), the home
@@ -230,15 +235,62 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
   const isCurrent = (cardTier: "free" | PaidTier) =>
     signedIn && cardTier === tier && (cardTier === "free" || status?.planSource !== "subscription" || currentPeriod === periodOf(cardTier));
 
-  const choose = (cardTier: PaidTier) => {
+  // A subscriber switching plan sees what it will do (and cost) before it happens.
+  const [confirming, setConfirming] = useState<{ tier: PaidTier; period: BillingPeriod; name: string } | null>(null);
+  const [previewing, setPreviewing] = useState<PaidTier | null>(null);
+  const [preview, setPreview] = useState<PlanChangePreview | null>(null);
+  const [changedNote, setChangedNote] = useState<string | null>(null);
+  const { data: scheduled } = useQuery({
+    queryKey: ["scheduled-plan-change"],
+    queryFn: getScheduledPlanChange,
+    enabled: signedIn && subscribed,
+    staleTime: 60_000,
+  });
+
+  const choose = async (cardTier: PaidTier, name: string) => {
     setError(null);
+    setChangedNote(null);
     const onError = (err: unknown) => setError(err instanceof ApiError ? err.message : "Could not start checkout. Please try again.");
     const period = periods[cardTier];
-    if (subscribed) changePlan.mutate({ tier: cardTier, period }, { onError });
-    else checkout.mutate({ tier: cardTier, period }, { onError });
+    if (!subscribed) {
+      checkout.mutate({ tier: cardTier, period }, { onError });
+      return;
+    }
+    setPreviewing(cardTier);
+    try {
+      setPreview(await previewPlanChange(cardTier, period));
+      setConfirming({ tier: cardTier, period, name });
+    } catch (err) {
+      onError(err);
+    } finally {
+      setPreviewing(null);
+    }
+  };
+  const confirmChange = () => {
+    if (!confirming || !preview) return;
+    const { tier: toTier, period, name } = confirming;
+    changePlan.mutate(
+      { tier: toTier, period },
+      {
+        onSuccess: () => {
+          setConfirming(null);
+          setChangedNote(
+            preview.timing === "now"
+              ? `You're on ${name} now.`
+              : `You'll switch to ${name} (${PERIOD_LABEL[period]}) on ${formatDate(preview.effectiveAt)}.`
+          );
+        },
+        onError: (err) => {
+          setConfirming(null);
+          setError(err instanceof ApiError ? err.message : "Could not change your plan. Please try again.");
+        },
+      }
+    );
   };
   const pendingFor = (cardTier: PaidTier) =>
-    (checkout.isPending && checkout.variables?.tier === cardTier) || (changePlan.isPending && changePlan.variables?.tier === cardTier);
+    previewing === cardTier ||
+    (checkout.isPending && checkout.variables?.tier === cardTier) ||
+    (changePlan.isPending && changePlan.variables?.tier === cardTier);
 
   const freeCard = { tier: "free" as const, name: "Free", blurb: "Try it on your next application." };
   const paidCards: { tier: PaidTier; name: string; blurb: string; popular?: boolean }[] = [
@@ -298,7 +350,11 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
                   </Link>
                 )
               ) : !signedIn ? (
-                <Link href="/signup" className={`${BUTTON} ${card.popular ? t.primary : t.secondary}`}>
+                <Link
+                  href="/signup"
+                  onClick={() => saveQuickIntent({ kind: "checkout", tier: card.tier as PaidTier, period })}
+                  className={`${BUTTON} ${t.primary}`}
+                >
                   Get {card.name}
                   <ArrowRight className="h-4 w-4 opacity-80 transition-transform group-hover:translate-x-0.5" />
                 </Link>
@@ -307,9 +363,9 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
               ) : (
                 <button
                   type="button"
-                  disabled={checkout.isPending || changePlan.isPending || !price?.available}
-                  onClick={() => choose(card.tier as PaidTier)}
-                  className={`${BUTTON} ${card.popular ? t.primary : t.secondary}`}
+                  disabled={checkout.isPending || changePlan.isPending || previewing !== null || !price?.available}
+                  onClick={() => void choose(card.tier as PaidTier, card.name)}
+                  className={`${BUTTON} ${t.primary}`}
                 >
                   {pendingFor(card.tier as PaidTier) ? (
                     <>
@@ -338,8 +394,80 @@ export function PlanCards({ theme, signedIn, status, periodOnCards = false, free
         })}
       </div>
       {error && <p className={`mx-auto mt-6 max-w-md text-center text-sm font-medium ${t.error}`}>{error}</p>}
+      {(changedNote || scheduled) && (
+        <p className={`mx-auto mt-6 max-w-md text-center text-sm font-medium ${t.body}`}>
+          {changedNote ??
+            (scheduled &&
+              `You'll switch to ${scheduled.tier === "pro" ? "Pro" : "Plus"} (${PERIOD_LABEL[scheduled.period]}) on ${formatDate(scheduled.effectiveAt)}.`)}
+        </p>
+      )}
+
+      {confirming && preview && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-neutral-950/60 p-4 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" className="relative w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 text-neutral-950 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setConfirming(null)}
+              disabled={changePlan.isPending}
+              className="absolute right-4 top-4 cursor-pointer rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-40"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <h3 className="mb-1.5 text-sm font-bold">
+              Switch to {confirming.name} ({PERIOD_LABEL[confirming.period]})?
+            </h3>
+            {preview.timing === "now" ? (
+              <p className="text-xs leading-relaxed text-neutral-500">
+                You&apos;ll get {confirming.name} right away. Your card on file is charged{" "}
+                <strong className="text-neutral-900">{formatCents(preview.chargeNow, preview.currency)}</strong> now for the rest of this
+                period, then {formatPrice(preview.renewalPrice)} each {PERIOD_UNIT[confirming.period]}.
+              </p>
+            ) : (
+              <p className="text-xs leading-relaxed text-neutral-500">
+                You keep your current plan until <strong className="text-neutral-900">{formatDate(preview.effectiveAt)}</strong>, then switch
+                to {confirming.name} at {formatPrice(preview.renewalPrice)} each {PERIOD_UNIT[confirming.period]}. Nothing is charged or
+                refunded now.
+              </p>
+            )}
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirming(null)}
+                disabled={changePlan.isPending}
+                className="flex-1 cursor-pointer rounded-xl border border-neutral-200 px-4 py-2.5 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              >
+                Keep current plan
+              </button>
+              <button
+                type="button"
+                onClick={confirmChange}
+                disabled={changePlan.isPending}
+                className="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-xl bg-neutral-950 px-4 py-2.5 text-xs font-semibold text-white hover:bg-neutral-800 disabled:opacity-70"
+              >
+                {changePlan.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                {preview.timing === "now" ? `Pay and switch` : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+const PERIOD_UNIT: Record<BillingPeriod, string> = { weekly: "week", monthly: "month", quarterly: "3 months" };
+
+function formatDate(iso: string | null | undefined): string {
+  return iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "your next renewal";
+}
+
+function formatCents(cents: number, currency: string | null): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency: currency ?? "USD" }).format(cents / 100);
+  } catch {
+    return formatPrice(cents / 100);
+  }
 }
 
 /**
@@ -386,7 +514,7 @@ export function LifetimeDeal({ theme, signedIn, status }: { theme: PlanTheme; si
         <p className={`mt-1.5 text-[14px] ${t.body}`}>Plus forever, pay once.</p>
 
         {!signedIn ? (
-          <Link href="/signup" className={`${BUTTON} ${t.primary}`}>
+          <Link href="/signup" onClick={() => saveQuickIntent({ kind: "lifetime" })} className={`${BUTTON} ${t.primary}`}>
             Get Lifetime
             <ArrowRight className="h-4 w-4 opacity-80 transition-transform group-hover:translate-x-0.5" />
           </Link>

@@ -1507,3 +1507,32 @@ export function getCvTemplateSample(templateId: string, story?: string) {
   const query = story ? `?story=${encodeURIComponent(story)}` : "";
   return apiFetch<CvTemplateSample>(`/api/v1/templates/${encodeURIComponent(templateId)}/sample${query}`);
 }
+
+export interface PlanChangePreview {
+  /** "now": an upgrade, charged chargeNow (cents) today; "renewal": switches on effectiveAt, nothing charged until then. */
+  timing: "now" | "renewal";
+  chargeNow: number;
+  currency: string | null;
+  effectiveAt: string | null;
+  /** The new plan's price each period, in dollars. */
+  renewalPrice: number;
+}
+
+/** What switching plan would do, for the confirmation before it happens. */
+export function previewPlanChange(tier: PaidTier, period: BillingPeriod) {
+  return apiFetch<PlanChangePreview>("/api/v1/subscriptions/change-plan/preview", {
+    method: "POST",
+    body: JSON.stringify({ tier, period }),
+  });
+}
+
+export interface ScheduledPlanChange {
+  tier: PaidTier;
+  period: BillingPeriod;
+  effectiveAt: string;
+}
+
+/** The plan change waiting for the next renewal, if any. */
+export function getScheduledPlanChange() {
+  return apiFetch<ScheduledPlanChange | null>("/api/v1/subscriptions/scheduled-change");
+}
