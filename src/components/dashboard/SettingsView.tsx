@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneInput } from "@/components/PhoneInput";
 import { canAutoFocus } from "@/lib/autofocus";
 import React, { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
@@ -247,15 +248,7 @@ function ProfileForm({ me }: { me: ApiUser }) {
           <label htmlFor="phone" className={LABEL_CLASS}>
             Phone <span className="font-normal text-neutral-400">· optional</span>
           </label>
-          <input
-            id="phone"
-            type="tel"
-            autoComplete="tel"
-            value={form.phone}
-            onChange={(e) => set("phone")(e.target.value)}
-            placeholder="+251 91 234 5678"
-            className={INPUT_CLASS}
-          />
+          <PhoneInput id="phone" value={form.phone} onChange={(v) => set("phone")(v)} invalid={phoneInvalid} />
           {phoneInvalid && <p className="mt-1.5 text-xs text-red-600">Use digits, spaces and + ( ) - only.</p>}
         </div>
         <div className="sm:col-span-2">

@@ -25,7 +25,9 @@ export function TemplateThumbnail({ templateId, className = "", title, story, ea
   const src = `${API_URL}/api/v1/templates/${encodeURIComponent(templateId)}/thumb.webp${query}`;
 
   return (
-    <div className={`relative bg-white overflow-hidden ${className}`}>
+    // `relative` only when the caller doesn't position it: with both, `relative` wins in the CSS and an
+    // `absolute inset-0` thumbnail collapses to zero height (an invisible image).
+    <div className={`${/\b(absolute|fixed)\b/.test(className) ? "" : "relative"} bg-white overflow-hidden ${className}`}>
       {state === "loading" && <div className="absolute inset-0 animate-pulse bg-neutral-100" />}
       {state === "error" ? (
         <div className="absolute inset-0 flex items-center justify-center text-[10px] text-neutral-400">

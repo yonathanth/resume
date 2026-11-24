@@ -1,5 +1,6 @@
 "use client";
 
+import { PhoneInput } from "@/components/PhoneInput";
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight, Plus, Search, Trash2, X } from "lucide-react";
 import { CvBullet } from "./types";
@@ -616,6 +617,16 @@ export function TagInput({ items, onChange, placeholder }: TagInputProps) {
         onBlur={() => draft.trim() && commit(draft)}
         className={inputClass}
       />
+    </div>
+  );
+}
+
+/** A phone field in the editor: the country code dropdown beside the number (see PhoneInput). */
+export function PhoneField({ label, value, onChange, name }: { label: string; value: string; onChange: (v: string) => void; name?: string }) {
+  return (
+    <div className="block" data-field={name}>
+      <span className={labelClass}>{label}</span>
+      <PhoneInput name={name} value={value ?? ""} onChange={onChange} />
     </div>
   );
 }

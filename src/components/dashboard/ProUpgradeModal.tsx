@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { ArrowRight, Check, Infinity as InfinityIcon, Loader2, X } from "lucide-react";
+import { ArrowRight, Check, ChevronLeft, ChevronRight, Infinity as InfinityIcon, Loader2, X } from "lucide-react";
 import { Moxie } from "@/components/moxie";
 import {
   ApiError,
@@ -10,7 +10,7 @@ import {
   type CvUnlockProduct,
   type PaidTier,
 } from "@/lib/api";
-import { FALLBACK_PRICING, PERIODS, PERIOD_LABEL, PERIOD_SUFFIX, PERIOD_WEEKS, describeLimits, formatPrice, planFeatures, weeklyPrice } from "@/lib/plans";
+import { FALLBACK_PRICING, PERIODS, PERIOD_LABEL, PERIOD_WEEKS, describeLimits, formatPrice, planFeatures, weeklyPrice } from "@/lib/plans";
 import { useChangePlan, usePricing, useStartProCheckout, useStartPurchase, useSubscriptionStatus } from "@/hooks/use-subscription";
 import { LifetimeScarcity } from "@/components/pricing/PlanCards";
 import type { PaywallDetails } from "@/hooks/use-pro-gate";
@@ -22,7 +22,7 @@ import type { PaywallDetails } from "@/hooks/use-pro-gate";
 // PRO_REQUIRED), paid-only features (career profiles, AI polish) and locked
 // downloads (UnlockCvModal).
 
-type Choice = { kind: "plan"; tier: PaidTier } | { kind: "unlock" } | null;
+type Choice = { kind: "unlock" } | null;
 
 interface PlanPaywallProps {
   isOpen: boolean;
@@ -77,7 +77,8 @@ export function ProUpgradeModal({
   const checkout = useStartProCheckout(unlock?.cvDocumentId);
   const changePlan = useChangePlan();
   const purchase = useStartPurchase(unlock?.cvDocumentId);
-  // Nothing is picked up front; a plan row opens its billing periods once clicked.
+  // A plan row opens a second dialog with its billing periods (like Ethio Jobs).
+  const [periodFor, setPeriodFor] = useState<PaidTier | null>(null);
   const [choice, setChoice] = useState<Choice>(unlock ? { kind: "unlock" } : null);
   // Opening a plan starts on its cheapest period.
   const [period, setPeriod] = useState<BillingPeriod>("weekly");
@@ -118,10 +119,12 @@ export function ProUpgradeModal({
     setError(null);
     if (picked?.kind === "unlock" && unlock) {
       purchase.mutate({ product: "cv_unlock", cvDocumentId: unlock.cvDocumentId }, { onError });
-    } else if (picked?.kind === "plan") {
-      if (subscribed) changePlan.mutate({ tier: picked.tier, period }, { onError, onSuccess: onClose });
-      else checkout.mutate({ tier: picked.tier, period }, { onError });
     }
+  };
+  const buyPlan = (t: PaidTier) => {
+    setError(null);
+    if (subscribed) changePlan.mutate({ tier: t, period }, { onError, onSuccess: onClose });
+    else checkout.mutate({ tier: t, period }, { onError });
   };
 
   // Each option has its own soft colour; the picked one gets a dark outline.
@@ -188,19 +191,19 @@ export function ProUpgradeModal({
               )}
 
               {tiers.map((t) => {
-                const selected = choice?.kind === "plan" && choice.tier === t;
                 const plan = pricing.plans[t];
                 const periods = periodsFor(t);
                 return (
-                  <div
+                  <button
                     key={t}
-                    data-option
-                    className={row(selected, t)}
+                    type="button"
+                    disabled={busy}
                     onClick={() => {
-                      if (busy) return;
-                      if (!selected) setPeriod(periods[0]);
-                      setChoice({ kind: "plan", tier: t });
+                      setError(null);
+                      setPeriod(periods[0]);
+                      setPeriodFor(t);
                     }}
+                    className={row(false, t)}
                   >
                     {t === "pro" && (
                       <span className="absolute -top-2.5 right-4 rounded-full bg-accent px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
@@ -214,52 +217,18 @@ export function ProUpgradeModal({
                           {t === "pro" ? "Unlimited CVs + career profiles" : "Higher limits + career profiles"}
                         </span>
                       </span>
-                      <span className="text-right">
-                        <span className="block text-[11px] text-neutral-400">from</span>
-                        <span className="text-[15px] font-bold text-neutral-950">
-                          {formatPrice(Math.min(...periods.map((p) => plan[p].price / PERIOD_WEEKS[p])))}
-                          <span className="text-[11px] font-medium text-neutral-500"> / week</span>
+                      <span className="flex items-center gap-2 text-right">
+                        <span>
+                          <span className="block text-[11px] text-neutral-400">from</span>
+                          <span className="text-[15px] font-bold text-neutral-950">
+                            {formatPrice(Math.min(...periods.map((p) => plan[p].price / PERIOD_WEEKS[p])))}
+                            <span className="text-[11px] font-medium text-neutral-500"> / week</span>
+                          </span>
                         </span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-neutral-400" />
                       </span>
                     </span>
-                    {selected && (
-                      <span
-                        className={`mt-3 grid gap-1.5 ${periods.length === 3 ? "grid-cols-3" : periods.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}
-                        role="radiogroup"
-                        aria-label="Billing period"
-                      >
-                        {periods.map((p) => (
-                          <button
-                            key={p}
-                            type="button"
-                            role="radio"
-                            aria-checked={period === p}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPeriod(p);
-                            }}
-                            className={`rounded-lg border px-1.5 py-2 text-center transition-colors cursor-pointer ${
-                              period === p ? "border-neutral-950 bg-white" : "border-neutral-200 bg-white/60 hover:border-neutral-300"
-                            }`}
-                          >
-                            <span className="block text-[11px] font-semibold text-neutral-600">{PERIOD_LABEL[p]}</span>
-                            <span className="block text-[13px] font-bold text-neutral-950">{weeklyPrice(plan[p].price, p)} / week</span>
-                          </button>
-                        ))}
-                      </span>
-                    )}
-                    {/* What the picked period gets you. */}
-                    {selected && (
-                      <ul className="mt-3 space-y-1.5 border-t border-neutral-950/10 pt-3">
-                        {planFeatures(pricing, t, period).map((feature) => (
-                          <li key={feature} className="flex items-start gap-1.5 text-[12.5px] font-medium text-neutral-800">
-                            <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-950" strokeWidth={3} />
-                            {feature}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+                  </button>
                 );
               })}
 
@@ -303,24 +272,17 @@ export function ProUpgradeModal({
             {nothingToBuy && (
               <p className="mt-2 text-center text-[13px] text-neutral-500">Plans aren&apos;t on sale just yet. Check back soon.</p>
             )}
-            {!nothingToBuy && (
-            <button
-              type="button"
-              disabled={busy || !picked}
-              onClick={go}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-neutral-950 py-3.5 text-sm font-bold text-white transition-colors hover:bg-neutral-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {(checkout.isPending || changePlan.isPending || (purchase.isPending && purchase.variables?.product === "cv_unlock")) && (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-              {!picked
-                ? "Choose a plan"
-                : picked.kind === "unlock"
-                ? `Unlock for ${formatPrice(unlock?.price ?? 0)}`
-                : subscribed
-                  ? `Switch to ${picked.tier === "pro" ? "Pro" : "Plus"} · ${formatPrice(pricing.plans[picked.tier][period].price)} ${PERIOD_SUFFIX[period]}`
-                  : `Continue · ${formatPrice(pricing.plans[picked.tier][period].price)} ${PERIOD_SUFFIX[period]}`}
-            </button>
+            {/* Plans continue in their own dialog; this button is only for "just this CV". */}
+            {canUnlock && unlock && (
+              <button
+                type="button"
+                disabled={busy || picked?.kind !== "unlock"}
+                onClick={go}
+                className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-neutral-950 py-3.5 text-sm font-bold text-white transition-colors hover:bg-neutral-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {purchase.isPending && purchase.variables?.product === "cv_unlock" && <Loader2 className="h-4 w-4 animate-spin" />}
+                {picked?.kind === "unlock" ? `Unlock for ${formatPrice(unlock.price)}` : "Choose an option"}
+              </button>
             )}
           </>
         )}
@@ -348,6 +310,106 @@ export function ProUpgradeModal({
           </button>
         )}
       </div>
+
+      {/* Second dialog: the picked plan's billing periods, what each gets you, and Continue. */}
+      {periodFor && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-neutral-950/40 p-4 sm:p-6 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !busy) setPeriodFor(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="plan-period-title"
+            className="relative w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-neutral-200/90 bg-white p-6 text-left shadow-2xl animate-in zoom-in-95 sm:p-7"
+          >
+            <button
+              type="button"
+              onClick={() => setPeriodFor(null)}
+              disabled={busy}
+              className="-ml-1 inline-flex items-center gap-0.5 text-[13px] font-semibold text-neutral-500 hover:text-neutral-900 cursor-pointer disabled:opacity-50"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Plans
+            </button>
+            <h2 id="plan-period-title" className="mt-3 text-xl font-bold tracking-tight text-neutral-950">
+              {periodFor === "pro" ? "Pro" : "Plus"}
+            </h2>
+            <p className="mt-1 text-sm text-neutral-500">How often do you want to pay?</p>
+
+            <div className="mt-5 flex flex-col gap-2.5" role="radiogroup" aria-label="Billing period">
+              {periodsFor(periodFor).map((p) => {
+                const prices = pricing.plans[periodFor];
+                const selected = period === p;
+                // Saving against paying weekly for the same stretch.
+                const weekly = prices.weekly.available ? prices.weekly.price * PERIOD_WEEKS[p] : 0;
+                const save = p !== "weekly" && weekly > 0 ? Math.round((1 - prices[p].price / weekly) * 100) : 0;
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setPeriod(p)}
+                    className={`flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors cursor-pointer ${
+                      selected ? "border-neutral-950 ring-1 ring-neutral-950" : "border-neutral-200 hover:border-neutral-300"
+                    }`}
+                  >
+                    <span
+                      className={`grid h-5 w-5 shrink-0 place-items-center rounded-full border ${
+                        selected ? "border-neutral-950 bg-neutral-950 text-white" : "border-neutral-300"
+                      }`}
+                    >
+                      {selected && <Check className="h-3 w-3" strokeWidth={3.5} />}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="text-[15px] font-semibold text-neutral-950">{PERIOD_LABEL[p]}</span>
+                        {save > 0 && (
+                          <span className="rounded-full bg-accent-soft px-1.5 py-px text-[11px] font-bold text-accent-strong">Save {save}%</span>
+                        )}
+                      </span>
+                      {p !== "weekly" && (
+                        <span className="mt-0.5 block text-[12.5px] text-neutral-500">{weeklyPrice(prices[p].price, p)} a week</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[16px] font-bold tracking-tight text-neutral-950">{formatPrice(prices[p].price)}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 rounded-2xl bg-neutral-50 px-4 py-3.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">What you get</p>
+              <ul className="mt-2.5 space-y-2">
+                {planFeatures(pricing, periodFor, period).map((feature) => (
+                  <li key={feature} className="flex items-center gap-2.5 text-[13px] text-neutral-700">
+                    <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-strong">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                    </span>
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {error && <p className="mt-3 text-center text-xs font-medium text-red-600">{error}</p>}
+
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => buyPlan(periodFor)}
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-full bg-neutral-950 py-3.5 text-sm font-bold text-white transition-colors hover:bg-neutral-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {(checkout.isPending || changePlan.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+              {subscribed ? `Switch to ${periodFor === "pro" ? "Pro" : "Plus"}` : "Continue to payment"}
+            </button>
+            <p className="mt-3 text-center text-xs text-neutral-500">Cancel anytime.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

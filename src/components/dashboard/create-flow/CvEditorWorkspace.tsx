@@ -94,6 +94,7 @@ import {
   Field,
   LanguageField,
   MonthField,
+  PhoneField,
   SectionHeader,
   TagInput,
   inputClass,
@@ -1503,7 +1504,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                       onChange={(v) => setPersonal({ headline: v })}
                     />
                     <Field name="email" label="Email" type="email" value={cv.personalInfo.email} onChange={(v) => setPersonal({ email: v })} />
-                    <Field name="phone" label="Phone" value={cv.personalInfo.phone} onChange={(v) => setPersonal({ phone: v })} />
+                    <PhoneField name="phone" label="Phone" value={cv.personalInfo.phone} onChange={(v) => setPersonal({ phone: v })} />
                     <Field name="location" label="Location" value={cv.personalInfo.location} placeholder="City, Country" onChange={(v) => setPersonal({ location: v })} />
                   </div>
                 </div>
@@ -2139,7 +2140,7 @@ export function CvEditorWorkspace({ initialData, onBack, onSave, onDownloaded, o
                     <Field name="title" label="Job title" value={ref.title} onChange={(v) => updateItem("references", ref.id, { title: v })} />
                     <Field name="organization" label="Organization" value={ref.organization} onChange={(v) => updateItem("references", ref.id, { organization: v })} />
                     <Field name="email" label="Email" type="email" value={ref.email} onChange={(v) => updateItem("references", ref.id, { email: v })} />
-                    <Field name="phone" label="Phone" value={ref.phone} onChange={(v) => updateItem("references", ref.id, { phone: v })} />
+                    <PhoneField name="phone" label="Phone" value={ref.phone} onChange={(v) => updateItem("references", ref.id, { phone: v })} />
                   </div>
                 )}
               />

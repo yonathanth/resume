@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Check } from "lucide-react";
 import { groupTemplatesByCategory, useCvTemplates } from "@/hooks/use-cv-templates";
 import type { ApiCvTemplate } from "@/lib/api";
@@ -25,6 +25,27 @@ interface TemplatePickerProps {
 export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePickerProps) {
   const { data: templates, isLoading, isError } = useCvTemplates();
   const [category, setCategory] = useState(ALL);
+  // Phones: a sideways row of cards; which one is in view, for the "2 of 12" line and dots.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(0);
+  const pickCategory = (c: string) => {
+    setCategory(c);
+    setActive(0);
+    rowRef.current?.scrollTo({ left: 0 });
+  };
+  const onRowScroll = () => {
+    const row = rowRef.current;
+    const first = row?.firstElementChild as HTMLElement | null;
+    if (!row || !first) return;
+    setActive(Math.round(row.scrollLeft / (first.offsetWidth + 12)));
+  };
+  const scrollToCard = (index: number) => {
+    const card = rowRef.current?.children[index] as HTMLElement | undefined;
+    // Only when it's a row (phones); in the grid this would jump the page.
+    if (card && rowRef.current && rowRef.current.scrollWidth > rowRef.current.clientWidth) {
+      card.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -47,14 +68,17 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
   const ordered = templates ?? [];
   const visible = category === ALL ? ordered : ordered.filter((t) => t.category === category);
 
-  const renderCard = (tmpl: ApiCvTemplate) => {
+  const renderCard = (tmpl: ApiCvTemplate, index: number) => {
     const isSelected = selectedId === tmpl.id;
     const tags = [tmpl.twoColumn && "Two-column", tmpl.hasPhoto && "Photo"].filter(Boolean) as string[];
     return (
+      <div key={tmpl.id} className="w-[76%] shrink-0 snap-center @sm:w-auto">
       <button
-        key={tmpl.id}
         type="button"
-        onClick={() => onSelect(tmpl.id)}
+        onClick={() => {
+          onSelect(tmpl.id);
+          scrollToCard(index);
+        }}
         onDoubleClick={() => onConfirm?.(tmpl.id)}
         aria-pressed={isSelected}
         // clip-path (not just overflow-hidden) so the scaled preview iframe
@@ -105,18 +129,20 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
           </>
         )}
       </button>
+      </div>
     );
   };
 
   return (
     <div className="@container">
       {groups.length > 1 && (
-        <div className="flex flex-wrap gap-1.5 mb-6">
+        // Phones: one sideways-scrolling line of chips; wider: they wrap.
+        <div className="flex gap-1.5 mb-4 overflow-x-auto scrollbar-none [&>*]:shrink-0 @sm:flex-wrap @sm:mb-6">
           {[ALL, ...groups.map((g) => g.category)].map((c) => (
             <button
               key={c}
               type="button"
-              onClick={() => setCategory(c)}
+              onClick={() => pickCategory(c)}
               className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors cursor-pointer ${
                 category === c
                   ? "bg-accent text-white border-accent"
@@ -129,7 +155,30 @@ export function TemplatePicker({ selectedId, onSelect, onConfirm }: TemplatePick
         </div>
       )}
 
-      <div className="grid grid-cols-1 @sm:grid-cols-2 @lg:grid-cols-3 gap-5">{visible.map(renderCard)}</div>
+      {/* Phones: a snapping sideways row where the next card peeks in, so it's clear there are more.
+          Wider: the grid. */}
+      <div
+        ref={rowRef}
+        onScroll={onRowScroll}
+        className="flex gap-3 overflow-x-auto snap-x snap-mandatory scrollbar-none pb-1 @sm:grid @sm:grid-cols-2 @lg:grid-cols-3 @sm:gap-5 @sm:overflow-visible @sm:snap-none @sm:pb-0"
+      >
+        {visible.map(renderCard)}
+      </div>
+      {visible.length > 1 && (
+        <div className="mt-3 flex items-center justify-center gap-3 @sm:hidden">
+          <div className="flex items-center gap-1.5" aria-hidden="true">
+            {visible.slice(0, 12).map((t, i) => (
+              <span
+                key={t.id}
+                className={`h-1.5 rounded-full transition-all ${Math.min(active, 11) === i ? "w-4 bg-accent" : "w-1.5 bg-neutral-300"}`}
+              />
+            ))}
+          </div>
+          <span className="text-xs font-medium text-neutral-500 tabular-nums">
+            {Math.min(active + 1, visible.length)} of {visible.length}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

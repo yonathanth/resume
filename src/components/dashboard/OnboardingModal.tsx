@@ -341,8 +341,10 @@ export function OnboardingModal({ me, onFinished }: { me: ApiUser; onFinished?: 
             <h2 className="text-2xl font-bold tracking-tight text-neutral-950">What do you do?</h2>
             <p className="mt-1.5 text-sm text-neutral-500">Your main profession becomes the headline on new CVs.</p>
 
-            <div className={`mt-5 ${usingCv ? "opacity-60" : ""}`}>
-                <label htmlFor="onb-profession" className={LABEL_CLASS}>
+            {/* Not faded as a whole when it's optional: opacity would also make the suggestions
+                dropdown see-through over the text behind it. Only the label is muted. */}
+            <div className="mt-5">
+                <label htmlFor="onb-profession" className={`${LABEL_CLASS} ${usingCv ? "opacity-60" : ""}`}>
                   Your profession{" "}
                   <span className="font-normal text-neutral-400">
                     {usingCv ? "· optional, we'll take it from your CV" : "· add more than one if you work in several fields"}

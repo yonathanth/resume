@@ -271,7 +271,7 @@ export function TemplateStep({
       <div className="text-center mb-8 pr-6">
         <h2 className="text-2xl font-bold tracking-tight text-neutral-950">Choose a Template</h2>
         <p className="text-sm text-neutral-500 mt-1.5 leading-relaxed max-w-md mx-auto">
-          We&apos;ll only ask for what this template needs. You can switch later without losing anything.
+          You can switch later without losing anything.
         </p>
       </div>
 
